@@ -345,6 +345,71 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
   }
 };
 
+// Get merchant data
+const getMerchantData = async (req, res, next) => {
+  try {
+    const { merchantId, latitude, longitude } = req.query;
+
+    const customerId = req.userAuth;
+
+    const [merchantFound, customerFound] = await Promise.all([
+      Merchant.findById(merchantId),
+      Customer.findById(customerId),
+    ]);
+
+    if (!merchantFound) return next(appError("Merchant not found", 404));
+    if (customerId && !customerFound)
+      return next(appError("Customer not found", 404));
+
+    const merchantLocation = merchantFound.merchantDetail.location;
+    const customerLocation =
+      latitude && longitude
+        ? [latitude, longitude]
+        : customerFound.customerDetails.location;
+
+    let distanceInKM;
+
+    if (merchantLocation.length) {
+      const distance = await getDistanceFromPickupToDelivery(
+        merchantLocation,
+        customerLocation
+      );
+
+      distanceInKM = distance.distanceInKM;
+    }
+
+    let distanceWarning = false;
+    if (distanceInKM > 12) distanceWarning = true;
+
+    let isFavourite = false;
+
+    if (
+      customerId &&
+      customerFound.customerDetails.favoriteMerchants.some(
+        (favorite) => favorite.merchantId === merchantFound._id
+      )
+    ) {
+      isFavourite = true;
+    }
+
+    const merchantData = {
+      merchantName: merchantFound.merchantDetail.merchantName,
+      distanceInKM: distanceInKM || null,
+      deliveryTime: merchantFound.merchantDetail.deliveryTime,
+      description: merchantFound.merchantDetail.description,
+      displayAddress: merchantFound.merchantDetail.displayAddress,
+      preOrderStatus: merchantFound.merchantDetail.preOrderStatus,
+      rating: merchantFound.merchantDetail.averageRating,
+      isFavourite,
+      distanceWarning,
+    };
+
+    res.status(200).json(merchantData);
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 // Get variants of a product
 const getProductVariantsByProductIdController = async (req, res, next) => {
   try {
