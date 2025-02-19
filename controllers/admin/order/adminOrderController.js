@@ -2497,6 +2497,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
 
+    console.log("Here");
+
     const {
       oneTimeDeliveryCharge,
       surgeCharges,
@@ -2514,6 +2516,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       pickupLocation,
       selectedBusinessCategory
     );
+
+    console.log("Here 2");
 
     let merchantDiscountAmount;
     if (merchantFound) {

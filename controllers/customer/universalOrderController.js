@@ -361,21 +361,23 @@ const getMerchantData = async (req, res, next) => {
     if (customerId && !customerFound)
       return next(appError("Customer not found", 404));
 
-    const merchantLocation = merchantFound.merchantDetail.location;
-    const customerLocation =
-      latitude && longitude
-        ? [latitude, longitude]
-        : customerFound.customerDetails.location;
+    let distanceInKM = 0;
 
-    let distanceInKM;
+    if (latitude && longitude) {
+      const merchantLocation = merchantFound.merchantDetail.location;
+      const customerLocation =
+        latitude && longitude
+          ? [latitude, longitude]
+          : customerFound.customerDetails.location;
 
-    if (merchantLocation.length) {
-      const distance = await getDistanceFromPickupToDelivery(
-        merchantLocation,
-        customerLocation
-      );
+      if (merchantLocation.length) {
+        const distance = await getDistanceFromPickupToDelivery(
+          merchantLocation,
+          customerLocation
+        );
 
-      distanceInKM = distance.distanceInKM;
+        distanceInKM = distance.distanceInKM;
+      }
     }
 
     let distanceWarning = false;
@@ -400,6 +402,7 @@ const getMerchantData = async (req, res, next) => {
       displayAddress: merchantFound.merchantDetail.displayAddress,
       preOrderStatus: merchantFound.merchantDetail.preOrderStatus,
       rating: merchantFound.merchantDetail.averageRating,
+      phoneNumber: merchantFound.phoneNumber,
       isFavourite,
       distanceWarning,
     };
@@ -1536,7 +1539,6 @@ const orderPaymentController = async (req, res, next) => {
 
       endDate = new Date(cart.cartDetail.endDate);
       endDate.setHours(18, 29, 59, 999);
-      s;
     }
 
     const populatedCartWithVariantNames = cart.toObject();
@@ -1717,7 +1719,10 @@ const orderPaymentController = async (req, res, next) => {
               paymentStatus: storedOrderData.paymentStatus,
               purchasedItems: storedOrderData.purchasedItems,
               "orderDetailStepper.created": {
-                by: storedOrderData.orderDetail.deliveryAddress.fullName,
+                by:
+                  storedOrderData.orderDetail.deliveryAddress.fullName ||
+                  customer.fullName ||
+                  "-",
                 userId: storedOrderData.customerId,
                 date: new Date(),
               },
@@ -1892,7 +1897,10 @@ const orderPaymentController = async (req, res, next) => {
             paymentId: storedOrderData.paymentId,
             purchasedItems: storedOrderData?.purchasedItems,
             "orderDetailStepper.created": {
-              by: storedOrderData?.orderDetail?.deliveryAddress?.fullName,
+              by:
+                storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
+                customer.fullName ||
+                "-",
               userId: storedOrderData?.customerId,
               date: new Date(),
             },
@@ -2028,9 +2036,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     const { paymentDetails } = req.body;
     const customerId = req.userAuth;
 
-    console.log("Payment Details: ", paymentDetails);
-    console.log("Customer ID: ", customerId);
-
     if (!customerId) {
       return next(appError("Customer is not authenticated", 401));
     }
@@ -2046,9 +2051,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         select: "productName productImageURL description variants",
       })
       .exec();
-
-    console.log("Customer: ", Boolean(customer));
-    console.log("Cart: ", Boolean(cart));
 
     if (!cart) {
       return next(appError("Cart not found", 404));
@@ -2248,7 +2250,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             paymentId: storedOrderData.paymentId,
             purchasedItems: storedOrderData.purchasedItems,
             "orderDetailStepper.created": {
-              by: storedOrderData.orderDetail.deliveryAddress.fullName,
+              by:
+                storedOrderData.orderDetail.deliveryAddress.fullName ||
+                customer.fullName ||
+                "-",
               userId: storedOrderData.customerId,
               date: new Date(),
             },

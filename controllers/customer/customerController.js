@@ -154,7 +154,7 @@ const registerAndLoginController = async (req, res, next) => {
         customer.id,
         customer.role,
         customer?.fullName ? customer.fullName : "",
-        "1min"
+        "2hr"
       ),
       refreshToken: refreshToken,
       role: customer.role,
@@ -211,26 +211,20 @@ const setSelectedGeofence = async (req, res, next) => {
 const getCustomerProfileController = async (req, res, next) => {
   try {
     const currentCustomer = await Customer.findById(req.userAuth).select(
-      "fullName phoneNumber email customerDetails.customerImageURL customerDetails.walletBalance customerDetails.pricing"
+      "fullName phoneNumber email customerDetails.customerImageURL"
     );
 
     if (!currentCustomer) return next(appError("Customer not found", 404));
 
     const formattedCustomer = {
-      id: currentCustomer._id,
-      fullName: currentCustomer.fullName || "-",
-      imageURL: currentCustomer?.customerDetails?.customerImageURL || null,
-      email: currentCustomer.email || "-",
+      customerId: currentCustomer._id,
+      fullName: currentCustomer.fullName || "",
+      imageURL: currentCustomer?.customerDetails?.customerImageURL || "",
+      email: currentCustomer.email || "",
       phoneNumber: currentCustomer.phoneNumber,
-      walletBalance: currentCustomer?.customerDetails?.walletBalance || 0.0,
-      haveSubscription:
-        currentCustomer?.customerDetails?.pricing?.length > 0 ? true : false,
     };
 
-    res.status(200).json({
-      message: "Customer profile",
-      data: formattedCustomer,
-    });
+    res.status(200).json(formattedCustomer);
   } catch (err) {
     next(appError(err.message));
   }
@@ -300,7 +294,7 @@ const updateCustomerProfileController = async (req, res, next) => {
       );
     }
 
-    res.status(200).json({ message: "Customer updated successfully" });
+    res.status(200).json({ success: true });
   } catch (err) {
     next(appError(err.message));
   }
@@ -835,39 +829,39 @@ const searchOrderController = async (req, res, next) => {
 // Get transaction details of customer
 const getTransactionOfCustomerController = async (req, res, next) => {
   try {
+    let { page = 1, limit = 20 } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
     const currentCustomer = req.userAuth;
 
     const customerFound = await Customer.findById(currentCustomer)
       .select("fullName customerDetails.customerImageURL transactionDetail")
-      .exec();
+      .populate({
+        path: "transactionDetail",
+        options: {
+          sort: { madeOn: -1 },
+          skip: (page - 1) * limit,
+          limit: limit,
+        },
+      });
 
     if (!customerFound) {
       return next(appError("Customer not found", 404));
     }
 
-    const sortedTransactions = customerFound?.transactionDetail.sort(
-      (a, b) => new Date(b.madeOn) - new Date(a.madeOn)
-    );
+    const transactions = customerFound.transactionDetail.map((transaction) => ({
+      transactionAmount: transaction.transactionAmount,
+      transactionType: transaction.transactionType,
+      type: transaction.type,
+      transactionDate: `${formatDate(transaction.madeOn)}`,
+      transactionTime: `${formatTime(transaction.madeOn)}`,
+    }));
 
-    const formattedData = sortedTransactions.map((transaction) => {
-      return {
-        customerName: customerFound.fullName || "-",
-        // TODO: Need to change the default image URL
-        customerImage:
-          customerFound.customerDetails.customerImageURL ||
-          "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/AgentImages%2Fdemo-image.png-0fe7a62e-6d1c-4e5f-9d3c-87698bdfc32e?alt=media&token=97737725-250d-481e-a8db-69bdaedbb073",
-        transactionAmount: transaction.transactionAmount,
-        transactionType: transaction.transactionType,
-        type: transaction.type,
-        transactionDate: `${formatDate(transaction.madeOn)}`,
-        transactionTime: `${formatTime(transaction.madeOn)}`,
-      };
-    });
+    console.log(`Length is ${transactions?.length} on ${new Date()}`);
 
-    res.status(200).json({
-      message: "Customer transaction detail",
-      data: formattedData,
-    });
+    res.status(200).json(transactions);
   } catch (err) {
     next(appError(err.message));
   }
@@ -997,16 +991,13 @@ const getWalletAndLoyaltyController = async (req, res, next) => {
 
     const customerData = {
       walletBalance:
-        customerFound?.customerDetails?.walletBalance?.toString() || "0",
+        customerFound?.customerDetails?.walletBalance?.toString() || 0,
       loyaltyPoints:
         customerFound?.customerDetails?.loyaltyPointLeftForRedemption?.toString() ||
-        "0",
+        0,
     };
 
-    res.status(200).json({
-      message: "Wallet balance and loyalty points of customer",
-      data: customerData,
-    });
+    res.status(200).json(customerData);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1097,23 +1088,26 @@ const getSplashScreenImageController = async (req, res, next) => {
 //
 const getCustomerAppBannerController = async (req, res, next) => {
   try {
-    const customerId = req.userAuth;
+    const customerId = req?.userAuth;
 
-    const customer = await Customer.findById(customerId).select(
-      "customerDetails.geofenceId"
+    let matchCriteria = { status: true };
+
+    if (customerId) {
+      const customer = await Customer.findById(customerId).select(
+        "customerDetails.geofenceId"
+      );
+
+      matchCriteria.geofenceId = customer?.customerDetails?.geofenceId;
+    }
+
+    const allBanners = await AppBanner.find(matchCriteria).select(
+      "name imageUrl"
     );
 
-    const allBanners = await AppBanner.find({
-      status: true,
-      geofenceId: customer?.customerDetails?.geofenceId,
-    }).select("name imageUrl");
-
-    const formattedResponse = allBanners?.map((banner) => {
-      return {
-        name: banner.name,
-        imageUrl: banner.imageUrl,
-      };
-    });
+    const formattedResponse = allBanners.map((banner) => ({
+      name: banner.name,
+      imageUrl: banner.imageUrl,
+    }));
 
     res.status(200).json({ message: "Banner", data: formattedResponse });
   } catch (err) {
@@ -1244,7 +1238,6 @@ const generateReferralCode = async (req, res, next) => {
     await customer.save();
 
     res.status(200).json({
-      message: "Referral Code",
       appLink: process.env.PLAY_STORE_APP_LINK,
       referralCode: newReferralCode,
     });

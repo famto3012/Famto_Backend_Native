@@ -121,7 +121,7 @@ customerRoute.get("/profile", isAuthenticated, getCustomerProfileController);
 // Edit customer profile route
 customerRoute.put(
   "/edit-profile",
-  upload.single("imageURL"),
+  upload.single("image"),
   isAuthenticated,
   updateCustomerProfileController
 );
