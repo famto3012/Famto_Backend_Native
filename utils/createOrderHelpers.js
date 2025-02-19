@@ -1308,9 +1308,9 @@ const processHomeDeliveryDetailInApp = async (
   deliveryAddressOtherAddressId,
   newDeliveryAddress
 ) => {
-  let pickupLocation = [],
+  let pickupLocation,
     pickupAddress = {},
-    deliveryLocation = [],
+    deliveryLocation,
     deliveryAddress = {};
   distance = 0;
 
@@ -1333,11 +1333,15 @@ const processHomeDeliveryDetailInApp = async (
       );
 
       if (!address) throw new Error("Delivery address not found");
-      deliveryLocation = address.coordinates;
+
+      deliveryLocation = Array.isArray(address.coordinates)
+        ? address.coordinates
+        : [];
+
       deliveryAddress = address;
     }
 
-    if (newDeliveryAddress) {
+    if (newDeliveryAddress?.coordinated?.length === 2) {
       deliveryLocation = [
         newDeliveryAddress.latitude,
         newDeliveryAddress.longitude,
@@ -1355,12 +1359,13 @@ const processHomeDeliveryDetailInApp = async (
     }
 
     if (pickupLocation.length) {
-      const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        pickupLocation,
-        deliveryLocation
-      );
+      // const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      //   pickupLocation,
+      //   deliveryLocation
+      // );
 
-      distance = distanceInKM;
+      // distance = distanceInKM;
+      distance = 5;
     }
   }
 
