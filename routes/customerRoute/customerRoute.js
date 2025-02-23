@@ -73,6 +73,7 @@ const {
   searchProductsInMerchantToOrderController,
   getSuperMarketMerchant,
   getMerchantData,
+  fetchTemporaryOrderOfCustomer,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -554,5 +555,11 @@ customerRoute.put(
 );
 
 customerRoute.get("/get-super-market", isAuthenticated, getSuperMarketMerchant);
+
+customerRoute.get(
+  "/get-temporary-order",
+  isAuthenticated,
+  fetchTemporaryOrderOfCustomer
+);
 
 module.exports = customerRoute;
