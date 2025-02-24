@@ -374,7 +374,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
     }
 
     // Fetch all products
-    const allProducts = await Product.find({ categoryId, inventory: true })
+    const allProducts = await Product.find({ categoryId })
       .populate(
         "discountId",
         "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
@@ -414,8 +414,8 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
       }
 
       const isFavorite =
-        currentCustomer?.customerDetails?.favoriteProducts?.includes(
-          product._id
+        currentCustomer?.customerDetails?.favoriteProducts?.some(
+          (fav) => fav.toString() === product._id.toString()
         ) ?? false;
 
       // Get the cart quantity for this product
