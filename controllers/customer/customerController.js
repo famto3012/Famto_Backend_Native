@@ -581,7 +581,9 @@ const getFavoriteProductsController = async (req, res, next) => {
         productId: product._id,
         productName: product.productName || null,
         price: product.price || null,
-        productImageURL: product.productImageURL || null,
+        productImageURL:
+          product.productImageURL ||
+          "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
         businessCategoryId: product.categoryId.businessCategoryId || null,
         merchantId: product.categoryId.merchantId || null,
         inventory: product.inventory || null,
