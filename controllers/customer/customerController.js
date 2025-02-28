@@ -46,6 +46,8 @@ const LoyaltyPoint = require("../../models/LoyaltyPoint");
 const Banner = require("../../models/Banner");
 const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const verifyToken = require("../../utils/verifyToken");
+const Merchant = require("../../models/Merchant");
+const Product = require("../../models/Product");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -676,28 +678,96 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
 };
 
 // Get single order detail
+// const getSingleOrderDetailController = async (req, res, next) => {
+//   try {
+//     const currentCustomer = req.userAuth;
+//     const { orderId } = req.params;
+
+//     const orderFound = await Order.findOne({
+//       _id: orderId,
+//       customerId: currentCustomer,
+//     })
+//       .populate({
+//         path: "merchantId",
+//         select: "phoneNumber merchantDetail",
+//       })
+
+//       .exec();
+
+//     if (!orderFound) return next(appError("Order not found", 404));
+
+//     const formattedResponse = {
+//       orderId: orderFound?._id,
+//       pickUpAddress: orderFound?.orderDetail?.pickupAddress || null,
+//       deliveryAddress: orderFound?.orderDetail?.deliveryAddress || null,
+//       items: orderFound?.items || null,
+//       billDetail: {
+//         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
+//         taxAmount: orderFound?.billDetail?.taxAmount || null,
+//         discountedAmount: orderFound?.billDetail?.discountedAmount || null,
+//         grandTotal: orderFound?.billDetail?.grandTotal || null,
+//         itemTotal: orderFound?.billDetail?.itemTotal || null,
+//         addedTip: orderFound?.billDetail?.addedTip || null,
+//         subTotal: orderFound?.billDetail?.subTotal || null,
+//         surgePrice: orderFound?.billDetail?.surgePrice || null,
+//         waitingCharge: orderFound?.billDetail?.waitingCharge || null,
+//         vehicleType: orderFound?.billDetail?.vehicleType || null,
+//       },
+//       orderDate: formatDate(orderFound?.createdAt),
+//       orderTime: formatTime(orderFound?.createdAt),
+//       paymentMode: orderFound?.paymentMode || null,
+//       deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
+//       vehicleType: orderFound?.billDetail?.vehicleType || null,
+//     };
+
+//     res.status(200).json({
+//       message: "Single order detail",
+//       data: formattedResponse,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 const getSingleOrderDetailController = async (req, res, next) => {
   try {
-    const currentCustomer = req.userAuth;
     const { orderId } = req.params;
+    const customerId = req.userAuth;
 
+    // Find the order with populated fields
     const orderFound = await Order.findOne({
       _id: orderId,
-      customerId: currentCustomer,
+      customerId,
     })
-      .populate({
-        path: "merchantId",
-        select: "phoneNumber merchantDetail",
-      })
-
-      .exec();
+      .populate("agentId")
+      .populate("merchantId")
+      .select(
+        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status"
+      );
 
     if (!orderFound) return next(appError("Order not found", 404));
 
+    // Construct the response object
     const formattedResponse = {
       orderId: orderFound?._id,
-      pickUpAddress: orderFound?.orderDetail?.pickupAddress || null,
-      deliveryAddress: orderFound?.orderDetail?.deliveryAddress || null,
+      status: orderFound?.status || "Unknown", // Include order status
+      agentId: orderFound?.agentId?._id || null,
+      agentName: orderFound?.agentId?.fullName || null,
+      agentLocation: orderFound?.agentId?.location || null,
+      agentImageURL: orderFound?.agentId?.agentImageURL || null,
+      agentPhone: orderFound?.agentId?.phoneNumber || null,
+      merchantName:
+        orderFound?.merchantId?.merchantDetail?.merchantName || null,
+      merchantPhone: orderFound?.merchantId?.phoneNumber || null,
+      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
+      paymentStatus: orderFound?.paymentStatus || null,
+      pickUpAddress:
+        orderFound?.orderDetail?.pickupAddress ||
+        orderFound?.orderDetail?.pickupLocation ||
+        null,
+      deliveryAddress:
+        orderFound?.orderDetail?.deliveryAddress ||
+        orderFound?.orderDetail?.deliveryLocation ||
+        null,
       items: orderFound?.items || null,
       billDetail: {
         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
@@ -716,10 +786,17 @@ const getSingleOrderDetailController = async (req, res, next) => {
       paymentMode: orderFound?.paymentMode || null,
       deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
       vehicleType: orderFound?.billDetail?.vehicleType || null,
+      orderDetailStepper: orderFound?.orderDetailStepper || null,
+      detailAddedByAgent: {
+        notes: orderFound?.detailAddedByAgent?.notes || null,
+        signatureImageURL:
+          orderFound?.detailAddedByAgent?.signatureImageURL || null,
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || null,
+      },
     };
 
     res.status(200).json({
-      message: "Single order detail",
+      message: "Customer order detail",
       data: formattedResponse,
     });
   } catch (err) {
@@ -768,6 +845,7 @@ const getScheduledOrderDetailController = async (req, res, next) => {
       endDate: formatDate(orderFound?.endDate),
       time: formatTime(orderFound.time) || null,
       numberOfDays: orderFound?.orderDetail?.numOfDays || null,
+      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
     };
 
     res.status(200).json(formattedResponse);
@@ -1453,6 +1531,88 @@ const haveValidCart = async (req, res, next) => {
   }
 };
 
+const searchProductAndMerchantController = async (req, res) => {
+  try {
+    const { query, page = 1, limit = 10 } = req.query;
+
+    if (!query || query.trim() === "") {
+      return res.status(400).json({ message: "Query cannot be empty" });
+    }
+
+    const pageNumber = parseInt(page, 10) || 1;
+    const pageSize = parseInt(limit, 10) || 10;
+
+    const merchantFilter = {
+      "merchantDetail.merchantName": { $regex: query, $options: "i" },
+    };
+    const productFilter = { productName: { $regex: query, $options: "i" } };
+
+    // Fetch merchants
+    const merchants = await Merchant.find(merchantFilter)
+      .select(
+        "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers"
+      )
+      .lean();
+
+    // Format merchants with type and average rating
+    const merchantResults = merchants.map((merchant) => {
+      const ratings = merchant.merchantDetail.ratingByCustomers || [];
+      const totalRating = ratings.reduce((acc, cur) => acc + cur.rating, 0);
+      const averageRating =
+        ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : 0;
+
+      return {
+        _id: merchant._id,
+        name: merchant.merchantDetail.merchantName,
+        address: merchant.merchantDetail.displayAddress,
+        image: merchant.merchantDetail.merchantImageURL,
+        averageRating: parseFloat(averageRating), // Convert to number
+        type: "merchant",
+      };
+    });
+
+    // Fetch products
+    const products = await Product.find(productFilter)
+      .select("_id productName productImageURL")
+      .lean();
+
+    // Remove duplicate product names
+    const uniqueProducts = [];
+    const seenProductNames = new Set();
+
+    for (const product of products) {
+      if (!seenProductNames.has(product.productName)) {
+        seenProductNames.add(product.productName);
+        uniqueProducts.push({
+          _id: product._id,
+          name: product.productName,
+          image: product.productImageURL,
+          type: "dish",
+        });
+      }
+    }
+
+    // Merge results
+    const combinedResults = [...merchantResults, ...uniqueProducts];
+
+    // Paginate combined results
+    const startIndex = (pageNumber - 1) * pageSize;
+    const paginatedResults = combinedResults.slice(
+      startIndex,
+      startIndex + pageSize
+    );
+
+    return res.json({
+      results: paginatedResults,
+      page: pageNumber,
+      limit: pageSize,
+    });
+  } catch (error) {
+    console.error("Search Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   registerAndLoginController,
   getAvailableGeofences,
@@ -1489,4 +1649,5 @@ module.exports = {
   fetchPromoCodesController,
   removeAppliedPromoCode,
   haveValidCart,
+  searchProductAndMerchantController,
 };

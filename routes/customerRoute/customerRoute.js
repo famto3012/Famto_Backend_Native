@@ -44,6 +44,7 @@ const {
   fetchPromoCodesController,
   removeAppliedPromoCode,
   haveValidCart,
+  searchProductAndMerchantController,
 } = require("../../controllers/customer/customerController");
 const {
   getAllBusinessCategoryController,
@@ -560,6 +561,12 @@ customerRoute.get(
   "/get-temporary-order",
   isAuthenticated,
   fetchTemporaryOrderOfCustomer
+);
+
+customerRoute.get(
+  "/get-merchant-product",
+  // isAuthenticated,
+  searchProductAndMerchantController
 );
 
 module.exports = customerRoute;
