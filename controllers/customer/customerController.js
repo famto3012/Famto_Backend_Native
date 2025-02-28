@@ -938,7 +938,7 @@ const fetchPromoCodesController = async (req, res, next) => {
 
     if (!customer) return next(appError("Customer not found", 404));
 
-    const { deliveryMode, query } = req.query;
+    const { deliveryMode, merchantId, query } = req.query;
 
     const currentDate = new Date();
     const filter = {
@@ -950,6 +950,10 @@ const fetchPromoCodesController = async (req, res, next) => {
 
     if (deliveryMode) {
       filter.deliveryMode = deliveryMode;
+    }
+
+    if (merchantId) {
+      filter.merchantId = { $in: merchantId };
     }
 
     if (query) {
@@ -964,19 +968,12 @@ const fetchPromoCodesController = async (req, res, next) => {
       id: promo._id,
       imageURL: promo.imageUrl,
       promoCode: promo.promoCode,
-      discount: promo.discount,
-      description: promo.description,
-      promoType: promo.promoType,
       validUpTo: formatDate(promo.toDate),
-      maxDiscountValue: promo.maxDiscountValue,
       minOrderAmount: promo.minOrderAmount,
       status: promo.status,
     }));
 
-    res.status(200).json({
-      status: "Available promocodes",
-      data: formattedResponse,
-    });
+    res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1415,10 +1412,9 @@ const removeAppliedPromoCode = async (req, res, next) => {
 
     const updatedCart = deductPromoCodeDiscount(cart, promoCodeDiscount);
 
-    res.status(200).json({
-      success: "Promo code applied successfully",
-      data: updatedCart.billDetail,
-    });
+    await cart.save();
+
+    res.status(200).json(updatedCart.billDetail);
   } catch (err) {
     next(appError(err.message));
   }
