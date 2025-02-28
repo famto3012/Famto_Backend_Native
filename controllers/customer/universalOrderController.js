@@ -1470,7 +1470,10 @@ const confirmOrderDetailController = async (req, res, next) => {
       { new: true, upsert: true }
     );
 
-    res.status(200).json({ cartId: customerCart._id });
+    res.status(200).json({
+      cartId: customerCart._id,
+      merchantId: customerCart.merchantId,
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -1802,9 +1805,8 @@ const orderPaymentController = async (req, res, next) => {
 
         // Return countdown timer to client
         res.status(200).json({
-          message: "Custom order will be created in 1 minute.",
           orderId,
-          countdown: 60,
+          createdAt: tempOrder.createdAt,
         });
 
         // After 60 seconds, create the order if not canceled
@@ -1979,9 +1981,8 @@ const orderPaymentController = async (req, res, next) => {
 
       // Return countdown timer to client
       res.status(200).json({
-        message: "Custom order will be created in 1 minute.",
         orderId,
-        countdown: 60,
+        createdAt: tempOrder.createdAt,
       });
 
       // After 60 seconds, create the order if not canceled
@@ -2121,9 +2122,6 @@ const orderPaymentController = async (req, res, next) => {
           appError(`Error in creating Razorpay order: ${error}`, 500)
         );
       }
-
-      console.log("Order ID: ", orderId);
-      console.log("Order Amount: ", orderAmount);
 
       res.status(200).json({ success: true, orderId, amount: orderAmount });
       return;
@@ -2326,9 +2324,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
       // Return countdown timer to client
       res.status(200).json({
-        message: "Order will be created in 1 minute.",
         orderId,
-        countdown: 60,
+        createdAt: tempOrder.createdAt,
       });
 
       // After 60 seconds, create the order if not canceled
