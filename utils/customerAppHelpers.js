@@ -975,33 +975,69 @@ const calculatePromoCodeDiscount = (promoCode, total) => {
   return Math.min(percentageDiscount, promoCode.maxDiscountValue);
 };
 
-const applyPromoCodeDiscount = (cart, promoCode, discount) => {
+// const applyPromoCodeDiscount = (cart, promoCode, discount) => {
+//   const {
+//     itemTotal,
+//     originalDeliveryCharge,
+//     originalGrandTotal,
+//     addedTip = 0,
+//   } = cart.billDetail;
+//   let discountedTotal = itemTotal;
+
+//   if (promoCode.appliedOn === "Cart-value") {
+//     discountedTotal -= discount;
+//   } else if (promoCode.appliedOn === "Delivery-charge") {
+//     const deliveryDiscount = Math.max(originalDeliveryCharge - discount, 0);
+//     cart.billDetail.discountedDeliveryCharge = deliveryDiscount;
+//   }
+
+//   cart.billDetail.discountedGrandTotal = Math.max(
+//     Math.round(originalGrandTotal - discount),
+//     0
+//   );
+//   cart.billDetail.promoCodeUsed = promoCode.promoCode;
+//   cart.billDetail.discountedAmount =
+//     (cart.billDetail.discountedAmount || 0) + discount;
+//   cart.billDetail.subTotal = Math.round(
+//     discountedTotal +
+//       (cart.billDetail.discountedDeliveryCharge || originalDeliveryCharge) +
+//       addedTip
+//   );
+
+//   return cart;
+// };
+
+const applyPromoCodeDiscount = (cart, promoCode, discountValue) => {
   const {
     itemTotal,
     originalDeliveryCharge,
     originalGrandTotal,
     addedTip = 0,
   } = cart.billDetail;
-  let discountedTotal = itemTotal;
 
-  if (promoCode.appliedOn === "Cart-value") {
-    discountedTotal -= discount;
-  } else if (promoCode.appliedOn === "Delivery-charge") {
-    const deliveryDiscount = Math.max(originalDeliveryCharge - discount, 0);
-    cart.billDetail.discountedDeliveryCharge = deliveryDiscount;
+  let discountAmount = 0;
+  let discountedDeliveryCharge = originalDeliveryCharge;
+
+  if (promoCode.appliedOn.toLowerCase() === "cart-value") {
+    discountAmount = Math.min(discountValue, itemTotal); // Ensure discount doesn't exceed item total
+  } else if (promoCode.appliedOn.toLowerCase() === "delivery-charge") {
+    discountAmount = Math.min(discountValue, originalDeliveryCharge); // Ensure discount doesn't exceed delivery charge
+    discountedDeliveryCharge = originalDeliveryCharge - discountAmount;
   }
 
-  cart.billDetail.discountedGrandTotal = Math.max(
-    Math.round(originalGrandTotal - discount),
-    0
-  );
-  cart.billDetail.promoCodeUsed = promoCode.promoCode;
-  cart.billDetail.discountedAmount = discount;
-  cart.billDetail.subTotal = Math.round(
-    discountedTotal +
-      (cart.billDetail.discountedDeliveryCharge || originalDeliveryCharge) +
-      addedTip
-  );
+  const discountedGrandTotal = Math.max(originalGrandTotal - discountAmount, 0);
+
+  cart.billDetail = {
+    ...cart.billDetail,
+    discountedGrandTotal,
+    discountedDeliveryCharge,
+    promoCodeUsed: promoCode.promoCode,
+    discountedAmount: discountAmount,
+    subTotal: Math.max(
+      itemTotal + discountedDeliveryCharge + addedTip - discountAmount,
+      0
+    ),
+  };
 
   return cart;
 };
@@ -1009,6 +1045,7 @@ const applyPromoCodeDiscount = (cart, promoCode, discount) => {
 const deductPromoCodeDiscount = (cart, discount) => {
   const subtractOrNull = (currentValue, discount) => {
     const newValue = currentValue - discount;
+
     return newValue <= 0 ? null : newValue;
   };
 
@@ -1016,8 +1053,9 @@ const deductPromoCodeDiscount = (cart, discount) => {
     cart.billDetail.discountedAmount,
     discount
   );
+  cart.billDetail.subTotal += discount;
   cart.billDetail.discountedGrandTotal += discount;
-  cart.billDetail.discountedDeliveryCharge += discount;
+  cart.billDetail.discountedDeliveryCharge = null;
 
   cart.billDetail.promoCodeUsed = null;
 

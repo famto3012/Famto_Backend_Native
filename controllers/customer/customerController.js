@@ -1063,15 +1063,14 @@ const getWalletAndLoyaltyController = async (req, res, next) => {
     const currentCustomer = req.userAuth;
 
     const customerFound = await Customer.findById(currentCustomer).select(
-      "customerDetails.walletBalance customerDetails.totalLoyaltyPointEarned"
+      "customerDetails.walletBalance customerDetails.loyaltyPointLeftForRedemption"
     );
 
     const customerData = {
       walletBalance:
-        customerFound?.customerDetails?.walletBalance?.toString() || 0,
+        customerFound?.customerDetails?.walletBalance.toFixed(2) || "0",
       loyaltyPoints:
-        customerFound?.customerDetails?.loyaltyPointLeftForRedemption?.toString() ||
-        0,
+        customerFound?.customerDetails?.loyaltyPointLeftForRedemption || 0,
     };
 
     res.status(200).json(customerData);
@@ -1466,6 +1465,7 @@ const removeAppliedPromoCode = async (req, res, next) => {
     if (!cart) return next(appError("Cart not found", 404));
 
     const { billDetail } = cart;
+
     const promoCodeFound = await PromoCode.findOne({
       promoCode: billDetail.promoCodeUsed,
     });
@@ -1488,7 +1488,10 @@ const removeAppliedPromoCode = async (req, res, next) => {
       totalCartPrice
     );
 
-    const updatedCart = deductPromoCodeDiscount(cart, promoCodeDiscount);
+    const updatedCart = deductPromoCodeDiscount(
+      cart,
+      Number(promoCodeDiscount.toFixed(2))
+    );
 
     await cart.save();
 

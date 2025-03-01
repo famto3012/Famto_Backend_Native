@@ -75,6 +75,8 @@ const {
   getSuperMarketMerchant,
   getMerchantData,
   fetchTemporaryOrderOfCustomer,
+  getCategory,
+  getProduct,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -153,7 +155,7 @@ customerRoute.post(
 customerRoute.get("/search-home", homeSearchController);
 
 // List all restaurants in customers geofence
-customerRoute.post(
+customerRoute.get(
   "/list-restaurants",
   isLooselyAuthenticated,
   listRestaurantsController
