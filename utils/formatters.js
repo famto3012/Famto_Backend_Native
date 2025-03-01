@@ -90,17 +90,27 @@ const convertToUTC = (time12hr, startDate) => {
 };
 
 const convertISTToUTC = (startDate, time12hr) => {
-  // Parse the given date (e.g., '2024-10-20') and time (e.g., '01:00 AM') into a moment object in IST
+  // Ensure startDate is a string in YYYY-MM-DD format
+  const parsedDate =
+    startDate instanceof Date
+      ? moment(startDate).format("YYYY-MM-DD") // Convert Date object to string
+      : moment(startDate, "DD/MM/YYYY").format("YYYY-MM-DD"); // Convert DD/MM/YYYY to YYYY-MM-DD
+
+  // Parse the given date & time in IST
   const istDateTime = moment.tz(
-    `${startDate} ${time12hr}`,
+    `${parsedDate} ${time12hr}`,
     "YYYY-MM-DD hh:mm A",
     "Asia/Kolkata"
   );
-  // Convert to UTC
-  const utcDateTime = istDateTime.utc();
 
-  // Return the UTC date and time in ISO format
-  return new Date(utcDateTime);
+  if (!istDateTime.isValid()) {
+    throw new Error(
+      `Time conversion error: Invalid date/time format (${startDate}, ${time12hr})`
+    );
+  }
+
+  // Convert to UTC and return
+  return istDateTime.utc().toDate();
 };
 
 const convertStartDateToUTC = (date, time) => {

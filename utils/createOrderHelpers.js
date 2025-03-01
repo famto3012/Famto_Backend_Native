@@ -99,26 +99,97 @@ const findOrCreateCustomer = async ({
 };
 
 // Get the scheduled details
-const processSchedule = (ifScheduled) => {
-  const { startDate, endDate } = ifScheduled;
-  const time = ifScheduled.time
-    ? convertISTToUTC(startDate, ifScheduled.time)
-    : null;
+// const processSchedule = (ifScheduled) => {
+//   const { startDate, endDate } = ifScheduled;
+//   const time = ifScheduled.time
+//     ? convertISTToUTC(startDate, ifScheduled.time)
+//     : null;
 
-  if (!startDate || !endDate || !time) {
+//   if (!startDate || !endDate || !time) {
+//     return { startDate: null, endDate: null, time: null, numOfDays: null };
+//   }
+
+//   const adjustedStartDate = new Date(startDate);
+//   adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
+//   adjustedStartDate.setUTCHours(18, 30, 0, 0);
+
+//   const adjustedTime = new Date(time);
+//   adjustedTime.setUTCHours(adjustedTime.getUTCHours() - 1);
+
+//   const adjustedEndDate = new Date(endDate);
+//   adjustedEndDate.setUTCHours(18, 29, 59, 999);
+
+//   const numOfDays = getTotalDaysBetweenDates(
+//     adjustedStartDate,
+//     adjustedEndDate
+//   );
+
+//   return {
+//     startDate: adjustedStartDate,
+//     endDate: adjustedEndDate,
+//     time: adjustedTime,
+//     numOfDays,
+//   };
+// };
+
+const processSchedule = (ifScheduled) => {
+  if (
+    !ifScheduled ||
+    !ifScheduled.startDate ||
+    !ifScheduled.endDate ||
+    !ifScheduled.time
+  ) {
     return { startDate: null, endDate: null, time: null, numOfDays: null };
   }
 
-  const adjustedStartDate = new Date(startDate);
-  adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
-  adjustedStartDate.setUTCHours(18, 30, 0, 0);
+  // Convert DD/MM/YYYY to YYYY-MM-DD for proper parsing
+  const parseDate = (dateStr) => {
+    const [day, month, year] = dateStr.split("/").map(Number);
+    if (!day || !month || !year) {
+      throw new Error(`Invalid date format: ${dateStr}`);
+    }
+    return new Date(year, month - 1, day); // Month is 0-indexed
+  };
 
+  let startDate, endDate;
+  try {
+    startDate = parseDate(ifScheduled.startDate);
+    endDate = parseDate(ifScheduled.endDate);
+  } catch (error) {
+    console.error("Date parsing error:", error.message);
+    return { startDate: null, endDate: null, time: null, numOfDays: null };
+  }
+
+  // Convert time from IST to UTC
+  let time = null;
+  try {
+    time = convertISTToUTC(startDate, ifScheduled.time);
+    if (isNaN(new Date(time).getTime())) {
+      throw new Error("Invalid time format");
+    }
+  } catch (error) {
+    console.error("Time conversion error:", error.message);
+    return { startDate: null, endDate: null, time: null, numOfDays: null };
+  }
+
+  // Standardize start date to UTC
+  const adjustedStartDate = new Date(startDate);
+  adjustedStartDate.setUTCHours(0, 0, 0, 0);
+
+  if (process.env.NODE_ENV === "production") {
+    adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
+    adjustedStartDate.setUTCHours(18, 30, 0, 0);
+  }
+
+  // Adjust time correctly
   const adjustedTime = new Date(time);
   adjustedTime.setUTCHours(adjustedTime.getUTCHours() - 1);
 
+  // Standardize end date to 18:29:59.999 UTC
   const adjustedEndDate = new Date(endDate);
   adjustedEndDate.setUTCHours(18, 29, 59, 999);
 
+  // Calculate number of days correctly
   const numOfDays = getTotalDaysBetweenDates(
     adjustedStartDate,
     adjustedEndDate

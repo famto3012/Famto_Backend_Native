@@ -129,9 +129,19 @@ const homeSearchController = async (req, res, next) => {
 
 // List the available restaurants in the customers geofence
 const listRestaurantsController = async (req, res, next) => {
-  const { latitude, longitude, businessCategoryId } = req.body;
+  let {
+    latitude,
+    longitude,
+    businessCategoryId,
+    page = 1,
+    limit = 10,
+    query,
+  } = req.query;
 
   try {
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+
     const customerId = req.userAuth;
 
     let currentCustomer;
@@ -159,7 +169,10 @@ const listRestaurantsController = async (req, res, next) => {
       "merchantDetail.location": { $ne: [] },
       isBlocked: false,
       isApproved: "Approved",
-    }).exec();
+    })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     const filteredMerchants = merchants?.filter((merchant) => {
       const servingRadius = merchant.merchantDetail.servingRadius || 0;
@@ -203,10 +216,7 @@ const listRestaurantsController = async (req, res, next) => {
       })
     );
 
-    res.status(200).json({
-      message: "Available merchants",
-      data: simplifiedMerchants,
-    });
+    res.status(200).json(simplifiedMerchants);
   } catch (err) {
     next(appError(err.message));
   }
@@ -242,108 +252,16 @@ const getAllCategoriesOfMerchants = async (req, res, next) => {
       };
     });
 
-    // console.log(`FETCHED ${formattedResponse.length} CATEGORY`);
-
-    res.status(200).json(formattedResponse);
+    res.status(200).json({
+      hasNextPage: formattedResponse.length === limit,
+      data: formattedResponse,
+    });
   } catch (err) {
     next(appError(err.message));
   }
 };
 
 // Get all product of a category
-// const getAllProductsOfMerchantController = async (req, res, next) => {
-//   try {
-//     let { categoryId, page = 1, limit = 10 } = req.query;
-//     const customerId = req.userAuth;
-
-//     // console.log("FETCHING FOR: ", categoryId);
-
-//     page = parseInt(page, 10);
-//     limit = parseInt(limit, 10);
-
-//     const skip = (page - 1) * limit;
-
-//     const currentCustomer =
-//       (await Customer.findById(customerId)
-//         .select("customerDetails.favoriteProducts")
-//         .lean()) ?? null;
-
-//     if (customerId && !currentCustomer)
-//       return next(appError("Customer not found", 404));
-
-//     const allProducts = await Product.find({ categoryId, inventory: true })
-//       .populate(
-//         "discountId",
-//         "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
-//       )
-//       .sort({ order: 1 })
-//       .skip(skip)
-//       .limit(limit);
-
-//     const productsWithDetails = allProducts.map((product) => {
-//       const currentDate = new Date();
-//       const validFrom = new Date(product?.discountId?.validFrom);
-//       const validTo = new Date(product?.discountId?.validTo);
-
-//       // Adjusting the validTo date to the end of the day
-//       validTo?.setHours(18, 29, 59, 999);
-
-//       let discountPrice = null;
-
-//       // Calculate the discount price if applicable
-//       if (
-//         product?.discountId &&
-//         validFrom <= currentDate &&
-//         validTo >= currentDate &&
-//         product?.discountId?.status
-//       ) {
-//         const discount = product.discountId;
-
-//         if (discount.discountType === "Percentage-discount") {
-//           let discountAmount = (product.price * discount.discountValue) / 100;
-//           if (discountAmount > discount.maxAmount) {
-//             discountAmount = discount.maxAmount;
-//           }
-//           discountPrice = Math.max(0, product.price - discountAmount);
-//         } else if (discount.discountType === "Flat-discount") {
-//           discountPrice = Math.max(0, product.price - discount.discountValue);
-//         }
-//       }
-
-//       const isFavorite =
-//         currentCustomer?.customerDetails?.favoriteProducts?.includes(
-//           product._id
-//         ) ?? false;
-
-//       return {
-//         productId: product._id,
-//         productName: product.productName || null,
-//         price: product.price || null,
-//         discountPrice: Math.round(discountPrice) || null,
-//         minQuantityToOrder: product.minQuantityToOrder || null,
-//         maxQuantityPerOrder: product.maxQuantityPerOrder || null,
-//         isFavorite,
-//         preparationTime: product?.preparationTime
-//           ? `${product.preparationTime} min`
-//           : null,
-//         description: product.description || null,
-//         longDescription: product.longDescription || null,
-//         type: product.type || null,
-//         productImageURL:
-//           product.productImageURL ||
-//           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
-//         inventory: product.inventory,
-//         variantAvailable: product.variants && product.variants.length > 0,
-//       };
-//     });
-
-//     // console.log(`FETCHED ${productsWithDetails.length} PRODUCTS`);
-
-//     res.status(200).json(productsWithDetails);
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
 const getAllProductsOfMerchantController = async (req, res, next) => {
   try {
     let { categoryId, page = 1, limit = 10 } = req.query;
@@ -425,7 +343,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
         productId: product._id,
         productName: product.productName || null,
         price: product.price || null,
-        discountPrice: Math.round(discountPrice) || null,
+        discountPrice: discountPrice || null,
         minQuantityToOrder: product.minQuantityToOrder || null,
         maxQuantityPerOrder: product.maxQuantityPerOrder || null,
         isFavorite,
@@ -440,11 +358,14 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
         inventory: product.inventory,
         variantAvailable: product.variants && product.variants.length > 0,
-        cartCount, // ✅ Added cartCount
+        cartCount,
       };
     });
 
-    res.status(200).json(productsWithDetails);
+    res.status(200).json({
+      hasNextPage: productsWithDetails.length === limit,
+      data: productsWithDetails,
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -502,12 +423,13 @@ const getMerchantData = async (req, res, next) => {
     const merchantData = {
       merchantName: merchantFound.merchantDetail.merchantName,
       distanceInKM: distanceInKM || null,
-      deliveryTime: merchantFound.merchantDetail.deliveryTime,
-      description: merchantFound.merchantDetail.description,
-      displayAddress: merchantFound.merchantDetail.displayAddress,
-      preOrderStatus: merchantFound.merchantDetail.preOrderStatus,
-      rating: merchantFound.merchantDetail.averageRating,
+      deliveryTime: merchantFound.merchantDetail.deliveryTime || null,
+      description: merchantFound.merchantDetail.description || null,
+      displayAddress: merchantFound.merchantDetail.displayAddress || null,
+      preOrderStatus: merchantFound.merchantDetail.preOrderStatus || false,
+      rating: merchantFound.merchantDetail.averageRating || 0,
       phoneNumber: merchantFound.phoneNumber,
+      fssaiNumber: merchantFound.merchantDetail.FSSAINumber || null,
       isFavourite,
       distanceWarning,
     };
@@ -580,7 +502,7 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
 
               return {
                 ...variantType._doc,
-                discountPrice: Math.round(variantDiscountPrice),
+                discountPrice: variantDiscountPrice,
               };
             }
           );
@@ -604,13 +526,21 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
 // Filter merchants based on (Pure veg, Rating, Nearby)
 const filterAndSearchMerchantController = async (req, res, next) => {
   try {
-    const {
+    let {
       businessCategoryId,
       filterType,
       query = "",
       latitude,
       longitude,
+      page = 1,
+      limit = 10,
     } = req.query;
+
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+
+    const skip = (page - 1) * limit;
+
     const customerId = req.userAuth;
 
     // Validate required inputs
@@ -658,7 +588,10 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     }
 
     // Fetch merchants based on filter criteria
-    let merchants = await Merchant.find(filterCriteria).lean();
+    let merchants = await Merchant.find(filterCriteria)
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     const customerLocation = [latitude, longitude];
     // Apply "Nearby" filter if required
@@ -702,10 +635,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     });
 
     // Respond with filtered merchants
-    res.status(200).json({
-      message: "Filtered and searched merchants",
-      data: responseMerchants,
-    });
+    res.status(200).json(responseMerchants);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1398,10 +1328,14 @@ const confirmOrderDetailController = async (req, res, next) => {
       merchant,
     });
 
+    console.log("merchantDiscountAmount", merchantDiscountAmount);
+
     const loyaltyDiscount = await getDiscountAmountFromLoyalty(
       customer,
       itemTotal
     );
+
+    console.log("loyaltyDiscount", loyaltyDiscount);
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
@@ -1556,7 +1490,7 @@ const applyPromoCodeController = async (req, res, next) => {
       );
     }
 
-    const { itemTotal } = cart.billDetail;
+    const { itemTotal, discountedAmount = 0 } = cart.billDetail;
     const totalCartPrice =
       cart.cartDetail.deliveryOption === "Scheduled"
         ? calculateScheduledCartValue(cart, promoCodeFound)
@@ -1585,21 +1519,20 @@ const applyPromoCodeController = async (req, res, next) => {
       totalCartPrice
     );
 
+    const calculatedDiscount = promoCodeDiscount + discountedAmount;
+
     // Apply discount
     const updatedCart = applyPromoCodeDiscount(
       cart,
       promoCodeFound,
-      promoCodeDiscount
+      Number(calculatedDiscount.toFixed(2))
     );
 
     await updatedCart.save();
 
     const populatedCart = await populateCartDetails(customerId);
 
-    res.status(200).json({
-      success: "Promo code applied successfully",
-      data: populatedCart,
-    });
+    res.status(200).json(populatedCart);
   } catch (err) {
     next(appError(err.message));
   }
