@@ -84,29 +84,50 @@ const addShopController = async (req, res, next) => {
       };
     }
 
-    // Check if a cart with the same customerId and deliveryMode exists
-    const cartFound = await PickAndCustomCart.findOne({
-      customerId,
-      "cartDetail.deliveryMode": "Custom Order",
-    });
-
-    if (cartFound) await PickAndCustomCart.findByIdAndDelete(cartFound._id);
-
-    const cart = await PickAndCustomCart.create({
-      customerId,
-      cartDetail: updatedCartDetail,
-    });
+    const cart = await PickAndCustomCart.findOneAndUpdate(
+      {
+        customerId,
+        "cartDetail.deliveryMode": "Custom Order",
+      },
+      {
+        $set: { cartDetail: updatedCartDetail },
+        $setOnInsert: { customerId, items: [] },
+      },
+      { new: true, upsert: true }
+    );
 
     res.status(200).json({
-      message: "Shop detail added successfully in Custom order",
-      data: {
-        shopName: shopName || null,
-        place: place || null,
-        distance: parseFloat(distance) || null,
-        duration: duration || null,
-        items: cart?.items || [],
-      },
+      cartId: cart._id,
+      shopName: buyFromAnyWhere ? "Buy from any store" : shopName,
+      place: buyFromAnyWhere ? "" : place,
+      distance: parseFloat(distance) || null,
+      duration: duration || null,
     });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const getCustomOrderItems = async (req, res, next) => {
+  try {
+    const { cartId } = req.query;
+
+    const cart = await PickAndCustomCart.findById(cartId);
+
+    if (!cart) {
+      return next(appError("Cart not found", 404));
+    }
+
+    const formattedResponse = cart.items?.map((item) => ({
+      itemId: item.itemId,
+      itemName: item.itemName,
+      unit: item.unit,
+      numOfUnits: item.numOfUnits,
+      quantity: item.quantity,
+      itemImageURL: item.itemImageURL,
+    }));
+
+    res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -150,20 +171,17 @@ const addItemsToCartController = async (req, res, next) => {
     await cart.save();
 
     res.status(200).json({
-      message: "Item added successfully",
-      data: {
-        cartId: cart._id,
-        customerId: cart.customerId,
-        cartDetail: cart.cartDetail,
-        items: cart.items?.map((item) => ({
-          itemId: item.itemId,
-          itemName: item.itemName,
-          quantity: item.quantity,
-          unit: item.unit,
-          numOfUnits: item.numOfUnits,
-          itemImage: item.itemImageURL,
-        })),
-      },
+      cartId: cart._id,
+      customerId: cart.customerId,
+      cartDetail: cart.cartDetail,
+      items: cart.items?.map((item) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unit: item.unit,
+        numOfUnits: item.numOfUnits,
+        itemImage: item.itemImageURL,
+      })),
     });
   } catch (err) {
     next(appError(err.message));
@@ -212,11 +230,14 @@ const editItemInCartController = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
+    console.log("Cart found");
+
     const itemIndex = cart.items.findIndex(
       (item) => item.itemId.toString() === itemId
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
+    console.log("Item found");
 
     let itemImageURL = cart.items[itemIndex].itemImageURL;
 
@@ -244,7 +265,16 @@ const editItemInCartController = async (req, res, next) => {
 
     await cart.save();
 
-    res.status(200).json({ message: "Item updated successfully" });
+    const formattedItems = cart.items?.map((item) => ({
+      itemId: item.itemId,
+      itemName: item.itemName,
+      quantity: item.quantity,
+      unit: item.unit,
+      numOfUnits: item.numOfUnits,
+      itemImage: item.itemImageURL,
+    }));
+
+    res.status(200).json(formattedItems);
   } catch (err) {
     next(appError(err.message));
   }
@@ -450,49 +480,47 @@ const addDeliveryAddressController = async (req, res, next) => {
       { new: true }
     );
 
-    const formattedItems = cartFound.items.map((item) => ({
-      itemId: item.itemId,
-      itemName: item.itemName,
-      quantity: item?.quantity ? `${item.quantity} ${item.unit}` : null,
-      numOfUnits: item.numOfUnits,
-      itemImage: item.itemImageURL,
-    }));
+    res.status(200).json({
+      cartId: cartFound._id,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const getCustomCartBill = async (req, res, next) => {
+  try {
+    const { cartId } = req.query;
+
+    const cart = await PickAndCustomCart.findById(cartId);
+
+    if (!cart) {
+      return next(appError("Cart not found", 404));
+    }
+
+    const havePickupLocation = cart?.cartDetail?.pickupLocation?.length === 2;
 
     const billDetail = {
-      deliveryChargePerDay: cartFound?.billDetail?.deliveryChargePerDay || null,
-      originalDeliveryCharge: havePickupLocation
-        ? cartFound?.billDetail?.originalDeliveryCharge
-        : null,
-      discountedDeliveryCharge: havePickupLocation
-        ? cartFound?.billDetail?.discountedDeliveryCharge
+      deliveryCharge: havePickupLocation
+        ? cart?.billDetail?.discountedDeliveryCharge ||
+          cart?.billDetail?.originalDeliveryCharge
         : null,
       discountedAmount: havePickupLocation
-        ? cartFound?.billDetail?.discountedAmount
+        ? cart?.billDetail?.discountedAmount
         : null,
-      originalGrandTotal: havePickupLocation
-        ? cartFound?.billDetail?.originalGrandTotal
+      grandTotal: havePickupLocation
+        ? cart?.billDetail?.discountedGrandTotal ||
+          cart?.billDetail?.originalGrandTotal
         : null,
-      discountedGrandTotal: havePickupLocation
-        ? cartFound?.billDetail?.discountedGrandTotal
-        : null,
-      taxAmount: havePickupLocation ? cartFound?.billDetail?.taxAmount : null,
-      itemTotal: cartFound?.billDetail?.itemTotal || null,
-      addedTip: cartFound?.billDetail?.addedTip || null,
-      subTotal: havePickupLocation ? cartFound?.billDetail?.subTotal : null,
-      vehicleType: cartFound?.billDetail?.vehicleType || null,
-      surgePrice: cartFound?.billDetail?.surgePrice || null,
+      taxAmount: havePickupLocation ? cart?.billDetail?.taxAmount : null,
+      itemTotal: cart?.billDetail?.itemTotal || null,
+      addedTip: cart?.billDetail?.addedTip || null,
+      subTotal: havePickupLocation ? cart?.billDetail?.subTotal : null,
+      surgePrice: cart?.billDetail?.surgePrice || null,
+      promoCodeUsed: cart?.billDetail?.promoCodeUsed || null,
     };
 
-    const formattedResponse = {
-      items: formattedItems,
-      billDetail,
-      buyFromAnyWhere: !havePickupLocation,
-    };
-
-    res.status(200).json({
-      message: "Delivery address added successfully",
-      data: formattedResponse,
-    });
+    res.status(200).json(billDetail);
   } catch (err) {
     next(appError(err.message));
   }
@@ -778,9 +806,12 @@ const confirmCustomOrderController = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
 
+    const { cartId } = req.body;
+
     const [customer, cart] = await Promise.all([
       Customer.findById(customerId),
       PickAndCustomCart.findOne({
+        _id: mongoose.Types.ObjectId.createFromHexString(cartId),
         customerId,
         "cartDetail.deliveryMode": "Custom Order",
       }),
@@ -1030,6 +1061,7 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
 
 module.exports = {
   addShopController,
+  getCustomOrderItems,
   addItemsToCartController,
   editItemInCartController,
   deleteItemInCartController,
@@ -1038,4 +1070,5 @@ module.exports = {
   confirmCustomOrderController,
   cancelCustomBeforeOrderCreationController,
   getSingleItemController,
+  getCustomCartBill,
 };
