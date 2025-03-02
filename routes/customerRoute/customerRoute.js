@@ -98,6 +98,8 @@ const {
   confirmCustomOrderController,
   cancelCustomBeforeOrderCreationController,
   getSingleItemController,
+  getCustomOrderItems,
+  getCustomCartBill,
 } = require("../../controllers/customer/customOrderController");
 const {
   getTimingsForCustomerApp,
@@ -436,6 +438,10 @@ customerRoute.post(
   isAuthenticated,
   addItemsToCartController
 );
+
+customerRoute.get("/custom-order-item", isAuthenticated, getCustomOrderItems);
+
+customerRoute.get("/custom-cart-bill", isAuthenticated, getCustomCartBill);
 
 customerRoute.get(
   "/get-item/:itemId",

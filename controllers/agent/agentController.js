@@ -1685,6 +1685,7 @@ const verifyDepositController = async (req, res, next) => {
       type: "Debit",
       amount,
       madeOn: new Date(),
+      title: "Deposit to Famto",
     };
 
     agentFound.workStructure.cashInHand -= amount;
