@@ -91,7 +91,7 @@ const addShopController = async (req, res, next) => {
       },
       {
         $set: { cartDetail: updatedCartDetail },
-        $setOnInsert: { customerId, items: [] },
+        $setOnInsert: { customerId },
       },
       { new: true, upsert: true }
     );
@@ -136,6 +136,8 @@ const getCustomOrderItems = async (req, res, next) => {
 const addItemsToCartController = async (req, res, next) => {
   try {
     const { itemName, quantity, unit, numOfUnits } = req.body;
+
+    console.log(req.body);
 
     const customerId = req.userAuth;
 
@@ -491,6 +493,8 @@ const addDeliveryAddressController = async (req, res, next) => {
 const getCustomCartBill = async (req, res, next) => {
   try {
     const { cartId } = req.query;
+
+    console.log("cartId", cartId);
 
     const cart = await PickAndCustomCart.findById(cartId);
 

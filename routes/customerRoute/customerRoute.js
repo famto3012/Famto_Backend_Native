@@ -77,6 +77,7 @@ const {
   fetchTemporaryOrderOfCustomer,
   getCategory,
   getProduct,
+  getProductsWithVariantsInCart,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -177,6 +178,13 @@ customerRoute.get(
   getAllProductsOfMerchantController
 );
 
+// Get products with variants in cart
+customerRoute.get(
+  "/products-with-variants",
+  isAuthenticated,
+  getProductsWithVariantsInCart
+);
+
 // Get all merchant card data
 customerRoute.get("/merchant-data", isLooselyAuthenticated, getMerchantData);
 
@@ -222,7 +230,7 @@ customerRoute.patch(
 
 // Add ratings to merchant
 customerRoute.post(
-  "/rate-merchant/:merchantId",
+  "/rate-merchant",
   ratingValidations,
   isAuthenticated,
   addRatingToMerchantController

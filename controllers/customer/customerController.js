@@ -939,8 +939,6 @@ const getTransactionOfCustomerController = async (req, res, next) => {
       transactionTime: `${formatTime(transaction.madeOn)}`,
     }));
 
-    console.log(`Length is ${transactions?.length} on ${new Date()}`);
-
     res.status(200).json(transactions);
   } catch (err) {
     next(appError(err.message));
