@@ -1032,8 +1032,6 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
 
 // Add ratings to the merchant
 const addRatingToMerchantController = async (req, res, next) => {
-  const { review, rating } = req.body;
-
   const errors = validationResult(req);
 
   let formattedErrors = {};
@@ -1045,13 +1043,13 @@ const addRatingToMerchantController = async (req, res, next) => {
   }
 
   try {
+    const { review, rating, merchantId } = req.body;
+
     const currentCustomer = await Customer.findById(req.userAuth);
 
     if (!currentCustomer) {
       return next(appError("Customer is not authenticated", 401));
     }
-
-    const { merchantId } = req.params;
 
     const merchantFound = await Merchant.findById(merchantId);
 
@@ -1234,6 +1232,59 @@ const addOrUpdateCartItemController = async (req, res, next) => {
         itemTotal: updatedCart.itemTotal,
       },
     });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const getProductsWithVariantsInCart = async (req, res, next) => {
+  try {
+    const { productId } = req.query;
+    const customerId = req.userAuth;
+
+    // Fetch cart and product details in one optimized query
+    const cart = await CustomerCart.findOne({ customerId }).populate({
+      path: "items.productId",
+      select: "productName variants", // Fetch only necessary fields
+    });
+
+    if (!cart) {
+      return next(appError("Cart not found", 404));
+    }
+
+    // Find the specific product from the cart
+    const cartItems = cart.items.filter(
+      (item) => item.productId._id.toString() === productId
+    );
+
+    if (!cartItems.length) {
+      return next(appError("Product not found in cart", 404));
+    }
+
+    // Map and format the response
+    const formattedItems = cartItems.map((cartItem) => {
+      const product = cartItem.productId;
+
+      // Find the correct variant type
+      const variantTypeName =
+        product.variants
+          .flatMap((variant) => variant.variantTypes)
+          .find(
+            (vType) =>
+              vType._id.toString() === cartItem.variantTypeId?.toString()
+          )?.typeName || null;
+
+      return {
+        productId: product._id,
+        productName: product.productName, // Optimized retrieval
+        quantity: cartItem.quantity,
+        variantTypeId: cartItem.variantTypeId,
+        variantTypeName, // Directly assign variant type name
+        price: cartItem.price,
+      };
+    });
+
+    res.status(200).json(formattedItems);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1703,7 +1754,7 @@ const orderPaymentController = async (req, res, next) => {
         ]);
 
         res.status(200).json({
-          message: "Scheduled order created successfully",
+          success: true,
           data: newOrder,
         });
         return;
@@ -1738,6 +1789,7 @@ const orderPaymentController = async (req, res, next) => {
 
         // Return countdown timer to client
         res.status(200).json({
+          success: true,
           orderId,
           createdAt: tempOrder.createdAt,
         });
@@ -1914,6 +1966,7 @@ const orderPaymentController = async (req, res, next) => {
 
       // Return countdown timer to client
       res.status(200).json({
+        success: true,
         orderId,
         createdAt: tempOrder.createdAt,
       });
@@ -2668,4 +2721,5 @@ module.exports = {
   getSuperMarketMerchant,
   getMerchantData,
   fetchTemporaryOrderOfCustomer,
+  getProductsWithVariantsInCart,
 };
