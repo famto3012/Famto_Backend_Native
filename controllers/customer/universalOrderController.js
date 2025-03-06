@@ -1237,6 +1237,41 @@ const addOrUpdateCartItemController = async (req, res, next) => {
   }
 };
 
+const addItemsToCart = async (req, res, next) => {
+  try {
+    const { merchantId, items } = req.body;
+
+    console.log(req.body);
+
+    const customerId = req.userAuth;
+
+    if (!customerId) {
+      return next(appError("Customer is not authenticated", 401));
+    }
+
+    const formattedItems = items?.map((item) => ({
+      productId: item.productId,
+      price: item.price,
+      quantity: item.quantity,
+      variantTypeId: item?.variantTypeId || null,
+    }));
+
+    const cart = await CustomerCart.findOneAndUpdate(
+      { customerId },
+      {
+        $set: { merchantId, items: formattedItems },
+      },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      cartId: cart._id,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 const getProductsWithVariantsInCart = async (req, res, next) => {
   try {
     const { productId } = req.query;
@@ -2722,4 +2757,5 @@ module.exports = {
   getMerchantData,
   fetchTemporaryOrderOfCustomer,
   getProductsWithVariantsInCart,
+  addItemsToCart,
 };
