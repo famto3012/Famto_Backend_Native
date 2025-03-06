@@ -78,6 +78,7 @@ const {
   getCategory,
   getProduct,
   getProductsWithVariantsInCart,
+  addItemsToCart,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -242,13 +243,16 @@ customerRoute.get(
   getTotalRatingOfMerchantController
 );
 
-// Update cart items
+// // Update cart items
 customerRoute.put(
   "/update-cart",
   updateCartProductValidations,
   isAuthenticated,
   addOrUpdateCartItemController
 );
+
+// Update cart items
+customerRoute.post("/add-items", isAuthenticated, addItemsToCart);
 
 // Get merchant delivery option
 customerRoute.get(
