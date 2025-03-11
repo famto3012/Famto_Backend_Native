@@ -60,6 +60,11 @@ const calculateDeliveryCharges = (
   baseDistance,
   fareAfterBaseDistance
 ) => {
+  console.log("distance: ", distance);
+  console.log("baseFare: ", baseFare);
+  console.log("baseDistance: ", baseDistance);
+  console.log("fareAfterBaseDistance: ", fareAfterBaseDistance);
+
   if (fareAfterBaseDistance) {
     if (distance <= baseDistance) {
       return Number(parseFloat(baseFare).toFixed(2) || 0);

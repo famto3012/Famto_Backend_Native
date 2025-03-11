@@ -568,9 +568,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       isApproved: "Approved",
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
-      "merchantDetail.pricing.0": { $exists: true },
-      "merchantDetail.pricing.modelType": { $exists: true },
-      "merchantDetail.pricing.modelId": { $exists: true },
+      // "merchantDetail.pricing.0": { $exists: true },
+      // "merchantDetail.pricing.modelType": { $exists: true },
+      // "merchantDetail.pricing.modelId": { $exists: true },
       "merchantDetail.location": { $exists: true, $ne: [] },
     };
 
@@ -888,10 +888,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       };
     });
 
-    res.status(200).json({
-      success: true,
-      products: formattedResponse,
-    });
+    res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1357,6 +1354,8 @@ const confirmOrderDetailController = async (req, res, next) => {
       isSuperMarketOrder = false,
     } = req.body;
 
+    console.log(req.body);
+
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
       next
@@ -1391,6 +1390,9 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const cartItems = cart.items;
 
+    const booleanSuperMarketOrder =
+      isSuperMarketOrder === "true" ? true : false;
+
     const {
       oneTimeDeliveryCharge,
       surgeCharges,
@@ -1405,7 +1407,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       cartItems,
       scheduledDetails,
       businessCategoryId,
-      isSuperMarketOrder
+      booleanSuperMarketOrder
     );
 
     const merchantDiscountAmount = await applyDiscounts({
@@ -1827,6 +1829,7 @@ const orderPaymentController = async (req, res, next) => {
           success: true,
           orderId,
           createdAt: tempOrder.createdAt,
+          merchantName: merchant.merchantDetail.merchantName,
         });
 
         // After 60 seconds, create the order if not canceled
@@ -2004,6 +2007,7 @@ const orderPaymentController = async (req, res, next) => {
         success: true,
         orderId,
         createdAt: tempOrder.createdAt,
+        merchantName: merchant.merchantDetail.merchantName,
       });
 
       // After 60 seconds, create the order if not canceled
@@ -2011,6 +2015,7 @@ const orderPaymentController = async (req, res, next) => {
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
 
         if (storedOrderData) {
+          console.log("Found temporary", storedOrderData);
           let newOrderCreated = await Order.create({
             customerId: storedOrderData?.customerId,
             merchantId: storedOrderData?.merchantId,
@@ -2347,6 +2352,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       res.status(200).json({
         orderId,
         createdAt: tempOrder.createdAt,
+        merchantName: merchant.merchantDetail.merchantName,
       });
 
       // After 60 seconds, create the order if not canceled
@@ -2712,14 +2718,14 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
 
-    if (!customerId) {
-      return res.status(400).json({ error: "Customer ID is required" });
-    }
+    console.log("CustomerId", customerId);
 
     // Find the latest order for the given customerId
     const latestOrder = await TemporaryOrder.find({ customerId })
-      .sort({ createdAt: -1 }) // Sort in descending order (latest first)
-      .lean(); // Converts Mongoose document to plain JS object
+      .select("createdAt")
+      .sort({ createdAt: -1 });
+
+    console.log("latestOrder", latestOrder);
 
     res.status(200).json(latestOrder);
   } catch (err) {
