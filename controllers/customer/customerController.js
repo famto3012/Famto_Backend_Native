@@ -156,7 +156,7 @@ const registerAndLoginController = async (req, res, next) => {
         customer.id,
         customer.role,
         customer?.fullName ? customer.fullName : "",
-        "2hr"
+        "5hr"
       ),
       refreshToken: refreshToken,
       role: customer.role,
@@ -677,57 +677,6 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
   }
 };
 
-// Get single order detail
-// const getSingleOrderDetailController = async (req, res, next) => {
-//   try {
-//     const currentCustomer = req.userAuth;
-//     const { orderId } = req.params;
-
-//     const orderFound = await Order.findOne({
-//       _id: orderId,
-//       customerId: currentCustomer,
-//     })
-//       .populate({
-//         path: "merchantId",
-//         select: "phoneNumber merchantDetail",
-//       })
-
-//       .exec();
-
-//     if (!orderFound) return next(appError("Order not found", 404));
-
-//     const formattedResponse = {
-//       orderId: orderFound?._id,
-//       pickUpAddress: orderFound?.orderDetail?.pickupAddress || null,
-//       deliveryAddress: orderFound?.orderDetail?.deliveryAddress || null,
-//       items: orderFound?.items || null,
-//       billDetail: {
-//         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
-//         taxAmount: orderFound?.billDetail?.taxAmount || null,
-//         discountedAmount: orderFound?.billDetail?.discountedAmount || null,
-//         grandTotal: orderFound?.billDetail?.grandTotal || null,
-//         itemTotal: orderFound?.billDetail?.itemTotal || null,
-//         addedTip: orderFound?.billDetail?.addedTip || null,
-//         subTotal: orderFound?.billDetail?.subTotal || null,
-//         surgePrice: orderFound?.billDetail?.surgePrice || null,
-//         waitingCharge: orderFound?.billDetail?.waitingCharge || null,
-//         vehicleType: orderFound?.billDetail?.vehicleType || null,
-//       },
-//       orderDate: formatDate(orderFound?.createdAt),
-//       orderTime: formatTime(orderFound?.createdAt),
-//       paymentMode: orderFound?.paymentMode || null,
-//       deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
-//       vehicleType: orderFound?.billDetail?.vehicleType || null,
-//     };
-
-//     res.status(200).json({
-//       message: "Single order detail",
-//       data: formattedResponse,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
 const getSingleOrderDetailController = async (req, res, next) => {
   try {
     const { orderId } = req.params;

@@ -638,7 +638,13 @@ const calculateDeliveryChargesHelper = async (
 
     let customerPricing;
 
-    if (!isSuperMarketOrder) {
+    console.log("isSuperMarketOrder", isSuperMarketOrder);
+
+    if (isSuperMarketOrder) {
+      console.log("super market order");
+      oneTimeDeliveryCharge = 40;
+    } else {
+      console.log("Not super market order");
       customerPricing = await CustomerPricing.findOne({
         deliveryMode,
         businessCategoryId,
@@ -655,9 +661,9 @@ const calculateDeliveryChargesHelper = async (
         customerPricing.baseDistance,
         customerPricing.fareAfterBaseDistance
       );
-    } else {
-      oneTimeDeliveryCharge = 40;
     }
+
+    console.log("oneTimeDeliveryCharge: ", oneTimeDeliveryCharge);
 
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
@@ -1430,13 +1436,12 @@ const processHomeDeliveryDetailInApp = async (
     }
 
     if (pickupLocation.length) {
-      // const { distanceInKM } = await getDistanceFromPickupToDelivery(
-      //   pickupLocation,
-      //   deliveryLocation
-      // );
+      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        pickupLocation,
+        deliveryLocation
+      );
 
-      // distance = distanceInKM;
-      distance = 5;
+      distance = distanceInKM;
     }
   }
 
