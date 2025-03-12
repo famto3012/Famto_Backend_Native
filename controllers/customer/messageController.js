@@ -73,7 +73,11 @@ const sendMessage = async (req, res) => {
         image: formattedResponse.img,
       };
       const fcmToken = userSocketMap[recipientId]?.fcmToken;
-      sendPushNotificationToUser(fcmToken, data);
+      if (Array.isArray(fcmToken) && fcmToken.length > 0) {
+        fcmToken.forEach((token) => {
+          sendPushNotificationToUser(token, data);
+        });
+      }
     }
 
     res.status(201).json(formattedResponse);
@@ -92,23 +96,23 @@ const getMessages = async (req, res) => {
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+      return res.status(200).json([]);
     }
 
     const messages = await Message.find({
-      conversationId: conversation._id,
+      conversationId: conversation?._id,
     }).sort({ createdAt: 1 });
 
-    const formattedMessages = messages.map((message) => ({
-      id: message._id,
-      conversationId: message.conversationId,
-      sender: message.sender,
-      seen: message.seen || false, // Assuming `seen` is false if not present
+    const formattedMessages = messages?.map((message) => ({
+      id: message?._id,
+      conversationId: message?.conversationId,
+      sender: message?.sender,
+      seen: message?.seen || false, // Assuming `seen` is false if not present
       img: message?.img || "",
       text: message?.text || "",
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-      deletionDate: message.deletionDate, // Deletion date set to 7 days after creation
+      createdAt: message?.createdAt,
+      updatedAt: message?.updatedAt,
+      deletionDate: message?.deletionDate, // Deletion date set to 7 days after creation
     }));
 
     res.status(200).json(formattedMessages);
