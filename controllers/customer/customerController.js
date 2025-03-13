@@ -717,6 +717,8 @@ const getSingleOrderDetailController = async (req, res, next) => {
         orderFound?.orderDetail?.deliveryAddress ||
         orderFound?.orderDetail?.deliveryLocation ||
         null,
+      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
+      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
       items: orderFound?.items || null,
       billDetail: {
         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
