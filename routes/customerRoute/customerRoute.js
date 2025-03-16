@@ -89,6 +89,7 @@ const {
   cancelPickBeforeOrderCreationController,
   getVehiclePricingDetailsController,
   initializePickAndDrop,
+  getPickAndDropBill,
 } = require("../../controllers/customer/pickAndDropController");
 const {
   addShopController,
@@ -403,9 +404,15 @@ customerRoute.post(
 );
 
 customerRoute.get(
-  "/get-vehicle-charges/:cartId",
+  "/get-vehicle-charges",
   isAuthenticated,
   getVehiclePricingDetailsController
+);
+
+customerRoute.get(
+  "/get-pick-and-drop-bill",
+  isAuthenticated,
+  getPickAndDropBill
 );
 
 customerRoute.post(

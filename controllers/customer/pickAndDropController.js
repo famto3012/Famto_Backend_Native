@@ -70,6 +70,8 @@ const addPickUpAddressController = async (req, res, next) => {
       time,
     } = req.body;
 
+    console.log(req.body);
+
     const customerId = req.userAuth;
 
     const customer = await Customer.findById(customerId);
@@ -185,8 +187,7 @@ const addPickUpAddressController = async (req, res, next) => {
     }
 
     res.status(200).json({
-      message: "Pick and Drop locations added successfully",
-      data: cartFound._id,
+      cartId: cartFound._id,
     });
   } catch (err) {
     next(appError(err.message));
@@ -202,7 +203,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     if (!customer) return next(appError("Customer not found", 404));
 
-    const { cartId } = req.params;
+    const { cartId } = req.query;
 
     const cartFound = await PickAndCustomCart.findOne({
       _id: cartId,
@@ -252,7 +253,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
       );
     }
 
-    const vehicleCharges = uniqueVehicleTypes
+    const vehicleData = uniqueVehicleTypes
       ?.map((vehicleType) => {
         const pricing = customerPricingArray.find(
           (price) => price.vehicleType === vehicleType
@@ -284,6 +285,8 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
           return {
             vehicleType,
             deliveryCharges: Math.round(calculatedDeliveryCharges),
+            distance,
+            duration,
           };
         } else {
           return null;
@@ -291,12 +294,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
       })
       .filter(Boolean);
 
-    res.status(200).json({
-      distance,
-      duration,
-      vehicleCharges,
-      items: cartFound.items,
-    });
+    res.status(200).json(vehicleData);
   } catch (err) {
     next(appError(err.message));
   }
@@ -360,15 +358,43 @@ const addPickAndDropItemsController = async (req, res, next) => {
     await cart.save();
 
     res.status(200).json({
-      message: "Added items to pick and drop",
-      data: {
-        cartId: cart._id,
-        customerId: cart.customerId,
-        cartDetail: cart.cartDetail,
-        items: cart.items,
-        billDetail: cart.billDetail,
-      },
+      cartId: cart._id,
+      items: cart.items,
     });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const getPickAndDropBill = async (req, res, next) => {
+  try {
+    const { cartId } = req.query;
+
+    const cart = await PickAndCustomCart.findOne({
+      _id: mongoose.Types.ObjectId.createFromHexString(cartId),
+      customerId: req.userAuth,
+      "cartDetail.deliveryMode": "Pick and Drop",
+    });
+
+    if (!cart) {
+      return next(appError("Cart not found", 404));
+    }
+
+    const billDetail = {
+      deliveryCharge:
+        cart.billDetail.discountedDeliveryCharge ||
+        cart.billDetail.originalDeliveryCharge,
+      surgePrice: cart.billDetail.surgePrice,
+      addedTip: cart.billDetail.addedTip,
+      discountedAmount: cart.billDetail.discountedAmount,
+      promoCodeUsed: cart.billDetail.promoCodeUsed,
+      taxAmount: cart.billDetail.taxAmount,
+      grandTotal: cart.billDetail.discountedAmount
+        ? cart.billDetail.discountedGrandTotal
+        : cart.billDetail.originalGrandTotal,
+    };
+
+    res.status(200).json(billDetail);
   } catch (err) {
     next(appError(err.message));
   }
@@ -478,14 +504,7 @@ const addTipAndApplyPromoCodeInPickAndDropController = async (
     await cart.save();
 
     res.status(200).json({
-      message: "Tip and promo code applied successfully",
-      data: {
-        cartId: cart._id,
-        customerId: cart.customerId,
-        cartDetail: cart.cartDetail,
-        items: cart.items,
-        billDetail: cart.billDetail,
-      },
+      success: true,
     });
   } catch (err) {
     next(appError(err.message));
@@ -548,6 +567,9 @@ const confirmPickAndDropController = async (req, res, next) => {
         type: "Debit",
       };
 
+      const deliveryTime = new Date();
+      deliveryTime.setMinutes(deliveryTime.getMinutes() + 60);
+
       let newOrder;
       if (cart.cartDetail.deliveryOption === "Scheduled") {
         // Create scheduled Pick and Drop
@@ -572,7 +594,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         await customer.save();
 
         res.status(200).json({
-          message: "Scheduled order created successfully",
+          success: true,
           data: newOrder,
         });
         return;
@@ -581,12 +603,17 @@ const confirmPickAndDropController = async (req, res, next) => {
       // Generate a unique order ID
       const orderId = new mongoose.Types.ObjectId();
 
+      console.log("cart.cartDetail", cart.cartDetail);
+
       // Store order details temporarily in the database
       const tempOrder = await TemporaryOrder.create({
         orderId,
         customerId,
         items: cart.items,
-        orderDetail: cart.cartDetail,
+        orderDetail: {
+          ...cart.cartDetail,
+          deliveryTime,
+        },
         billDetail: orderBill,
         totalAmount: orderAmount,
         status: "Pending",
@@ -596,29 +623,34 @@ const confirmPickAndDropController = async (req, res, next) => {
 
       customer.transactionDetail.push(customerTransaction);
       customer.walletTransactionDetail.push(walletTransaction);
-      await customer.save();
 
-      // Clear the cart
-      await PickAndCustomCart.deleteOne({ customerId });
+      await Promise.all([
+        customer.save(),
+        PickAndCustomCart.deleteOne({ customerId }),
+      ]);
 
       if (!tempOrder)
         return next(appError("Error in creating temporary order"));
 
+      console.log("tempOrder.orderDetail", tempOrder.orderDetail);
+
       // Return countdown timer to client
       res.status(200).json({
-        message: "Pick and Drop order will be created in 1 minute.",
+        success: true,
         orderId,
-        countdown: 60,
+        createdAt: tempOrder.createdAt,
       });
 
       setTimeout(async () => {
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
 
         if (storedOrderData) {
+          console.log("Stored detail", storedOrderData.orderDetail);
+
           const newOrder = await Order.create({
             customerId: storedOrderData.customerId,
             items: storedOrderData.items,
-            orderDetail: storedOrderData.cartDetail,
+            orderDetail: storedOrderData.orderDetail,
             billDetail: storedOrderData.billDetail,
             totalAmount: storedOrderData.orderAmount,
             status: storedOrderData.status,
@@ -674,7 +706,7 @@ const confirmPickAndDropController = async (req, res, next) => {
                 ? formatTime(newOrder.orderDetail.deliveryTime)
                 : "-",
               paymentMethod: newOrder.paymentMode,
-              deliveryOption: newOrder.orderDetail.deliveryOption,
+              deliveryOption: newOrder?.orderDetail?.deliveryOption,
               amount: newOrder.billDetail.grandTotal,
               orderDetailStepper: newOrder.orderDetailStepper.created,
             },
@@ -706,7 +738,7 @@ const confirmPickAndDropController = async (req, res, next) => {
             parameter.role
           );
         }
-      });
+      }, 60000);
     } else if (paymentMode === "Online-payment") {
       const { success, orderId, error } = await createRazorpayOrderId(
         orderAmount
@@ -830,9 +862,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
 
     // Return countdown timer to client
     res.status(200).json({
-      message: "Order will be created in 1 minute.",
+      success: true,
       orderId,
-      countdown: 60,
+      createdAt: tempOrder.createdAt,
     });
 
     setTimeout(async () => {
@@ -1040,4 +1072,5 @@ module.exports = {
   verifyPickAndDropPaymentController,
   cancelPickBeforeOrderCreationController,
   initializePickAndDrop,
+  getPickAndDropBill,
 };

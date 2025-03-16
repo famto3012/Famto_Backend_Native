@@ -2340,13 +2340,15 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       });
 
       customer.transactionDetail.push(customerTransaction);
-      await customer.save();
 
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
 
-      await CustomerCart.deleteOne({ customerId });
+      await Promise.all([
+        customer.save(),
+        CustomerCart.deleteOne({ customerId }),
+      ]);
 
       // Return countdown timer to client
       res.status(200).json({
