@@ -82,7 +82,7 @@ const registerAndLoginController = async (req, res, next) => {
         lastPlatformUsed: os.platform(),
         customerDetails: {
           location,
-          geofenceId: geofence._id,
+          geofenceId: geofence._id ? geofence._id : null,
         },
       });
     } else {
@@ -91,7 +91,7 @@ const registerAndLoginController = async (req, res, next) => {
       customer.customerDetails = {
         ...customer.customerDetails,
         location,
-        geofenceId: geofence._id,
+        geofenceId: geofence._id ? geofence._id : null,
       };
 
       await customer.save();
@@ -161,6 +161,7 @@ const registerAndLoginController = async (req, res, next) => {
       refreshToken: refreshToken,
       role: customer.role,
       geofenceName: geofence.name,
+      outsideGeofence: geofence._id ? false : true,
     });
   } catch (err) {
     next(appError(err.message));
@@ -204,6 +205,18 @@ const setSelectedGeofence = async (req, res, next) => {
     await customerFound.save();
 
     res.status(200).json({ message: "Geofence saved successfully" });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const verifyCustomerAddressLocation = async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.body;
+
+    const geofence = await geoLocation(latitude, longitude, next);
+
+    res.status(200).json({ success: geofence ? true : false });
   } catch (err) {
     next(appError(err.message));
   }
@@ -313,72 +326,66 @@ const updateCustomerAddressController = async (req, res, next) => {
   }
 
   try {
-    const { addresses } = req.body;
+    const { type, fullName, phoneNumber, flat, area, landmark, coordinates } =
+      req.body;
 
     const currentCustomer = await Customer.findById(req.userAuth);
     if (!currentCustomer) return next(appError("Customer not found", 404));
 
-    // Initialize other addresses if not present
-    const updatedOtherAddresses =
-      currentCustomer.customerDetails.otherAddress || [];
+    const address = {
+      type,
+      fullName,
+      phoneNumber,
+      flat,
+      area,
+      landmark,
+      coordinates,
+    };
 
-    addresses.forEach((address) => {
-      const {
-        id,
-        type,
-        fullName,
-        phoneNumber,
-        flat,
-        area,
-        landmark,
-        coordinates,
-      } = address;
-      const updatedAddress = {
-        fullName,
-        phoneNumber,
-        flat,
-        area,
-        landmark,
-        coordinates,
-      };
+    let updatedAddress = null;
 
-      switch (type) {
-        case "home":
-          currentCustomer.customerDetails.homeAddress = updatedAddress;
-          break;
-        case "work":
-          currentCustomer.customerDetails.workAddress = updatedAddress;
-          break;
-        case "other":
-          if (id) {
-            // Update existing other address if ID matches
-            const index = updatedOtherAddresses.findIndex(
-              (addr) => addr.id.toString() === id.toString()
-            );
-            if (index !== -1) {
-              updatedOtherAddresses[index] = { id, ...updatedAddress };
-            } else {
-              updatedOtherAddresses.push({ id, ...updatedAddress });
-            }
+    switch (address.type) {
+      case "home":
+        currentCustomer.customerDetails.homeAddress = address;
+        updatedAddress = address;
+        break;
+
+      case "work":
+        currentCustomer.customerDetails.workAddress = address;
+        updatedAddress = address;
+        break;
+
+      case "other":
+        if (address.id) {
+          // Find and update existing other address
+          const index = currentCustomer.customerDetails.otherAddress.findIndex(
+            (addr) => addr.id.toString() === address.id.toString()
+          );
+
+          if (index !== -1) {
+            currentCustomer.otherAddress[index] = { ...address };
+            updatedAddress =
+              currentCustomer.customerDetails.otherAddress[index];
           } else {
-            // Add new address with generated ID
-            updatedOtherAddresses.push({
-              id: new mongoose.Types.ObjectId(),
-              ...updatedAddress,
-            });
+            return next(appError("Address ID not found", 404));
           }
-          break;
-        default:
-          throw new Error("Invalid address type");
-      }
-    });
+        } else {
+          // Create new address
+          const newAddress = { id: new mongoose.Types.ObjectId(), ...address };
+          currentCustomer.customerDetails.otherAddress.push(newAddress);
+          updatedAddress = newAddress;
+        }
+        break;
 
-    // Replace other addresses with updated array
-    currentCustomer.customerDetails.otherAddress = updatedOtherAddresses;
+      default:
+        return next(appError("Invalid address type", 400));
+    }
+
     await currentCustomer.save();
 
     res.status(200).json({
-      message: "Customer addresses updated successfully",
+      success: true,
+      address: updatedAddress,
     });
   } catch (err) {
     next(appError(err.message));
@@ -1842,4 +1849,5 @@ module.exports = {
   removeAppliedPromoCode,
   haveValidCart,
   searchProductAndMerchantController,
+  verifyCustomerAddressLocation,
 };
