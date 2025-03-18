@@ -45,6 +45,7 @@ const {
   removeAppliedPromoCode,
   haveValidCart,
   searchProductAndMerchantController,
+  verifyCustomerAddressLocation,
 } = require("../../controllers/customer/customerController");
 const {
   getAllBusinessCategoryController,
@@ -124,6 +125,12 @@ customerRoute.get("/all-geofence", isAuthenticated, getAvailableGeofences);
 // Set selected geofence
 customerRoute.post("/set-geofence", isAuthenticated, setSelectedGeofence);
 
+customerRoute.post(
+  "/verify-geofence",
+  isAuthenticated,
+  verifyCustomerAddressLocation
+);
+
 // Get customer profile route
 customerRoute.get("/profile", isAuthenticated, getCustomerProfileController);
 
@@ -138,7 +145,7 @@ customerRoute.put(
 // Update customer address route
 customerRoute.patch(
   "/update-address",
-  updateAddressValidations,
+  // updateAddressValidations,
   isAuthenticated,
   updateCustomerAddressController
 );
