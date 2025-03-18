@@ -6,7 +6,6 @@ const {
   deleteFromFirebase,
 } = require("../../utils/imageOperation");
 const generateToken = require("../../utils/generateToken");
-const geoLocation = require("../../utils/getGeoLocation");
 const appError = require("../../utils/appError");
 
 const {
@@ -51,6 +50,7 @@ const AgentAppCustomization = require("../../models/AgentAppCustomization");
 const ManagerRoles = require("../../models/ManagerRoles");
 const Manager = require("../../models/Manager");
 const verifyToken = require("../../utils/verifyToken");
+const { geoLocation } = require("../../utils/getGeoLocation");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {

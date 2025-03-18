@@ -43,4 +43,17 @@ const geoLocation = async (latitude, longitude) => {
   }
 };
 
-module.exports = geoLocation;
+const calculateRoadDistance = async (origin, destination) => {
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${origin[1]},${origin[0]};${destination[1]},${destination[0]}?overview=false`
+    );
+    const data = await response.json();
+    return data.routes[0].distance / 1000; // Convert meters to kilometers
+  } catch (error) {
+    console.error("Error calculating road distance:", error);
+    return null;
+  }
+};
+
+module.exports = { geoLocation, calculateRoadDistance };

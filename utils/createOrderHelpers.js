@@ -13,7 +13,7 @@ const appError = require("./appError");
 
 const { convertISTToUTC } = require("./formatters");
 
-const geoLocation = require("./getGeoLocation");
+const {geoLocation} = require("./getGeoLocation");
 
 const {
   calculateDeliveryCharges,
