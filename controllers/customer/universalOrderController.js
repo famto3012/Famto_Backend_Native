@@ -36,7 +36,7 @@ const {
 const { formatDate, formatTime } = require("../../utils/formatters");
 
 const appError = require("../../utils/appError");
-const geoLocation = require("../../utils/getGeoLocation");
+const { geoLocation } = require("../../utils/getGeoLocation");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
 const {
@@ -524,6 +524,123 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
 };
 
 // Filter merchants based on (Pure veg, Rating, Nearby)
+// const filterAndSearchMerchantController = async (req, res, next) => {
+//   try {
+//     let {
+//       businessCategoryId,
+//       filterType,
+//       query = "",
+//       latitude,
+//       longitude,
+//       page = 1,
+//       limit = 10,
+//     } = req.query;
+
+//     page = parseInt(page, 10);
+//     limit = parseInt(limit, 10);
+
+//     const skip = (page - 1) * limit;
+
+//     const customerId = req.userAuth;
+
+//     // Validate required inputs
+//     if (!businessCategoryId)
+//       return next(appError("Business category is required", 400));
+
+//     let customer;
+
+//     if (customerId) {
+//       // Fetch customer and validate existence
+//       customer = await Customer.findById(customerId).select(
+//         "customerDetails.location"
+//       );
+
+//       if (!customer) return next(appError("Customer not found", 404));
+//     }
+
+//     const foundGeofence = await geoLocation(latitude, longitude);
+
+//     if (!foundGeofence) return next(appError("Geofence not found", 404));
+
+//     // Define base filter criteria
+//     const filterCriteria = {
+//       isBlocked: false,
+//       isApproved: "Approved",
+//       "merchantDetail.geofenceId": foundGeofence._id,
+//       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
+//       // "merchantDetail.pricing.0": { $exists: true },
+//       // "merchantDetail.pricing.modelType": { $exists: true },
+//       // "merchantDetail.pricing.modelId": { $exists: true },
+//       "merchantDetail.location": { $exists: true, $ne: [] },
+//     };
+
+//     // Apply additional filters based on filterType
+//     if (query) {
+//       filterCriteria["merchantDetail.merchantName"] = {
+//         $regex: query.trim(),
+//         $options: "i",
+//       };
+//     }
+//     if (filterType === "Veg") {
+//       filterCriteria["merchantDetail.merchantFoodType"] = "Veg";
+//     } else if (filterType === "Rating") {
+//       filterCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
+//     }
+
+//     // Fetch merchants based on filter criteria
+//     let merchants = await Merchant.find(filterCriteria)
+//       .skip(skip)
+//       .limit(limit)
+//       .lean();
+
+//     const customerLocation = [latitude, longitude];
+//     // Apply "Nearby" filter if required
+//     const turf = require("@turf/turf");
+//     if (filterType === "Nearby" && customerLocation) {
+//       merchants = merchants.filter((merchant) => {
+//         const servingRadius = merchant.merchantDetail.servingRadius || 0;
+//         const merchantLocation = merchant.merchantDetail.location;
+//         if (servingRadius > 0 && Array.isArray(merchantLocation)) {
+//           const distance = turf.distance(
+//             turf.point(merchantLocation),
+//             turf.point(customerLocation),
+//             { units: "kilometers" }
+//           );
+//           return distance <= servingRadius;
+//         }
+//         return true;
+//       });
+//     }
+
+//     // Sort merchants by sponsorship or other criteria
+//     const sortedMerchants = sortMerchantsBySponsorship(merchants);
+
+//     // Map sorted merchants to response format
+//     const responseMerchants = sortedMerchants.map((merchant) => {
+//       return {
+//         id: merchant._id,
+//         merchantName: merchant.merchantDetail.merchantName,
+//         description: merchant.merchantDetail.description || "",
+//         averageRating: merchant.merchantDetail.averageRating || 0,
+//         status: merchant?.status,
+//         restaurantType: merchant?.merchantDetail?.merchantFoodType || null,
+//         merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
+//         displayAddress: merchant.merchantDetail.displayAddress || null,
+//         preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
+//         isFavorite:
+//           customer?.customerDetails?.favoriteMerchants?.includes(
+//             merchant._id
+//           ) ?? false,
+//       };
+//     });
+
+//     // Respond with filtered merchants
+//     res.status(200).json(responseMerchants);
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const filterAndSearchMerchantController = async (req, res, next) => {
   try {
     let {
@@ -534,47 +651,37 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       longitude,
       page = 1,
       limit = 10,
+      merchantId,
+      productName,
     } = req.query;
 
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
 
-    const skip = (page - 1) * limit;
-
     const customerId = req.userAuth;
 
-    // Validate required inputs
     if (!businessCategoryId)
       return next(appError("Business category is required", 400));
 
     let customer;
-
     if (customerId) {
-      // Fetch customer and validate existence
       customer = await Customer.findById(customerId).select(
         "customerDetails.location"
       );
-
       if (!customer) return next(appError("Customer not found", 404));
     }
 
     const foundGeofence = await geoLocation(latitude, longitude);
-
     if (!foundGeofence) return next(appError("Geofence not found", 404));
 
-    // Define base filter criteria
     const filterCriteria = {
       isBlocked: false,
       isApproved: "Approved",
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
-      // "merchantDetail.pricing.0": { $exists: true },
-      // "merchantDetail.pricing.modelType": { $exists: true },
-      // "merchantDetail.pricing.modelId": { $exists: true },
       "merchantDetail.location": { $exists: true, $ne: [] },
     };
 
-    // Apply additional filters based on filterType
     if (query) {
       filterCriteria["merchantDetail.merchantName"] = {
         $regex: query.trim(),
@@ -587,54 +694,86 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       filterCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
     }
 
-    // Fetch merchants based on filter criteria
-    let merchants = await Merchant.find(filterCriteria)
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Fetch all merchants (without pagination)
+    let merchants = await Merchant.find(filterCriteria).lean();
 
-    const customerLocation = [latitude, longitude];
-    // Apply "Nearby" filter if required
-    const turf = require("@turf/turf");
-    if (filterType === "Nearby" && customerLocation) {
-      merchants = merchants.filter((merchant) => {
-        const servingRadius = merchant.merchantDetail.servingRadius || 0;
-        const merchantLocation = merchant.merchantDetail.location;
-        if (servingRadius > 0 && Array.isArray(merchantLocation)) {
-          const distance = turf.distance(
-            turf.point(merchantLocation),
-            turf.point(customerLocation),
-            { units: "kilometers" }
-          );
-          return distance <= servingRadius;
-        }
-        return true;
-      });
+    console.log("Total merchants found before filtering:", merchants.length);
+
+    let sortedCount = 0;
+    let merchantsWithProducts = [];
+
+    if (productName) {
+      const matchingProducts = await Product.find({
+        productName: { $regex: productName, $options: "i" },
+      }).select("categoryId");
+      console.log("matchingProducts:", matchingProducts.length);
+
+      const categoryIds = matchingProducts.map((product) =>
+        product.categoryId.toString()
+      );
+      const matchingCategories = await Category.find({
+        _id: { $in: categoryIds },
+      }).select("merchantId");
+
+      const merchantIdsFromProducts = matchingCategories.map((category) =>
+        category.merchantId.toString()
+      );
+      console.log("merchantIdsFromProducts:", merchantIdsFromProducts.length);
+
+      merchantsWithProducts = merchants.filter((merchant) =>
+        merchantIdsFromProducts.includes(merchant._id.toString())
+      );
+
+      sortedCount = merchantsWithProducts.length;
+      console.log(
+        "Total merchants sorted to the top due to productName:",
+        sortedCount
+      );
     }
 
-    // Sort merchants by sponsorship or other criteria
-    const sortedMerchants = sortMerchantsBySponsorship(merchants);
+    // Sort merchants: First by productName match, then by merchantId match
+    let sortedMerchants = [
+      ...merchantsWithProducts, // Merchants with matching products
+      ...merchants.filter((m) => !merchantsWithProducts.includes(m)), // Remaining merchants
+    ];
 
-    // Map sorted merchants to response format
-    const responseMerchants = sortedMerchants.map((merchant) => {
-      return {
-        id: merchant._id,
-        merchantName: merchant.merchantDetail.merchantName,
-        description: merchant.merchantDetail.description || "",
-        averageRating: merchant.merchantDetail.averageRating || 0,
-        status: merchant?.status,
-        restaurantType: merchant?.merchantDetail?.merchantFoodType || null,
-        merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
-        displayAddress: merchant.merchantDetail.displayAddress || null,
-        preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
-        isFavorite:
-          customer?.customerDetails?.favoriteMerchants?.includes(
-            merchant._id
-          ) ?? false,
-      };
-    });
+    if (merchantId) {
+      sortedMerchants = sortedMerchants.sort((a, b) => {
+        if (a._id.toString() === merchantId) {
+          sortedCount++;
+          return -1;
+        }
+        if (b._id.toString() === merchantId) return 1;
+        return 0;
+      });
+      console.log(
+        "Total merchants sorted to the top due to merchantId:",
+        sortedCount
+      );
+    }
 
-    // Respond with filtered merchants
+    // Apply pagination AFTER sorting
+    const paginatedMerchants = sortedMerchants.slice(
+      (page - 1) * limit,
+      page * limit
+    );
+    console.log("Final paginated merchants:", paginatedMerchants.length);
+
+    const responseMerchants = paginatedMerchants.map((merchant) => ({
+      id: merchant._id,
+      merchantName: merchant.merchantDetail.merchantName,
+      description: merchant.merchantDetail.description || "",
+      averageRating: merchant.merchantDetail.averageRating || 0,
+      status: merchant?.status,
+      restaurantType: merchant?.merchantDetail?.merchantFoodType || null,
+      merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
+      displayAddress: merchant.merchantDetail.displayAddress || null,
+      preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
+      isFavorite:
+        customer?.customerDetails?.favoriteMerchants?.includes(merchant._id) ??
+        false,
+    }));
+
     res.status(200).json(responseMerchants);
   } catch (err) {
     next(appError(err.message));

@@ -24,7 +24,7 @@ const scheduledPickAndCustom = require("../../models/ScheduledPickAndCustom");
 
 const appError = require("../../utils/appError");
 const generateToken = require("../../utils/generateToken");
-const geoLocation = require("../../utils/getGeoLocation");
+const { geoLocation } = require("../../utils/getGeoLocation");
 const {
   deleteFromFirebase,
   uploadToFirebase,
@@ -1483,10 +1483,183 @@ const haveValidCart = async (req, res, next) => {
   }
 };
 
+// const searchProductAndMerchantController = async (req, res) => {
+//   try {
+//     const { query, page = 1, limit = 10 } = req.query;
+
+//     if (!query || query.trim() === "") {
+//       return res.status(400).json({ message: "Query cannot be empty" });
+//     }
+
+//     const pageNumber = parseInt(page, 10) || 1;
+//     const pageSize = parseInt(limit, 10) || 10;
+
+//     const merchantFilter = {
+//       "merchantDetail.merchantName": { $regex: query, $options: "i" },
+//     };
+//     const productFilter = { productName: { $regex: query, $options: "i" } };
+
+//     // Fetch merchants
+//     const merchants = await Merchant.find(merchantFilter)
+//       .select(
+//         "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers"
+//       )
+//       .lean();
+
+//     // Format merchants with type and average rating
+//     const merchantResults = merchants.map((merchant) => {
+//       const ratings = merchant.merchantDetail.ratingByCustomers || [];
+//       const totalRating = ratings.reduce((acc, cur) => acc + cur.rating, 0);
+//       const averageRating =
+//         ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : 0;
+
+//       return {
+//         _id: merchant._id,
+//         name: merchant.merchantDetail.merchantName,
+//         address: merchant.merchantDetail.displayAddress,
+//         image: merchant.merchantDetail.merchantImageURL,
+//         averageRating: parseFloat(averageRating), // Convert to number
+//         type: "merchant",
+//       };
+//     });
+
+//     // Fetch products
+//     const products = await Product.find(productFilter)
+//       .select("_id productName productImageURL")
+//       .lean();
+
+//     // Remove duplicate product names
+//     const uniqueProducts = [];
+//     const seenProductNames = new Set();
+
+//     for (const product of products) {
+//       if (!seenProductNames.has(product.productName)) {
+//         seenProductNames.add(product.productName);
+//         uniqueProducts.push({
+//           _id: product._id,
+//           name: product.productName,
+//           image: product.productImageURL,
+//           type: "dish",
+//         });
+//       }
+//     }
+
+//     // Merge results
+//     const combinedResults = [...merchantResults, ...uniqueProducts];
+
+//     // Paginate combined results
+//     const startIndex = (pageNumber - 1) * pageSize;
+//     const paginatedResults = combinedResults.slice(
+//       startIndex,
+//       startIndex + pageSize
+//     );
+
+//     return res.json({
+//       results: paginatedResults,
+//       page: pageNumber,
+//       limit: pageSize,
+//     });
+//   } catch (error) {
+//     console.error("Search Error:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+
+// const searchProductAndMerchantController = async (req, res) => {
+//   try {
+//     const { query, page = 1, limit = 10 } = req.query;
+//     if (!query || query.trim() === "") {
+//       return res.status(400).json({ message: "Query cannot be empty" });
+//     }
+
+//     const pageNumber = parseInt(page, 10) || 1;
+//     const pageSize = parseInt(limit, 10) || 10;
+
+//     // Merchant search filter
+//     const merchantFilter = {
+//       "merchantDetail.merchantName": { $regex: query, $options: "i" },
+//     };
+
+//     // Product search filter
+//     const productFilter = { productName: { $regex: query, $options: "i" } };
+
+//     // Fetch merchants
+//     const merchants = await Merchant.find(merchantFilter)
+//       .select(
+//         "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers merchantDetail.businessCategoryId"
+//       )
+//       .lean();
+
+//     // Format merchants
+//     const merchantResults = merchants.map((merchant) => {
+//       const ratings = merchant.merchantDetail.ratingByCustomers || [];
+//       const totalRating = ratings.reduce((acc, cur) => acc + cur.rating, 0);
+//       const averageRating =
+//         ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : 0;
+
+//       return {
+//         _id: merchant._id,
+//         name: merchant.merchantDetail.merchantName,
+//         address: merchant.merchantDetail.displayAddress,
+//         image: merchant.merchantDetail.merchantImageURL,
+//         averageRating: parseFloat(averageRating),
+//         type: "merchant",
+//         businessCategoryId: merchant.merchantDetail.businessCategoryId,
+//       };
+//     });
+
+//     // Fetch products and populate category to get businessCategoryId
+//     const products = await Product.find(productFilter)
+//       .select("_id productName productImageURL categoryId")
+//       .populate({ path: "categoryId", select: "businessCategoryId" })
+//       .lean();
+
+//     // Remove duplicate product names
+//     const uniqueProducts = [];
+//     const seenProductNames = new Set();
+
+//     for (const product of products) {
+//       if (!seenProductNames.has(product.productName)) {
+//         seenProductNames.add(product.productName);
+//         uniqueProducts.push({
+//           _id: product._id,
+//           name: product.productName,
+//           image: product.productImageURL,
+//           type: "dish",
+//           businessCategoryId: product.categoryId?.businessCategoryId || null,
+//         });
+//       }
+//     }
+
+//     // Intermix merchants and products like Swiggy
+//     const combinedResults = [];
+//     const maxLength = Math.max(merchantResults.length, uniqueProducts.length);
+//     for (let i = 0; i < maxLength; i++) {
+//       if (merchantResults[i]) combinedResults.push(merchantResults[i]);
+//       if (uniqueProducts[i]) combinedResults.push(uniqueProducts[i]);
+//     }
+
+//     // Paginate results
+//     const startIndex = (pageNumber - 1) * pageSize;
+//     const paginatedResults = combinedResults.slice(
+//       startIndex,
+//       startIndex + pageSize
+//     );
+
+//     return res.json({
+//       results: paginatedResults,
+//       page: pageNumber,
+//       limit: pageSize,
+//     });
+//   } catch (error) {
+//     console.error("Search Error:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+
 const searchProductAndMerchantController = async (req, res) => {
   try {
     const { query, page = 1, limit = 10 } = req.query;
-
     if (!query || query.trim() === "") {
       return res.status(400).json({ message: "Query cannot be empty" });
     }
@@ -1494,38 +1667,80 @@ const searchProductAndMerchantController = async (req, res) => {
     const pageNumber = parseInt(page, 10) || 1;
     const pageSize = parseInt(limit, 10) || 10;
 
+    // Merchant search filter
     const merchantFilter = {
+      isBlocked: false,
+      isApproved: "Approved",
       "merchantDetail.merchantName": { $regex: query, $options: "i" },
+      "merchantDetail.location": { $exists: true, $ne: [] },
     };
+
+    // Product search filter
     const productFilter = { productName: { $regex: query, $options: "i" } };
 
-    // Fetch merchants
+    // Fetch merchants and populate business categories
     const merchants = await Merchant.find(merchantFilter)
       .select(
-        "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers"
+        "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers merchantDetail.businessCategoryId"
       )
+      .populate({ path: "merchantDetail.businessCategoryId", select: "title" }) // Fetch category name
       .lean();
 
-    // Format merchants with type and average rating
-    const merchantResults = merchants.map((merchant) => {
+    // Format merchants (handling multiple business categories)
+    const merchantResults = [];
+    for (const merchant of merchants) {
       const ratings = merchant.merchantDetail.ratingByCustomers || [];
       const totalRating = ratings.reduce((acc, cur) => acc + cur.rating, 0);
       const averageRating =
         ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : 0;
 
-      return {
-        _id: merchant._id,
-        name: merchant.merchantDetail.merchantName,
-        address: merchant.merchantDetail.displayAddress,
-        image: merchant.merchantDetail.merchantImageURL,
-        averageRating: parseFloat(averageRating), // Convert to number
-        type: "merchant",
-      };
-    });
+      const businessCategories = Array.isArray(
+        merchant.merchantDetail.businessCategoryId
+      )
+        ? merchant.merchantDetail.businessCategoryId
+        : [merchant.merchantDetail.businessCategoryId];
 
-    // Fetch products
+      // If merchant has multiple business categories, add category name; otherwise, exclude it
+      if (businessCategories.length > 1) {
+        for (const category of businessCategories) {
+          merchantResults.push({
+            _id: merchant._id,
+            name: merchant.merchantDetail.merchantName,
+            address: merchant.merchantDetail.displayAddress,
+            image: merchant.merchantDetail.merchantImageURL,
+            averageRating: parseFloat(averageRating),
+            type: "merchant",
+            businessCategoryId: category?._id || null,
+            businessCategoryName: category?.title || null,
+            businessCategoryForPush: category?.title || null,
+          });
+        }
+      } else {
+        merchantResults.push({
+          _id: merchant._id,
+          name: merchant.merchantDetail.merchantName,
+          address: merchant.merchantDetail.displayAddress,
+          image: merchant.merchantDetail.merchantImageURL,
+          averageRating: parseFloat(averageRating),
+          type: "merchant",
+          businessCategoryId: businessCategories[0]?._id || null,
+          businessCategoryName: null,
+          businessCategoryForPush: businessCategories[0]?.title || null,
+        });
+      }
+    }
+
+    // Fetch products and populate category to get businessCategoryId
     const products = await Product.find(productFilter)
-      .select("_id productName productImageURL")
+      .select("_id productName productImageURL categoryId")
+      .populate({
+        path: "categoryId",
+        select: "businessCategoryId name",
+        populate: {
+          path: "businessCategoryId",
+          select: "title", // Fetch the title field from businessCategoryId
+        },
+      }) // Fetch category name
       .lean();
 
     // Remove duplicate product names
@@ -1540,24 +1755,49 @@ const searchProductAndMerchantController = async (req, res) => {
           name: product.productName,
           image: product.productImageURL,
           type: "dish",
+          businessCategoryId:
+            product.categoryId?.businessCategoryId?._id || null,
+          businessCategoryName:
+            product.categoryId?.businessCategoryId?.title || null, // Added category name
         });
       }
     }
 
-    // Merge results
-    const combinedResults = [...merchantResults, ...uniqueProducts];
+    // Intermix merchants and products like Swiggy
+    const combinedResults = [];
+    let productIndex = 0;
+    let merchantIndex = 0;
 
-    // Paginate combined results
+    while (
+      productIndex < uniqueProducts.length ||
+      merchantIndex < merchantResults.length
+    ) {
+      // Add up to 3 products
+      for (let i = 0; i < 3 && productIndex < uniqueProducts.length; i++) {
+        combinedResults.push(uniqueProducts[productIndex]);
+        productIndex++;
+      }
+
+      // Add 1 merchant
+      if (merchantIndex < merchantResults.length) {
+        combinedResults.push(merchantResults[merchantIndex]);
+        merchantIndex++;
+      }
+    }
+
+    // Paginate results
     const startIndex = (pageNumber - 1) * pageSize;
     const paginatedResults = combinedResults.slice(
       startIndex,
       startIndex + pageSize
     );
+    const hasNextPage = startIndex + pageSize < combinedResults?.length;
 
     return res.json({
       results: paginatedResults,
       page: pageNumber,
       limit: pageSize,
+      hasNextPage,
     });
   } catch (error) {
     console.error("Search Error:", error);
