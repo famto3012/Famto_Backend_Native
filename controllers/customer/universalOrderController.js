@@ -680,9 +680,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.location": { $exists: true, $ne: [] },
-      "merchantDetail.pricing.0": { $exists: true },
-      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
-      "merchantDetail.pricing.modelId": { $exists: true },
+      // "merchantDetail.pricing.0": { $exists: true },
+      // "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      // "merchantDetail.pricing.modelId": { $exists: true },
     };
 
     if (query) {
@@ -700,7 +700,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     // Fetch all merchants (without pagination)
     let merchants = await Merchant.find(filterCriteria).lean();
 
-    console.log("Total merchants found before filtering:", merchants.length);
+    // console.log("Total merchants found before filtering:", merchants.length);
 
     let sortedCount = 0;
     let merchantsWithProducts = [];
@@ -709,7 +709,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       const matchingProducts = await Product.find({
         productName: { $regex: productName, $options: "i" },
       }).select("categoryId");
-      console.log("matchingProducts:", matchingProducts.length);
+      // console.log("matchingProducts:", matchingProducts.length);
 
       const categoryIds = matchingProducts.map((product) =>
         product.categoryId.toString()
@@ -728,10 +728,10 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       );
 
       sortedCount = merchantsWithProducts.length;
-      console.log(
-        "Total merchants sorted to the top due to productName:",
-        sortedCount
-      );
+      // console.log(
+      //   "Total merchants sorted to the top due to productName:",
+      //   sortedCount
+      // );
     }
 
     // Sort merchants: First by productName match, then by merchantId match
@@ -749,10 +749,10 @@ const filterAndSearchMerchantController = async (req, res, next) => {
         if (b._id.toString() === merchantId) return 1;
         return 0;
       });
-      console.log(
-        "Total merchants sorted to the top due to merchantId:",
-        sortedCount
-      );
+      // console.log(
+      //   "Total merchants sorted to the top due to merchantId:",
+      //   sortedCount
+      // );
     }
 
     // Apply pagination AFTER sorting
@@ -760,7 +760,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       (page - 1) * limit,
       page * limit
     );
-    console.log("Final paginated merchants:", paginatedMerchants.length);
+    // console.log("Final paginated merchants:", paginatedMerchants.length);
 
     const responseMerchants = paginatedMerchants.map((merchant) => ({
       id: merchant._id,

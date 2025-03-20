@@ -13,6 +13,7 @@ const fs = require("fs");
 const path = require("path");
 const verifyToken = require("../../utils/verifyToken");
 const Customer = require("../../models/Customer");
+const jwt = require("jsonwebtoken");
 
 //For Admin and Merchant
 // =============================
@@ -112,40 +113,44 @@ const refreshTokenController = async (req, res, next) => {
       return next(appError("Refresh token is required", 400));
     }
 
-    // Verify and decode the refresh token
-    const decoded = verifyToken(refreshToken);
+    // Decode token without verifying (to check expiration)
+    const decoded = jwt.decode(refreshToken);
+
     if (!decoded) {
-      return next(appError("Invalid refresh token", 401));
+      return next(appError("Invalid refresh token format", 401));
     }
 
     const { role, id } = decoded;
 
-    // Map roles to corresponding models
-    const modelMap = {
-      Admin,
-      Manager,
-      Merchant,
-      Customer,
-      Agent,
-    };
-
+    // Ensure role is valid
+    const modelMap = { Admin, Manager, Merchant, Customer, Agent };
     const UserModel = modelMap[role];
     if (!UserModel) {
       return next(appError("Invalid role", 400));
     }
 
-    // Check if the refresh token exists in the database
+    // Check if refresh token exists in database
     const user = await UserModel.findOne({ refreshToken, _id: id });
+
     if (!user) {
       return next(appError("Invalid refresh token or user not found", 401));
     }
 
-    // Generate a new token
-    const newToken = generateToken(user._id, user.role, user.fullName, "5min");
+    // If the token is expired, don't reject it – just issue a new one
+    try {
+      jwt.verify(refreshToken, process.env.JWT_SECRET_KEY);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        console.warn("⚠️ Refresh token expired, generating a new one...");
+      } else {
+        return next(appError("Invalid refresh token", 401));
+      }
+    }
 
-    res.status(200).json({
-      newToken,
-    });
+    // Issue a new access token
+    const newToken = generateToken(user._id, user.role, user.fullName, "2hr");
+
+    res.status(200).json({ newToken });
   } catch (err) {
     next(appError(err.message || "Failed to refresh token", 500));
   }

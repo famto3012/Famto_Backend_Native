@@ -149,15 +149,20 @@ const registerAndLoginController = async (req, res, next) => {
       await customer.save();
     }
 
+    const token = generateToken(
+      customer.id,
+      customer.role,
+      customer?.fullName ? customer.fullName : "",
+      "2hr"
+    );
+
+    console.log("TOKEN: ", token);
+    console.log("REFRESH TOKEN: ", refreshToken);
+
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,
       id: customer.id,
-      token: generateToken(
-        customer.id,
-        customer.role,
-        customer?.fullName ? customer.fullName : "",
-        "5hr"
-      ),
+      token,
       refreshToken: refreshToken,
       role: customer.role,
       geofenceName: geofence.name,
@@ -326,13 +331,22 @@ const updateCustomerAddressController = async (req, res, next) => {
   }
 
   try {
-    const { type, fullName, phoneNumber, flat, area, landmark, coordinates } =
-      req.body;
+    const {
+      type,
+      fullName,
+      phoneNumber,
+      flat,
+      area,
+      landmark,
+      coordinates,
+      id,
+    } = req.body;
 
     const currentCustomer = await Customer.findById(req.userAuth);
     if (!currentCustomer) return next(appError("Customer not found", 404));
 
     const address = {
+      id: id ? id : null,
       type,
       fullName,
       phoneNumber,
@@ -356,14 +370,16 @@ const updateCustomerAddressController = async (req, res, next) => {
         break;
 
       case "other":
-        if (address.id) {
+        if (address?.id) {
           // Find and update existing other address
           const index = currentCustomer.customerDetails.otherAddress.findIndex(
             (addr) => addr.id.toString() === address.id.toString()
           );
 
           if (index !== -1) {
-            currentCustomer.otherAddress[index] = { ...address };
+            currentCustomer.customerDetails.otherAddress[index] = {
+              ...address,
+            };
             updatedAddress =
               currentCustomer.customerDetails.otherAddress[index];
           } else {
