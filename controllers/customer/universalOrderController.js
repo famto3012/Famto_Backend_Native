@@ -680,6 +680,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.location": { $exists: true, $ne: [] },
+      "merchantDetail.pricing.0": { $exists: true },
+      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelId": { $exists: true },
     };
 
     if (query) {

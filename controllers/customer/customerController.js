@@ -66,11 +66,11 @@ const registerAndLoginController = async (req, res, next) => {
     const location = [latitude, longitude];
     const geofence = await geoLocation(latitude, longitude, next);
 
-    if (!geofence) {
-      return res.status(400).json({
-        message: "Location is outside the listed geofence",
-      });
-    }
+    // if (!geofence) {
+    //   return res.status(400).json({
+    //     message: "Location is outside the listed geofence",
+    //   });
+    // }
 
     // Check if customer exists; if not, create a new one
     let customer = await Customer.findOne({ phoneNumber });
