@@ -372,6 +372,7 @@ const updateCustomerAddressController = async (req, res, next) => {
       case "other":
         if (address?.id) {
           // Find and update existing other address
+          console.log("Here");
           const index = currentCustomer.customerDetails.otherAddress.findIndex(
             (addr) => addr.id.toString() === address.id.toString()
           );
@@ -387,7 +388,11 @@ const updateCustomerAddressController = async (req, res, next) => {
           }
         } else {
           // Create new address
-          const newAddress = { id: new mongoose.Types.ObjectId(), ...address };
+          // console.log("Here1");
+          // console.log(new mongoose.Types.ObjectId()); // Should log a valid ObjectId
+          const newAddress = { ...address };
+          newAddress.id = new mongoose.Types.ObjectId();
+          // console.log("Here2", newAddress);
           currentCustomer.customerDetails.otherAddress.push(newAddress);
           updatedAddress = newAddress;
         }
