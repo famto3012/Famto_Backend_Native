@@ -225,7 +225,7 @@ const listRestaurantsController = async (req, res, next) => {
 // Get all categories of merchant
 const getAllCategoriesOfMerchants = async (req, res, next) => {
   try {
-    let { merchantId, businessCategoryId, page = 1, limit = 5 } = req.query;
+    let { merchantId, businessCategoryId, page = 1, limit = 1 } = req.query;
 
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
@@ -1383,8 +1383,6 @@ const addOrUpdateCartItemController = async (req, res, next) => {
 const addItemsToCart = async (req, res, next) => {
   try {
     const { merchantId, items } = req.body;
-
-    console.log(req.body);
 
     const customerId = req.userAuth;
 
