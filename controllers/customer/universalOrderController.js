@@ -254,6 +254,8 @@ const getAllCategoriesOfMerchants = async (req, res, next) => {
 
     res.status(200).json({
       hasNextPage: formattedResponse.length === limit,
+      page,
+      limit,
       data: formattedResponse,
     });
   } catch (err) {
@@ -364,6 +366,8 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
 
     res.status(200).json({
       hasNextPage: productsWithDetails.length === limit,
+      page,
+      limit,
       data: productsWithDetails,
     });
   } catch (err) {
