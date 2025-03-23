@@ -82,7 +82,7 @@ const registerAndLoginController = async (req, res, next) => {
         lastPlatformUsed: os.platform(),
         customerDetails: {
           location,
-          geofenceId: geofence._id ? geofence._id : null,
+          geofenceId: geofence?._id ? geofence?._id : null,
         },
       });
     } else {
@@ -91,7 +91,7 @@ const registerAndLoginController = async (req, res, next) => {
       customer.customerDetails = {
         ...customer.customerDetails,
         location,
-        geofenceId: geofence._id ? geofence._id : null,
+        geofenceId: geofence?._id ? geofence?._id : null,
       };
 
       await customer.save();
@@ -129,9 +129,9 @@ const registerAndLoginController = async (req, res, next) => {
         verifyToken(refreshToken);
       } else {
         refreshToken = generateToken(
-          customer._id,
-          customer.role,
-          customer?.fullName ? customer.fullName : "",
+          customer?._id,
+          customer?.role,
+          customer?.fullName ? customer?.fullName : "",
           "30d"
         );
         customer.refreshToken = refreshToken;
@@ -140,9 +140,9 @@ const registerAndLoginController = async (req, res, next) => {
     } catch {
       // Generate a new refresh token if expired/invalid
       refreshToken = generateToken(
-        customer._id,
-        customer.role,
-        customer?.fullName ? customer.fullName : "",
+        customer?._id,
+        customer?.role,
+        customer?.fullName ? customer?.fullName : "",
         "30d"
       );
       customer.refreshToken = refreshToken;
@@ -150,9 +150,9 @@ const registerAndLoginController = async (req, res, next) => {
     }
 
     const token = generateToken(
-      customer.id,
-      customer.role,
-      customer?.fullName ? customer.fullName : "",
+      customer?.id,
+      customer?.role,
+      customer?.fullName ? customer?.fullName : "",
       "2hr"
     );
 
@@ -161,12 +161,12 @@ const registerAndLoginController = async (req, res, next) => {
 
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,
-      id: customer.id,
+      id: customer?.id,
       token,
       refreshToken: refreshToken,
-      role: customer.role,
-      geofenceName: geofence.name,
-      outsideGeofence: geofence._id ? false : true,
+      role: customer?.role,
+      geofenceName: geofence?.name,
+      outsideGeofence: geofence?._id ? false : true,
     });
   } catch (err) {
     next(appError(err.message));
