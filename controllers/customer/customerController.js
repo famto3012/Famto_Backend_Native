@@ -324,10 +324,9 @@ const updateCustomerProfileController = async (req, res, next) => {
 const updateCustomerAddressController = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    const formattedErrors = errors
-      .array()
-      .map((error) => ({ [error.path]: error.msg }));
-    return res.status(400).json({ errors: formattedErrors });
+    return res.status(400).json({
+      errors: errors.array().map((error) => ({ [error.path]: error.msg })),
+    });
   }
 
   try {
@@ -342,11 +341,41 @@ const updateCustomerAddressController = async (req, res, next) => {
       id,
     } = req.body;
 
+    console.log(req.body);
+
     const currentCustomer = await Customer.findById(req.userAuth);
+
     if (!currentCustomer) return next(appError("Customer not found", 404));
+    if (!type) return next(appError("Address type is required", 400));
+
+    const { customerDetails } = currentCustomer;
+
+    // Helper function to remove address
+    const removeAddress = () => {
+      switch (type) {
+        case "home":
+          customerDetails.homeAddress = null;
+          break;
+        case "work":
+          customerDetails.workAddress = null;
+          break;
+        case "other":
+          customerDetails.otherAddress = customerDetails.otherAddress.filter(
+            (addr) => addr.id.toString() !== id?.toString()
+          );
+          break;
+      }
+    };
+
+    // If type exists but coordinates & flat are missing, delete the address
+    if (!coordinates && !flat) {
+      removeAddress();
+      await currentCustomer.save();
+      return res.status(200).json({ success: true, address: null });
+    }
 
     const address = {
-      id: id ? id : null,
+      id: id || new mongoose.Types.ObjectId(),
       type,
       fullName,
       phoneNumber,
@@ -355,59 +384,35 @@ const updateCustomerAddressController = async (req, res, next) => {
       landmark,
       coordinates,
     };
+    let updatedAddress = address;
 
-    let updatedAddress = null;
-
-    switch (address.type) {
+    switch (type) {
       case "home":
-        currentCustomer.customerDetails.homeAddress = address;
-        updatedAddress = address;
+        customerDetails.homeAddress = address;
         break;
-
       case "work":
-        currentCustomer.customerDetails.workAddress = address;
-        updatedAddress = address;
+        customerDetails.workAddress = address;
         break;
-
       case "other":
-        if (address?.id) {
-          // Find and update existing other address
-          console.log("Here");
-          const index = currentCustomer.customerDetails.otherAddress.findIndex(
-            (addr) => addr.id.toString() === address.id.toString()
+        if (id) {
+          const index = customerDetails.otherAddress.findIndex(
+            (addr) => addr.id.toString() === id.toString()
           );
-
           if (index !== -1) {
-            currentCustomer.customerDetails.otherAddress[index] = {
-              ...address,
-            };
-            updatedAddress =
-              currentCustomer.customerDetails.otherAddress[index];
+            customerDetails.otherAddress[index] = address;
           } else {
             return next(appError("Address ID not found", 404));
           }
         } else {
-          // Create new address
-          // console.log("Here1");
-          // console.log(new mongoose.Types.ObjectId()); // Should log a valid ObjectId
-          const newAddress = { ...address };
-          newAddress.id = new mongoose.Types.ObjectId();
-          // console.log("Here2", newAddress);
-          currentCustomer.customerDetails.otherAddress.push(newAddress);
-          updatedAddress = newAddress;
+          customerDetails.otherAddress.push(address);
         }
         break;
-
       default:
         return next(appError("Invalid address type", 400));
     }
 
     await currentCustomer.save();
-
-    res.status(200).json({
-      success: true,
-      address: updatedAddress,
-    });
+    res.status(200).json({ success: true, address: updatedAddress });
   } catch (err) {
     next(appError(err.message));
   }
@@ -423,10 +428,22 @@ const getCustomerAddressController = async (req, res, next) => {
     const { homeAddress, workAddress, otherAddress } =
       currentCustomer.customerDetails;
 
+    // Ensure only actual object properties are used
+    const formatAddress = (type, address) =>
+      address
+        ? { type, ...address.toObject() } // Convert Mongoose document to plain object
+        : null;
+
+    const formattedHomeAddress = formatAddress("home", homeAddress);
+    const formattedWorkAddress = formatAddress("work", workAddress);
+    const formattedOtherAddress = (otherAddress || [])
+      .map((address) => formatAddress("other", address))
+      .filter(Boolean); // Remove any null values
+
     res.status(200).json({
-      homeAddress,
-      workAddress,
-      otherAddress,
+      homeAddress: formattedHomeAddress,
+      workAddress: formattedWorkAddress,
+      otherAddress: formattedOtherAddress,
     });
   } catch (err) {
     next(appError(err.message));
@@ -581,7 +598,7 @@ const getFavoriteMerchantsController = async (req, res, next) => {
     );
 
     res.status(200).json({
-      message: "Favorite merchants retrieved successfully",
+      success: true,
       data: formattedMerchants,
     });
   } catch (err) {

@@ -5,6 +5,10 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const PromoCode = require("../../models/PromoCode");
 const Order = require("../../models/Order");
 const TemporaryOrder = require("../../models/TemporaryOrder");
+const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
+const Tax = require("../../models/Tax");
+const ManagerRoles = require("../../models/ManagerRoles");
+const Manager = require("../../models/Manager");
 
 const appError = require("../../utils/appError");
 const {
@@ -24,10 +28,6 @@ const {
   sendSocketData,
   findRolesToNotify,
 } = require("../../socket/socket");
-const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
-const Tax = require("../../models/Tax");
-const ManagerRoles = require("../../models/ManagerRoles");
-const Manager = require("../../models/Manager");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -747,9 +747,9 @@ const confirmCustomOrderController = async (req, res, next) => {
 
     // Return countdown timer to client
     res.status(200).json({
-      message: "Custom order will be created in 1 minute.",
+      success: true,
       orderId,
-      countdown: 60,
+      createdAt: tempOrder.createdAt,
     });
 
     // After 60 seconds, create the order if it is not cancelled
@@ -874,10 +874,17 @@ const confirmCustomOrderController = async (req, res, next) => {
 
 const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.body;
 
     const orderFound = await TemporaryOrder.findOne({ orderId });
-    if (!orderFound) return next(appError("Order not found", 404));
+    if (!orderFound) {
+      res.status(200).json({
+        success: false,
+        message: "Order creation already processed or not found",
+      });
+
+      return;
+    }
 
     const customerFound = await Customer.findById(orderFound.customerId);
     if (!customerFound) return next(appError("Customer not found", 404));
@@ -888,37 +895,34 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
       type: "Credit",
     };
 
-    if (orderFound) {
-      if (orderFound.paymentMode === "Famto-cash") {
-        const orderAmount = orderFound.billDetail.grandTotal;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
-          customerFound.customerDetails.walletBalance += orderAmount;
-          updatedTransactionDetail.transactionAmount = orderAmount;
-        }
-
-        customerFound.transactionDetail.push(updatedTransactionDetail);
-
-        // Remove the temporary order data from the database and push transaction to customer transaction
-        await Promise.all([
-          TemporaryOrder.deleteOne({ orderId }),
-          customerFound.save(),
-        ]);
-
-        res.status(200).json({
-          message: "Order cancelled and amount refunded to wallet",
-        });
-        return;
-      } else if (orderFound.paymentMode === "Cash-on-delivery") {
-        // Remove the temporary order data from the database
-        await TemporaryOrder.deleteOne({ orderId });
-
-        res.status(200).json({ message: "Order cancelled" });
-        return;
+    if (orderFound.paymentMode === "Famto-cash") {
+      const orderAmount = orderFound.billDetail.grandTotal;
+      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        customerFound.customerDetails.walletBalance += orderAmount;
+        updatedTransactionDetail.transactionAmount = orderAmount;
       }
-    } else {
-      res.status(400).json({
-        message: "Order creation already processed or not found",
+
+      customerFound.transactionDetail.push(updatedTransactionDetail);
+
+      // Remove the temporary order data from the database and push transaction to customer transaction
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        customerFound.save(),
+      ]);
+
+      res.status(200).json({
+        success: true,
+        message: "Order cancelled and amount refunded to wallet",
       });
+
+      return;
+    } else if (orderFound.paymentMode === "Cash-on-delivery") {
+      // Remove the temporary order data from the database
+      await TemporaryOrder.deleteOne({ orderId });
+
+      res.status(200).json({ success: true, message: "Order cancelled" });
+
+      return;
     }
   } catch (err) {
     next(appError(err.message));
