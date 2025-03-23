@@ -297,7 +297,7 @@ customerRoute.post(
 );
 
 customerRoute.post(
-  "/cancel-universal-order/:orderId",
+  "/cancel-universal-order",
   isAuthenticated,
   cancelOrderBeforeCreationController
 );
@@ -447,7 +447,7 @@ customerRoute.post(
 );
 
 customerRoute.post(
-  "/cancel-pick-and-drop-order/:orderId",
+  "/cancel-pick-and-drop-order",
   isAuthenticated,
   cancelPickBeforeOrderCreationController
 );
@@ -508,7 +508,7 @@ customerRoute.post(
 );
 
 customerRoute.post(
-  "/cancel-custom-order/:orderId",
+  "/cancel-custom-order",
   isAuthenticated,
   cancelCustomBeforeOrderCreationController
 );

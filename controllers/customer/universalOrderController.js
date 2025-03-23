@@ -266,8 +266,10 @@ const getAllCategoriesOfMerchants = async (req, res, next) => {
 // Get all product of a category
 const getAllProductsOfMerchantController = async (req, res, next) => {
   try {
-    let { categoryId, page = 1, limit = 10 } = req.query;
+    let { categoryId, filter, page = 1, limit = 10 } = req.query;
     const customerId = req.userAuth;
+
+    console.log("QUERY: ", req.query);
 
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
@@ -285,16 +287,24 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
       .select("items.productId items.quantity")
       .lean();
 
-    // Create a map of productId -> quantity in the cart
-    const cartMap = new Map();
-    if (customerCart && customerCart.items.length > 0) {
-      customerCart.items.forEach((item) => {
-        cartMap.set(item.productId.toString(), item.quantity);
-      });
+    // // Create a map of productId -> quantity in the cart
+    // const cartMap = new Map();
+    // if (customerCart && customerCart.items.length > 0) {
+    //   customerCart.items.forEach((item) => {
+    //     cartMap.set(item.productId.toString(), item.quantity);
+    //   });
+    // }
+
+    const matchCriteria = {
+      categoryId: mongoose.Types.ObjectId.createFromHexString(categoryId),
+    };
+
+    if (filter && filter.toLowerCase() !== "all") {
+      matchCriteria.type = filter;
     }
 
     // Fetch all products
-    const allProducts = await Product.find({ categoryId })
+    const allProducts = await Product.find(matchCriteria)
       .populate(
         "discountId",
         "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
@@ -338,8 +348,8 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
           (fav) => fav.toString() === product._id.toString()
         ) ?? false;
 
-      // Get the cart quantity for this product
-      const cartCount = cartMap.get(product._id.toString()) || 0;
+      // // Get the cart quantity for this product
+      // const cartCount = cartMap.get(product._id.toString()) || 0;
 
       return {
         productId: product._id,
@@ -360,7 +370,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
         inventory: product.inventory,
         variantAvailable: product.variants && product.variants.length > 0,
-        cartCount,
+        // cartCount,
       };
     });
 
@@ -1080,34 +1090,38 @@ const toggleProductFavoriteController = async (req, res, next) => {
 
     const { productId } = req.params;
 
-    const productFound = await Product.findById(productId);
+    const productFound = await Product.findById(productId).lean();
 
     if (!productFound) {
       return next(appError("Product not found", 404));
     }
 
-    const isFavorite =
-      currentCustomer.customerDetails.favoriteProducts.includes(productId);
+    let favoriteProducts = new Set(
+      currentCustomer.customerDetails.favoriteProducts.map((fav) =>
+        fav.toString()
+      )
+    );
 
-    if (isFavorite) {
-      currentCustomer.customerDetails.favoriteProducts =
-        currentCustomer.customerDetails.favoriteProducts.filter(
-          (favorite) => favorite.toString() !== productId.toString()
-        );
-
-      await currentCustomer.save();
+    if (favoriteProducts.has(productId)) {
+      favoriteProducts.delete(productId);
 
       res.status(200).json({
-        message: "successfully removed product from favorite list",
+        success: true,
+        message: "Successfully removed product from favorite list",
       });
     } else {
-      currentCustomer.customerDetails.favoriteProducts.push(productId);
-      await currentCustomer.save();
+      favoriteProducts.add(productId);
 
       res.status(200).json({
-        message: "successfully added product to favorite list",
+        success: true,
+        message: "Successfully added product to favorite list",
       });
     }
+
+    currentCustomer.customerDetails.favoriteProducts =
+      Array.from(favoriteProducts);
+
+    await currentCustomer.save();
   } catch (err) {
     next(appError(err.message));
   }
@@ -1116,59 +1130,79 @@ const toggleProductFavoriteController = async (req, res, next) => {
 // Add or remove Merchants from favorite
 const toggleMerchantFavoriteController = async (req, res, next) => {
   try {
+    console.log("🔹 Request received for toggling favorite merchant");
+
     // Find the current customer
     const currentCustomer = await Customer.findById(req.userAuth);
 
     if (!currentCustomer) {
+      console.error("❌ Customer not found or not authenticated");
       return next(appError("Customer is not authenticated", 403));
     }
 
     const { merchantId, businessCategoryId } = req.params;
-
-    // Check if the merchant exists
-    const merchantFound = await Merchant.findById(merchantId);
-
-    if (!merchantFound) return next(appError("Merchant not found", 404));
-
-    // Check if the merchant is already in the favorite list
-    const isFavorite = currentCustomer.customerDetails.favoriteMerchants.some(
-      (favorite) =>
-        favorite?.merchantId?.toString() === merchantId?.toString() &&
-        favorite?.businessCategoryId?.toString() ===
-          businessCategoryId?.toString()
+    console.log(
+      `📌 Merchant ID: ${merchantId}, Business Category ID: ${businessCategoryId}`
     );
 
-    if (isFavorite) {
-      // Remove the merchant from the favorite list
-      currentCustomer.customerDetails.favoriteMerchants =
-        currentCustomer.customerDetails.favoriteMerchants.filter(
-          (favorite) =>
-            !(
-              favorite?.merchantId?.toString() === merchantId?.toString() &&
-              favorite?.businessCategoryId?.toString() ===
-                businessCategoryId?.toString()
-            )
-        );
+    // Check if the merchant exists
+    const merchantFound = await Merchant.findById(merchantId).lean();
 
-      await currentCustomer.save();
+    if (!merchantFound) {
+      console.error("❌ Merchant not found");
+      return next(appError("Merchant not found", 404));
+    }
+
+    console.log("✅ Merchant found, processing favorite status...");
+
+    let favoriteMerchants = new Set(
+      currentCustomer.customerDetails.favoriteMerchants.map((fav) =>
+        JSON.stringify({
+          merchantId: fav.merchantId.toString(),
+          businessCategoryId: fav.businessCategoryId.toString(),
+        })
+      )
+    );
+
+    console.log(
+      "🔍 Current Favorite Merchants:",
+      Array.from(favoriteMerchants)
+    );
+
+    const merchantKey = JSON.stringify({ merchantId, businessCategoryId });
+
+    if (favoriteMerchants.has(merchantKey)) {
+      console.log("❌ Merchant found in favorites, removing...");
+      favoriteMerchants.delete(merchantKey);
 
       res.status(200).json({
+        success: true,
         message: "Successfully removed merchant from favorite list",
       });
     } else {
-      // Add the merchant and business category to the favorite list
-      currentCustomer.customerDetails.favoriteMerchants.push({
-        merchantId,
-        businessCategoryId,
-      });
-
-      await currentCustomer.save();
+      console.log("✅ Merchant not in favorites, adding...");
+      favoriteMerchants.add(merchantKey);
 
       res.status(200).json({
+        success: true,
         message: "Successfully added merchant to favorite list",
       });
     }
+
+    // Convert Set back to array and update database
+    currentCustomer.customerDetails.favoriteMerchants = Array.from(
+      favoriteMerchants
+    ).map((fav) => JSON.parse(fav));
+
+    console.log(
+      "💾 Updated Favorite Merchants:",
+      currentCustomer.customerDetails.favoriteMerchants
+    );
+
+    await currentCustomer.save();
+    console.log("✅ Favorite merchant list updated successfully.");
   } catch (err) {
+    console.error("❌ Error:", err.message);
     next(appError(err.message));
   }
 };
@@ -1498,8 +1532,6 @@ const confirmOrderDetailController = async (req, res, next) => {
       isSuperMarketOrder = false,
     } = req.body;
 
-    console.log(req.body);
-
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
       next
@@ -1560,14 +1592,10 @@ const confirmOrderDetailController = async (req, res, next) => {
       merchant,
     });
 
-    console.log("merchantDiscountAmount", merchantDiscountAmount);
-
     const loyaltyDiscount = await getDiscountAmountFromLoyalty(
       customer,
       itemTotal
     );
-
-    console.log("loyaltyDiscount", loyaltyDiscount);
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
@@ -2137,14 +2165,15 @@ const orderPaymentController = async (req, res, next) => {
       });
 
       customer.transactionDetail.push(customerTransaction);
-      await customer.save();
 
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
 
-      // Clear the cart
-      await CustomerCart.deleteOne({ customerId });
+      await Promise.all([
+        CustomerCart.deleteOne({ customerId }),
+        customer.save(),
+      ]);
 
       // Return countdown timer to client
       res.status(200).json({
@@ -2159,7 +2188,6 @@ const orderPaymentController = async (req, res, next) => {
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
 
         if (storedOrderData) {
-          console.log("Found temporary", storedOrderData);
           let newOrderCreated = await Order.create({
             customerId: storedOrderData?.customerId,
             merchantId: storedOrderData?.merchantId,
@@ -2450,15 +2478,19 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       });
 
       // Clear the cart
-      await CustomerCart.deleteOne({ customerId });
 
       customer.transactionDetail.push(customerTransaction);
-      await customer.save();
+
+      await Promise.all([
+        CustomerCart.deleteOne({ customerId }),
+        customer.save(),
+      ]);
 
       res.status(200).json({
         message: "Scheduled order created successfully",
         data: newOrder,
       });
+
       return;
     } else {
       // Generate a unique order ID
@@ -2643,9 +2675,22 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 // Cancel order before getting created
 const cancelOrderBeforeCreationController = async (req, res, next) => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.body;
 
-    const orderFound = await TemporaryOrder.findOne({ orderId });
+    console.log(req.body);
+
+    const orderFound = await TemporaryOrder.findOne({
+      orderId: mongoose.Types.ObjectId.createFromHexString(orderId),
+    });
+
+    if (!orderFound) {
+      res.status(200).json({
+        success: false,
+        message: "Order creation already processed or not found",
+      });
+
+      return;
+    }
 
     const customerFound = await Customer.findById(orderFound.customerId);
 
@@ -2655,63 +2700,59 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
       type: "Credit",
     };
 
-    if (orderFound) {
-      if (orderFound.paymentMode === "Famto-cash") {
-        const orderAmount = orderFound.billDetail.grandTotal;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
-          customerFound.customerDetails.walletBalance += orderAmount;
-          updatedTransactionDetail.transactionAmount = orderAmount;
-        }
-
-        // Remove the temporary order data from the database
-        await TemporaryOrder.deleteOne({ orderId });
-
-        customerFound.transactionDetail.push(updatedTransactionDetail);
-
-        await customerFound.save();
-
-        res.status(200).json({
-          message: "Order cancelled",
-        });
-        return;
-      } else if (orderFound.paymentMode === "Cash-on-delivery") {
-        // Remove the temporary order data from the database
-        await TemporaryOrder.deleteOne({ orderId });
-
-        res.status(200).json({ message: "Order cancelled" });
-        return;
-      } else if (orderFound.paymentMode === "Online-payment") {
-        const paymentId = orderFound.paymentId;
-
-        let refundAmount;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
-          refundAmount = orderFound.billDetail.grandTotal;
-          updatedTransactionDetail.transactionAmount = refundAmount;
-        } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
-          refundAmount =
-            orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
-          updatedTransactionDetail.transactionAmount = refundAmount;
-        }
-
-        const refundResponse = await razorpayRefund(paymentId, refundAmount);
-
-        if (!refundResponse.success) {
-          return next(appError("Refund failed: " + refundResponse.error, 500));
-        }
-
-        customerFound.transactionDetail.push(updatedTransactionDetail);
-
-        await customerFound.save();
-
-        res.status(200).json({
-          message: "Order cancelled",
-        });
-        return;
+    if (orderFound.paymentMode === "Famto-cash") {
+      const orderAmount = orderFound.billDetail.grandTotal;
+      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        customerFound.customerDetails.walletBalance += orderAmount;
+        updatedTransactionDetail.transactionAmount = orderAmount;
       }
-    } else {
-      res.status(400).json({
-        message: "Order creation already processed or not found",
+
+      // Remove the temporary order data from the database
+      await TemporaryOrder.deleteOne({ orderId });
+
+      customerFound.transactionDetail.push(updatedTransactionDetail);
+
+      await customerFound.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Order cancelled",
       });
+      return;
+    } else if (orderFound.paymentMode === "Cash-on-delivery") {
+      // Remove the temporary order data from the database
+      await TemporaryOrder.deleteOne({ orderId });
+
+      res.status(200).json({ success: true, message: "Order cancelled" });
+      return;
+    } else if (orderFound.paymentMode === "Online-payment") {
+      const paymentId = orderFound.paymentId;
+
+      let refundAmount;
+      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        refundAmount = orderFound.billDetail.grandTotal;
+        updatedTransactionDetail.transactionAmount = refundAmount;
+      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+        refundAmount =
+          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+        updatedTransactionDetail.transactionAmount = refundAmount;
+      }
+
+      const refundResponse = await razorpayRefund(paymentId, refundAmount);
+
+      if (!refundResponse.success) {
+        return next(appError("Refund failed: " + refundResponse.error, 500));
+      }
+
+      customerFound.transactionDetail.push(updatedTransactionDetail);
+
+      await customerFound.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Order cancelled",
+      });
+      return;
     }
   } catch (err) {
     next(appError(err.message));
