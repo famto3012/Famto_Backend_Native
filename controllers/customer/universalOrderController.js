@@ -269,8 +269,6 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
     let { categoryId, filter, page = 1, limit = 10 } = req.query;
     const customerId = req.userAuth;
 
-    console.log("QUERY: ", req.query);
-
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     const skip = (page - 1) * limit;
@@ -281,19 +279,6 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
 
     if (customerId && !currentCustomer)
       return next(appError("Customer not found", 404));
-
-    // Fetch customer cart
-    const customerCart = await CustomerCart.findOne({ customerId })
-      .select("items.productId items.quantity")
-      .lean();
-
-    // // Create a map of productId -> quantity in the cart
-    // const cartMap = new Map();
-    // if (customerCart && customerCart.items.length > 0) {
-    //   customerCart.items.forEach((item) => {
-    //     cartMap.set(item.productId.toString(), item.quantity);
-    //   });
-    // }
 
     const matchCriteria = {
       categoryId: mongoose.Types.ObjectId.createFromHexString(categoryId),
@@ -348,9 +333,6 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
           (fav) => fav.toString() === product._id.toString()
         ) ?? false;
 
-      // // Get the cart quantity for this product
-      // const cartCount = cartMap.get(product._id.toString()) || 0;
-
       return {
         productId: product._id,
         productName: product.productName || null,
@@ -370,7 +352,6 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
         inventory: product.inventory,
         variantAvailable: product.variants && product.variants.length > 0,
-        // cartCount,
       };
     });
 
@@ -537,124 +518,6 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
   }
 };
 
-// Filter merchants based on (Pure veg, Rating, Nearby)
-// const filterAndSearchMerchantController = async (req, res, next) => {
-//   try {
-//     let {
-//       businessCategoryId,
-//       filterType,
-//       query = "",
-//       latitude,
-//       longitude,
-//       page = 1,
-//       limit = 10,
-//     } = req.query;
-
-//     page = parseInt(page, 10);
-//     limit = parseInt(limit, 10);
-
-//     const skip = (page - 1) * limit;
-
-//     const customerId = req.userAuth;
-
-//     // Validate required inputs
-//     if (!businessCategoryId)
-//       return next(appError("Business category is required", 400));
-
-//     let customer;
-
-//     if (customerId) {
-//       // Fetch customer and validate existence
-//       customer = await Customer.findById(customerId).select(
-//         "customerDetails.location"
-//       );
-
-//       if (!customer) return next(appError("Customer not found", 404));
-//     }
-
-//     const foundGeofence = await geoLocation(latitude, longitude);
-
-//     if (!foundGeofence) return next(appError("Geofence not found", 404));
-
-//     // Define base filter criteria
-//     const filterCriteria = {
-//       isBlocked: false,
-//       isApproved: "Approved",
-//       "merchantDetail.geofenceId": foundGeofence._id,
-//       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
-//       // "merchantDetail.pricing.0": { $exists: true },
-//       // "merchantDetail.pricing.modelType": { $exists: true },
-//       // "merchantDetail.pricing.modelId": { $exists: true },
-//       "merchantDetail.location": { $exists: true, $ne: [] },
-//     };
-
-//     // Apply additional filters based on filterType
-//     if (query) {
-//       filterCriteria["merchantDetail.merchantName"] = {
-//         $regex: query.trim(),
-//         $options: "i",
-//       };
-//     }
-//     if (filterType === "Veg") {
-//       filterCriteria["merchantDetail.merchantFoodType"] = "Veg";
-//     } else if (filterType === "Rating") {
-//       filterCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
-//     }
-
-//     // Fetch merchants based on filter criteria
-//     let merchants = await Merchant.find(filterCriteria)
-//       .skip(skip)
-//       .limit(limit)
-//       .lean();
-
-//     const customerLocation = [latitude, longitude];
-//     // Apply "Nearby" filter if required
-//     const turf = require("@turf/turf");
-//     if (filterType === "Nearby" && customerLocation) {
-//       merchants = merchants.filter((merchant) => {
-//         const servingRadius = merchant.merchantDetail.servingRadius || 0;
-//         const merchantLocation = merchant.merchantDetail.location;
-//         if (servingRadius > 0 && Array.isArray(merchantLocation)) {
-//           const distance = turf.distance(
-//             turf.point(merchantLocation),
-//             turf.point(customerLocation),
-//             { units: "kilometers" }
-//           );
-//           return distance <= servingRadius;
-//         }
-//         return true;
-//       });
-//     }
-
-//     // Sort merchants by sponsorship or other criteria
-//     const sortedMerchants = sortMerchantsBySponsorship(merchants);
-
-//     // Map sorted merchants to response format
-//     const responseMerchants = sortedMerchants.map((merchant) => {
-//       return {
-//         id: merchant._id,
-//         merchantName: merchant.merchantDetail.merchantName,
-//         description: merchant.merchantDetail.description || "",
-//         averageRating: merchant.merchantDetail.averageRating || 0,
-//         status: merchant?.status,
-//         restaurantType: merchant?.merchantDetail?.merchantFoodType || null,
-//         merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
-//         displayAddress: merchant.merchantDetail.displayAddress || null,
-//         preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
-//         isFavorite:
-//           customer?.customerDetails?.favoriteMerchants?.includes(
-//             merchant._id
-//           ) ?? false,
-//       };
-//     });
-
-//     // Respond with filtered merchants
-//     res.status(200).json(responseMerchants);
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
 const filterAndSearchMerchantController = async (req, res, next) => {
   try {
     let {
@@ -692,9 +555,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.location": { $exists: true, $ne: [] },
-      // "merchantDetail.pricing.0": { $exists: true },
-      // "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
-      // "merchantDetail.pricing.modelId": { $exists: true },
+      "merchantDetail.pricing.0": { $exists: true },
+      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelId": { $exists: true },
     };
 
     if (query) {
@@ -740,10 +603,6 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       );
 
       sortedCount = merchantsWithProducts.length;
-      // console.log(
-      //   "Total merchants sorted to the top due to productName:",
-      //   sortedCount
-      // );
     }
 
     // Sort merchants: First by productName match, then by merchantId match
@@ -761,10 +620,6 @@ const filterAndSearchMerchantController = async (req, res, next) => {
         if (b._id.toString() === merchantId) return 1;
         return 0;
       });
-      // console.log(
-      //   "Total merchants sorted to the top due to merchantId:",
-      //   sortedCount
-      // );
     }
 
     // Apply pagination AFTER sorting
@@ -1129,30 +984,21 @@ const toggleProductFavoriteController = async (req, res, next) => {
 // Add or remove Merchants from favorite
 const toggleMerchantFavoriteController = async (req, res, next) => {
   try {
-    console.log("🔹 Request received for toggling favorite merchant");
-
     // Find the current customer
     const currentCustomer = await Customer.findById(req.userAuth);
 
     if (!currentCustomer) {
-      console.error("❌ Customer not found or not authenticated");
       return next(appError("Customer is not authenticated", 403));
     }
 
     const { merchantId, businessCategoryId } = req.params;
-    console.log(
-      `📌 Merchant ID: ${merchantId}, Business Category ID: ${businessCategoryId}`
-    );
 
     // Check if the merchant exists
     const merchantFound = await Merchant.findById(merchantId).lean();
 
     if (!merchantFound) {
-      console.error("❌ Merchant not found");
       return next(appError("Merchant not found", 404));
     }
-
-    console.log("✅ Merchant found, processing favorite status...");
 
     let favoriteMerchants = new Set(
       currentCustomer.customerDetails.favoriteMerchants.map((fav) =>
@@ -1163,15 +1009,9 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
       )
     );
 
-    console.log(
-      "🔍 Current Favorite Merchants:",
-      Array.from(favoriteMerchants)
-    );
-
     const merchantKey = JSON.stringify({ merchantId, businessCategoryId });
 
     if (favoriteMerchants.has(merchantKey)) {
-      console.log("❌ Merchant found in favorites, removing...");
       favoriteMerchants.delete(merchantKey);
 
       res.status(200).json({
@@ -1179,7 +1019,6 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
         message: "Successfully removed merchant from favorite list",
       });
     } else {
-      console.log("✅ Merchant not in favorites, adding...");
       favoriteMerchants.add(merchantKey);
 
       res.status(200).json({
@@ -1193,13 +1032,7 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
       favoriteMerchants
     ).map((fav) => JSON.parse(fav));
 
-    console.log(
-      "💾 Updated Favorite Merchants:",
-      currentCustomer.customerDetails.favoriteMerchants
-    );
-
     await currentCustomer.save();
-    console.log("✅ Favorite merchant list updated successfully.");
   } catch (err) {
     console.error("❌ Error:", err.message);
     next(appError(err.message));
@@ -2904,14 +2737,10 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
 
-    console.log("CustomerId", customerId);
-
     // Find the latest order for the given customerId
     const latestOrder = await TemporaryOrder.find({ customerId })
       .select("createdAt")
       .sort({ createdAt: -1 });
-
-    console.log("latestOrder", latestOrder);
 
     res.status(200).json(latestOrder);
   } catch (err) {

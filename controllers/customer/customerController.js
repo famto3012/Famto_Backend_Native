@@ -66,12 +66,6 @@ const registerAndLoginController = async (req, res, next) => {
     const location = [latitude, longitude];
     const geofence = await geoLocation(latitude, longitude, next);
 
-    // if (!geofence) {
-    //   return res.status(400).json({
-    //     message: "Location is outside the listed geofence",
-    //   });
-    // }
-
     // Check if customer exists; if not, create a new one
     let customer = await Customer.findOne({ phoneNumber });
 
@@ -155,9 +149,6 @@ const registerAndLoginController = async (req, res, next) => {
       customer?.fullName ? customer?.fullName : "",
       "2hr"
     );
-
-    console.log("TOKEN: ", token);
-    console.log("REFRESH TOKEN: ", refreshToken);
 
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,
