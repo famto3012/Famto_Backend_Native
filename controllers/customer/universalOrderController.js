@@ -679,9 +679,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
 
     let customer;
     if (customerId) {
-      customer = await Customer.findById(customerId).select(
-        "customerDetails.location"
-      );
+      customer = await Customer.findById(customerId).select("customerDetails");
       if (!customer) return next(appError("Customer not found", 404));
     }
 
@@ -787,8 +785,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       displayAddress: merchant.merchantDetail.displayAddress || null,
       preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
       isFavorite:
-        customer?.customerDetails?.favoriteMerchants?.includes(merchant._id) ??
-        false,
+        customer?.customerDetails?.favoriteMerchants?.some(
+          (fav) => fav.merchantId === merchant._id
+        ) || false,
     }));
 
     res.status(200).json(responseMerchants);
