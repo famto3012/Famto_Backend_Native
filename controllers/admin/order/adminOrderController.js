@@ -2774,7 +2774,7 @@ const createOrderByAdminController = async (req, res, next) => {
         userType: req.userRole,
         description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${
           newOrderCreated._id
-        }) is created by Admin (${req.userName} - ${req.userAuth})`,
+        }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
       clearCart(customer._id, deliveryMode),
       updateCustomerTransaction(customer, orderDetails.billDetail),

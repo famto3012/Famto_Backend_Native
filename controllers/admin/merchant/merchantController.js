@@ -204,34 +204,35 @@ const getMerchantProfileController = async (req, res, next) => {
 
     const merchantDetail = {
       ...merchantFound.merchantDetail,
-      merchantImage: merchantFound.merchantDetail.merchantImageURL,
-      pancardImage: merchantFound.merchantDetail.pancardImageURL,
-      gstinImage: merchantFound.merchantDetail.GSTINImageURL,
-      fssaiImage: merchantFound.merchantDetail.FSSAIImageURL,
-      aadharImage: merchantFound.merchantDetail.aadharImageURL,
+      merchantImage: merchantFound?.merchantDetail?.merchantImageURL,
+      pancardImage: merchantFound?.merchantDetail?.pancardImageURL,
+      gstinImage: merchantFound?.merchantDetail?.GSTINImageURL,
+      fssaiImage: merchantFound?.merchantDetail?.FSSAIImageURL,
+      aadharImage: merchantFound?.merchantDetail?.aadharImageURL,
       pricing: merchantPricing,
-      geofenceId: merchantFound.merchantDetail.geofenceId?._id || "",
-      businessCategoryId: merchantFound.merchantDetail.businessCategoryId || [],
+      geofenceId: merchantFound?.merchantDetail?.geofenceId?._id || "",
+      businessCategoryId:
+        merchantFound?.merchantDetail?.businessCategoryId || [],
     };
 
     // Clean up redundant *ImageURL fields
-    delete merchantDetail.merchantImageURL;
-    delete merchantDetail.pancardImageURL;
-    delete merchantDetail.GSTINImageURL;
-    delete merchantDetail.FSSAIImageURL;
-    delete merchantDetail.aadharImageURL;
+    delete merchantDetail?.merchantImageURL;
+    delete merchantDetail?.pancardImageURL;
+    delete merchantDetail?.GSTINImageURL;
+    delete merchantDetail?.FSSAIImageURL;
+    delete merchantDetail?.aadharImageURL;
 
     const formattedResponse = {
-      _id: merchantFound._id,
-      fullName: merchantFound.fullName,
-      email: merchantFound.email,
-      phoneNumber: merchantFound.phoneNumber,
-      isApproved: merchantFound.isApproved,
-      status: merchantFound.status,
-      isBlocked: merchantFound.isBlocked,
-      statusManualToggle: merchantFound.statusManualToggle,
+      _id: merchantFound?._id,
+      fullName: merchantFound?.fullName,
+      email: merchantFound?.email,
+      phoneNumber: merchantFound?.phoneNumber,
+      isApproved: merchantFound?.isApproved,
+      status: merchantFound?.status,
+      isBlocked: merchantFound?.isBlocked,
+      statusManualToggle: merchantFound?.statusManualToggle,
       merchantDetail,
-      sponsorshipDetail: merchantFound.sponsorshipDetail?.[0] || {},
+      sponsorshipDetail: merchantFound?.sponsorshipDetail?.[0] || {},
     };
 
     res.status(200).json({

@@ -79,6 +79,7 @@ const createOrUpdateCustomerCustomizationController = async (
       loginViaFacebook,
       customOrderCustomization,
       pickAndDropOrderCustomization,
+      appUpdateType,
     } = req.body;
 
     const customization = await CustomerAppCustomization.findOne({});
@@ -114,6 +115,7 @@ const createOrUpdateCustomerCustomizationController = async (
           endTime: pickAndDropOrderCustomization.endTime,
           taxId: pickAndDropOrderCustomization.taxId,
         },
+        appUpdateType,
       });
     } else {
       await CustomerAppCustomization.create({
@@ -136,6 +138,7 @@ const createOrUpdateCustomerCustomizationController = async (
           endTime: pickAndDropOrderCustomization.endTime,
           taxId: pickAndDropOrderCustomization.taxId,
         },
+        appUpdateType,
       });
     }
 
@@ -147,8 +150,24 @@ const createOrUpdateCustomerCustomizationController = async (
   }
 };
 
+const getCustomerAppAppUpdateType = async (req, res, next) => {
+  try {
+    const customization = await CustomerAppCustomization.findOne({}).select(
+      "appUpdateType"
+    );
+
+    res.status(200).json({
+      success: true,
+      appUpdateType: customization.appUpdateType,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   createOrUpdateCustomerCustomizationController,
   getCustomerCustomizationController,
   getTimingsForCustomerApp,
+  getCustomerAppAppUpdateType,
 };

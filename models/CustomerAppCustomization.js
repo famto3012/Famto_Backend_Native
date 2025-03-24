@@ -82,6 +82,11 @@ const customerAppCustomizationSchema = new mongoose.Schema(
     },
     customOrderCustomization: customOrderCustomizationSchema,
     pickAndDropOrderCustomization: pickAndDropOrderCustomizationSchema,
+    appUpdateType: {
+      type: String,
+      enum: ["IMMEDIATE", "FLEXIBLE"],
+      required: true,
+    },
   },
   {
     timestamps: true,

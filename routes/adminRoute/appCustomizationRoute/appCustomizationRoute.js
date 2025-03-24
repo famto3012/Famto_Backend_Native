@@ -14,6 +14,7 @@ const {
 const {
   createOrUpdateCustomerCustomizationController,
   getCustomerCustomizationController,
+  getCustomerAppAppUpdateType,
 } = require("../../../controllers/admin/appCustomization/customerAppCustomization");
 
 const appCustomizationRoute = express.Router();
@@ -68,6 +69,11 @@ appCustomizationRoute.get(
   isAuthenticated,
   isAdmin,
   getAgentWorkTimings
+);
+
+appCustomizationRoute.get(
+  "/customer-app-update-type",
+  getCustomerAppAppUpdateType
 );
 
 module.exports = appCustomizationRoute;

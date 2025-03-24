@@ -13,7 +13,7 @@ const appError = require("./appError");
 
 const { convertISTToUTC } = require("./formatters");
 
-const {geoLocation} = require("./getGeoLocation");
+const { geoLocation } = require("./getGeoLocation");
 
 const {
   calculateDeliveryCharges,
@@ -21,6 +21,8 @@ const {
   getDistanceFromPickupToDelivery,
   filterProductIdAndQuantity,
 } = require("./customerAppHelpers");
+const CustomerAppCustomization = require("../models/CustomerAppCustomization");
+const Tax = require("../models/Tax");
 
 // Create or return the existing customer
 const findOrCreateCustomer = async ({
@@ -638,13 +640,9 @@ const calculateDeliveryChargesHelper = async (
 
     let customerPricing;
 
-    console.log("isSuperMarketOrder", isSuperMarketOrder);
-
     if (isSuperMarketOrder) {
-      console.log("super market order");
       oneTimeDeliveryCharge = 40;
     } else {
-      console.log("Not super market order");
       customerPricing = await CustomerPricing.findOne({
         deliveryMode,
         businessCategoryId,
@@ -662,8 +660,6 @@ const calculateDeliveryChargesHelper = async (
         customerPricing.fareAfterBaseDistance
       );
     }
-
-    console.log("oneTimeDeliveryCharge: ", oneTimeDeliveryCharge);
 
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
@@ -1059,7 +1055,7 @@ const pickAndDropCharges = async (
   ).toFixed(2);
 
   // Calculate delivery charge for scheduled orders if applicable
-  let deliveryChargeForScheduledOrder;
+  let deliveryChargeForScheduledOrder = 0;
 
   if (
     scheduledDetails?.startDate &&
@@ -1071,11 +1067,28 @@ const pickAndDropCharges = async (
     ).toFixed(2);
   }
 
+  const tax = await CustomerAppCustomization.findOne({}).select(
+    "pickAndDropOrderCustomization"
+  );
+
+  const taxFound = await Tax.findOne({
+    _id: tax.pickAndDropOrderCustomization.taxId,
+    status: true,
+  });
+
+  const charge = deliveryChargeForScheduledOrder || oneTimeDeliveryCharge;
+
+  let taxAmount = 0;
+  if (taxFound) {
+    const calculatedTax = (charge * taxFound.tax) / 100;
+    taxAmount = parseFloat(calculatedTax.toFixed(2));
+  }
+
   return {
     oneTimeDeliveryCharge: oneTimeDeliveryCharge || null,
     surgeCharges: surgeCharges || null,
     deliveryChargeForScheduledOrder: deliveryChargeForScheduledOrder || null,
-    taxAmount: null,
+    taxAmount,
     itemTotal: null,
   };
 };
@@ -1149,13 +1162,30 @@ const customOrderCharges = async (
     ).toFixed(2);
   }
 
+  const tax = await CustomerAppCustomization.findOne({}).select(
+    "customOrderCustomization"
+  );
+
+  const taxFound = await Tax.findOne({
+    _id: tax.customOrderCustomization.taxId,
+    status: true,
+  });
+
+  const charge = deliveryChargeForScheduledOrder || oneTimeDeliveryCharge;
+
+  let taxAmount = 0;
+  if (taxFound) {
+    const calculatedTax = (charge * taxFound.tax) / 100;
+    taxAmount = parseFloat(calculatedTax.toFixed(2));
+  }
+
   return {
     oneTimeDeliveryCharge: distance ? oneTimeDeliveryCharge.toFixed(2) : 0,
     surgeCharges: distance ? surgeCharges.toFixed(2) : 0,
     deliveryChargeForScheduledOrder: distance
       ? deliveryChargeForScheduledOrder
       : 0,
-    taxAmount: 0,
+    taxAmount,
     itemTotal: 0,
   };
 };
