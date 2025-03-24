@@ -1755,11 +1755,8 @@ const orderPaymentController = async (req, res, next) => {
       }
 
       // Deduct the amount from wallet
-      customer.customerDetails.walletBalance -= orderAmount;
-
-      // Format wallet balance to two decimal places
       customer.customerDetails.walletBalance = Number(
-        customer.customerDetails.walletBalance.toFixed(2)
+        (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
       );
 
       if (cart.cartDetail.deliveryOption === "Scheduled") {
@@ -1822,11 +1819,19 @@ const orderPaymentController = async (req, res, next) => {
         });
 
         // Clear the cart
-        await CustomerCart.deleteOne({ customerId });
 
         if (!tempOrder) {
           return next(appError("Error in creating temporary order"));
         }
+
+        walletTransaction.orderId = orderId;
+        customer.walletTransactionDetail.push(walletTransaction);
+        customer.transactionDetail.push(customerTransaction);
+
+        await Promise.all([
+          customer.save(),
+          CustomerCart.deleteOne({ customerId }),
+        ]);
 
         // Return countdown timer to client
         res.status(200).json({
@@ -1839,7 +1844,7 @@ const orderPaymentController = async (req, res, next) => {
         // After 60 seconds, create the order if not canceled
         setTimeout(async () => {
           const storedOrderData = await TemporaryOrder.findOne({ orderId });
-          console.log("Stored order data", storedOrderData);
+
           if (storedOrderData) {
             let newOrderCreated = await Order.create({
               customerId: storedOrderData.customerId,
@@ -1876,13 +1881,17 @@ const orderPaymentController = async (req, res, next) => {
               );
             }
 
-            walletTransaction.orderId = newOrder._id;
-            customer.walletTransactionDetail.push(walletTransaction);
-            customer.transactionDetail.push(customerTransaction);
+            const walletTransaction =
+              customer.customerDetails.walletTransaction.find(
+                (transaction) =>
+                  transaction.orderId.toString() === orderId.toString()
+              );
+
+            walletTransaction.orderId = newOrderCreated._id;
 
             await Promise.all([
-              customer.save(),
               TemporaryOrder.deleteOne({ orderId }),
+              customer.save(),
             ]);
 
             const eventName = "newOrderCreated";
