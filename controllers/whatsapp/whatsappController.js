@@ -352,7 +352,7 @@ const getWhatsAppMessages = async (req, res) => {
   try {
     const messages = await WhatsApp.aggregate([
       {
-        $sort: { timestamp: -1 }, // Sort messages by latest timestamp first
+        $sort: { createdAt: -1 }, // Sort messages by latest timestamp first
       },
       {
         $group: {
@@ -391,7 +391,8 @@ const getWhatsAppMessages = async (req, res) => {
             },
           },
           lastMessage: "$latestMessage.messageBody",
-          timestamp: "$latestMessage.timestamp",
+          timestamp: "$latestMessage.createdAt",
+          received: "$latestMessage.received",
         },
       },
       {
@@ -404,6 +405,7 @@ const getWhatsAppMessages = async (req, res) => {
       name: msg.name,
       lastMessage: msg.lastMessage,
       timeAgo: timeAgo(msg.timestamp),
+      received: msg.received,
     }));
 
     res.status(200).json({ success: true, data: formattedMessages });
