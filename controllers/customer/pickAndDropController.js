@@ -203,8 +203,6 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     if (!customer) return next(appError("Customer not found", 404));
 
-    console.log("Customer found");
-
     const { cartId } = req.query;
 
     const cartFound = await PickAndCustomCart.findOne({
@@ -214,16 +212,12 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
     });
 
     if (!cartFound) return next(appError("Customer cart not found", 404));
-    console.log("Cart found");
 
     const agents = await Agent.find({});
     const vehicleTypes = agents.flatMap((agent) =>
       agent.vehicleDetail.map((vehicle) => vehicle.type)
     );
     const uniqueVehicleTypes = [...new Set(vehicleTypes)];
-
-    console.log("geofenceId: ", customer.customerDetails.geofenceId);
-    console.log("uniqueVehicleTypes: ", uniqueVehicleTypes);
 
     // Fetch the customer pricing details for all vehicle types
     const customerPricingArray = await CustomerPricing.find({
@@ -232,12 +226,10 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
       status: true,
       vehicleType: { $in: uniqueVehicleTypes },
     });
-    console.log("Here");
 
     if (!customerPricingArray || customerPricingArray.length === 0) {
       return next(appError("Customer Pricing not found", 404));
     }
-    console.log("Customer pricing found");
 
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
@@ -301,8 +293,6 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
         }
       })
       .filter(Boolean);
-
-    console.log("vehicleData", vehicleData);
 
     res.status(200).json(vehicleData);
   } catch (err) {

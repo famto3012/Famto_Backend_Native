@@ -562,7 +562,8 @@ const addTipAndApplyPromoCodeInCustomOrderController = async (
     } = cart.billDetail;
 
     // Update the tip if provided
-    const tip = parseInt(addedTip) || currentTip;
+    const tip = addedTip !== undefined ? parseInt(addedTip) : currentTip;
+
     cart.billDetail.addedTip = tip;
 
     // Apply the promo code if provided
