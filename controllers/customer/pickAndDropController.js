@@ -429,7 +429,7 @@ const addTipAndApplyPromoCodeInPickAndDropController = async (
     } = cart.billDetail;
 
     // Add the tip
-    const tip = parseInt(addedTip) || 0;
+    const tip = addedTip !== undefined ? parseInt(addedTip) : oldTip;
     const originalGrandTotalWithTip = originalGrandTotal + tip - oldTip;
 
     cart.billDetail.addedTip = tip;
@@ -493,7 +493,8 @@ const addTipAndApplyPromoCodeInPickAndDropController = async (
     discountAmount = parseFloat(discountAmount) || 0;
 
     const discountedDeliveryCharge = originalDeliveryCharge - discountAmount;
-    const discountedGrandTotal = originalGrandTotal - discountAmount;
+    const discountedGrandTotal =
+      originalGrandTotal - discountAmount + tip - oldTip;
 
     cart.billDetail.discountedDeliveryCharge =
       discountedDeliveryCharge < 0 ? 0 : Math.round(discountedDeliveryCharge);
