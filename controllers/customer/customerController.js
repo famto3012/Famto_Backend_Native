@@ -164,43 +164,25 @@ const registerAndLoginController = async (req, res, next) => {
   }
 };
 
-// Get all geofences
-const getAvailableGeofences = async (req, res, next) => {
-  try {
-    const availableGeofences = await Geofence.find({});
-
-    const formattedResponse = availableGeofences?.map((geofence) => ({
-      id: geofence._id,
-      name: geofence.name,
-    }));
-
-    res.status(200).json({
-      message: "Geofence name",
-      data: formattedResponse,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
 // Set selected geofence
 const setSelectedGeofence = async (req, res, next) => {
   try {
-    const { geofenceId } = req.body;
+    const { latitude, longitude } = req.body;
 
-    const [geofenceFound, customerFound] = await Promise.all([
-      Geofence.findById(geofenceId),
-      Customer.findById(req.userAuth),
-    ]);
+    const geofence = await geoLocation(latitude, longitude, next);
 
-    if (!geofenceFound) return next(appError("Geofence not found", 404));
+    const customerFound = await Customer.findById(req.userAuth);
+
     if (!customerFound) return next(appError("Customer not found", 404));
 
-    customerFound.customerDetails.geofenceId = geofenceId;
+    customerFound.customerDetails.geofenceId = geofence._id;
 
     await customerFound.save();
 
-    res.status(200).json({ message: "Geofence saved successfully" });
+    res.status(200).json({
+      success: true,
+      message: "Geofence saved successfully",
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -331,8 +313,6 @@ const updateCustomerAddressController = async (req, res, next) => {
       coordinates,
       id,
     } = req.body;
-
-    console.log(req.body);
 
     const currentCustomer = await Customer.findById(req.userAuth);
 
@@ -1843,7 +1823,6 @@ const searchProductAndMerchantController = async (req, res) => {
 
 module.exports = {
   registerAndLoginController,
-  getAvailableGeofences,
   setSelectedGeofence,
   getCustomerProfileController,
   updateCustomerProfileController,

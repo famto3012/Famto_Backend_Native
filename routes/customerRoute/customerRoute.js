@@ -33,7 +33,6 @@ const {
   generateReferralCode,
   getSelectedOngoingOrderDetailController,
   getAllNotificationsOfCustomerController,
-  getAvailableGeofences,
   setSelectedGeofence,
   getCurrentOngoingOrders,
   getAllScheduledOrdersOfCustomer,
@@ -118,9 +117,6 @@ customerRoute.post(
   customerAuthenticateValidations,
   registerAndLoginController
 );
-
-// Get available geofence
-customerRoute.get("/all-geofence", isAuthenticated, getAvailableGeofences);
 
 // Set selected geofence
 customerRoute.post("/set-geofence", isAuthenticated, setSelectedGeofence);
