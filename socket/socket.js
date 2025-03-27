@@ -101,60 +101,6 @@ const io = socketio(server, {
 
 const userSocketMap = {};
 
-// const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
-//   const notificationSettings = await NotificationSetting.findOne({
-//     event: eventName || "",
-//     status: true,
-//   });
-
-//   const mes = {
-//     notification: {
-//       title: notificationSettings?.title || message?.title,
-//       body: notificationSettings?.description || message?.body,
-//       image: message?.image,
-//     },
-//     data: {
-//       orderId: message?.orderId || "",
-//       merchantName: message?.merchantName || "",
-//       pickAddress: JSON.stringify(message?.pickAddress || {}),
-//       customerName: message?.customerName || "",
-//       customerAddress: JSON.stringify(message?.customerAddress || {}),
-//       orderType: message?.orderType || "",
-//       taskDate: message?.taskDate || "",
-//       taskTime: message?.taskTime || "",
-//       timer: JSON.stringify(message?.timer || ""),
-//     },
-//     webpush: {
-//       fcm_options: {
-//         link: "https://dashboard.famto.in/home",
-//       },
-//       notification: {
-//         icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media&token=0be47a53-43f3-4887-9822-3baad0edd31e",
-//       },
-//     },
-//     token: fcmToken,
-//   };
-//   // console.log(mes);
-
-//   try {
-//     // Try sending with the first project
-//     const response1 = await admin1.messaging(app1).send(mes);
-//     // console.log("Successfully sent message with project1:", response1);
-//     return true; // Return true if the notification was sent successfully with project1
-//   } catch (error1) {
-//     // console.error("Error sending message with project1:", error1);
-
-//     try {
-//       const response2 = await admin2.messaging(app2).send(mes);
-//       // console.log("Successfully sent message with project2:", response2);
-//       return true; // Return true if the notification was sent successfully with project2
-//     } catch (error2) {
-//       // console.error("Error sending message with project2:", error2);
-//       return false; // Return false if there was an error with both projects
-//     }
-//   }
-// };
-
 const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
@@ -317,35 +263,6 @@ const createNotificationLog = async (notificationSettings, message) => {
   }
 };
 
-// Function to send notification to user (using Socket.IO if available, else FCM)
-// const sendNotification = async (userId, eventName, data, role) => {
-//   const { fcmToken } = userSocketMap[userId] || {};
-//   let notificationSent = false;
-
-//   const notificationSettings = await NotificationSetting.findOne({
-//     event: eventName || "",
-//     status: true,
-//   });
-
-//   for (let token of fcmToken) {
-//     console.log("FcmToken", token);
-//     if (token && !notificationSent) {
-//       notificationSent = await sendPushNotificationToUser(
-//         token,
-//         data.fcm,
-//         eventName
-//       );
-//     }
-//   }
-//   // console.log("Notification send", notificationSent);
-
-//   if (notificationSent) {
-//     await createNotificationLog(notificationSettings, data.fcm);
-//   } else {
-//     console.log(`No socketId or fcmToken found for userId: ${userId}`);
-//   }
-// };
-
 const sendNotification = async (userId, eventName, data, role) => {
   const { fcmToken } = userSocketMap[userId] || {};
 
@@ -355,8 +272,6 @@ const sendNotification = async (userId, eventName, data, role) => {
   }
 
   let notificationSent = false;
-
-  console.log("event name: ", eventName);
 
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
