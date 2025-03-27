@@ -48,6 +48,7 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const verifyToken = require("../../utils/verifyToken");
 const Merchant = require("../../models/Merchant");
 const Product = require("../../models/Product");
+const Category = require("../../models/Category");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -527,6 +528,56 @@ const rateDeliveryAgentController = async (req, res, next) => {
 };
 
 // Get favorite merchants
+// const getFavoriteMerchantsController = async (req, res, next) => {
+//   try {
+//     const currentCustomer = req.userAuth;
+//     // Retrieving only necessary fields for customer and their favorite merchants
+//     const customer = await Customer.findById(currentCustomer)
+//       .select("customerDetails.favoriteMerchants")
+//       .populate({
+//         path: "customerDetails.favoriteMerchants.merchantId",
+//       })
+//       .populate({
+//         path: "customerDetails.favoriteMerchants.businessCategoryId",
+//         select: "title",
+//       });
+
+//     if (!customer || !customer.customerDetails) {
+//       return next(appError("Customer details not found", 404));
+//     }
+
+//     // Map the favorite merchants into the desired format
+//     const formattedMerchants = customer.customerDetails.favoriteMerchants.map(
+//       (merchant) => ({
+//         id: merchant?.merchantId?._id,
+//         merchantName:
+//           merchant?.merchantId?.merchantDetail?.merchantName || null,
+//         description: merchant?.merchantId?.merchantDetail?.description || null,
+//         averageRating: merchant?.merchantId?.merchantDetail?.averageRating,
+//         status: merchant?.merchantId?.status,
+//         restaurantType:
+//           merchant?.merchantId?.merchantDetail?.merchantFoodType || null,
+//         merchantImageURL:
+//           merchant?.merchantId?.merchantDetail?.merchantImageURL ||
+//           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
+//         displayAddress:
+//           merchant?.merchantId?.merchantDetail?.displayAddress || null,
+//         preOrderStatus: merchant?.merchantId?.merchantDetail?.preOrderStatus,
+//         isFavorite: true,
+//         businessCategoryId: merchant?.businessCategoryId?.id,
+//         businessCategoryName: merchant?.businessCategoryId?.title,
+//       })
+//     );
+
+//     res.status(200).json({
+//       success: true,
+//       data: formattedMerchants,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const getFavoriteMerchantsController = async (req, res, next) => {
   try {
     const currentCustomer = req.userAuth;
@@ -547,25 +598,39 @@ const getFavoriteMerchantsController = async (req, res, next) => {
 
     // Map the favorite merchants into the desired format
     const formattedMerchants = customer.customerDetails.favoriteMerchants.map(
-      (merchant) => ({
-        id: merchant?.merchantId?._id,
-        merchantName:
-          merchant?.merchantId?.merchantDetail?.merchantName || null,
-        description: merchant?.merchantId?.merchantDetail?.description || null,
-        averageRating: merchant?.merchantId?.merchantDetail?.averageRating,
-        status: merchant?.merchantId?.status,
-        restaurantType:
-          merchant?.merchantId?.merchantDetail?.merchantFoodType || null,
-        merchantImageURL:
-          merchant?.merchantId?.merchantDetail?.merchantImageURL ||
-          "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
-        displayAddress:
-          merchant?.merchantId?.merchantDetail?.displayAddress || null,
-        preOrderStatus: merchant?.merchantId?.merchantDetail?.preOrderStatus,
-        isFavorite: true,
-        businessCategoryId: merchant?.businessCategoryId?.id,
-        businessCategoryName: merchant?.businessCategoryId?.title,
-      })
+      (merchant) => {
+        // Determine redirectable based on specific conditions
+        const redirectable = !!(
+          merchant?.merchantId?.merchantDetail?.pricing?.[0] &&
+          merchant?.merchantId?.merchantDetail?.pricing?.[0]?.modelType &&
+          merchant?.merchantId?.merchantDetail?.pricing?.[0]?.modelId &&
+          merchant?.merchantId?.merchantDetail?.location?.length > 0 &&
+          !merchant?.merchantId?.isBlocked &&
+          merchant?.merchantId?.isApproved === "Approved"
+        );
+
+        return {
+          id: merchant?.merchantId?._id,
+          merchantName:
+            merchant?.merchantId?.merchantDetail?.merchantName || null,
+          description:
+            merchant?.merchantId?.merchantDetail?.description || null,
+          averageRating: merchant?.merchantId?.merchantDetail?.averageRating,
+          status: merchant?.merchantId?.status,
+          restaurantType:
+            merchant?.merchantId?.merchantDetail?.merchantFoodType || null,
+          merchantImageURL:
+            merchant?.merchantId?.merchantDetail?.merchantImageURL ||
+            "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
+          displayAddress:
+            merchant?.merchantId?.merchantDetail?.displayAddress || null,
+          preOrderStatus: merchant?.merchantId?.merchantDetail?.preOrderStatus,
+          isFavorite: true,
+          businessCategoryId: merchant?.businessCategoryId?.id,
+          businessCategoryName: merchant?.businessCategoryId?.title,
+          redirectable: redirectable, // Add redirectable field based on conditions
+        };
+      }
     );
 
     res.status(200).json({
@@ -578,6 +643,44 @@ const getFavoriteMerchantsController = async (req, res, next) => {
 };
 
 // Get favorite products
+// const getFavoriteProductsController = async (req, res, next) => {
+//   try {
+//     const customer = await Customer.findById(req.userAuth)
+//       .populate({
+//         path: "customerDetails.favoriteProducts",
+//         select:
+//           "productName price productImageURL description categoryId inventory",
+//         populate: {
+//           path: "categoryId",
+//           select: "businessCategoryId merchantId",
+//         },
+//       })
+//       .select("customerDetails.favoriteProducts");
+
+//     if (!customer) return next(appError("Customer not found", 404));
+
+//     const formattedResponse = customer.customerDetails.favoriteProducts?.map(
+//       (product) => ({
+//         productId: product._id,
+//         productName: product.productName || null,
+//         price: product.price || null,
+//         productImageURL:
+//           product.productImageURL ||
+//           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
+//         businessCategoryId: product.categoryId.businessCategoryId || null,
+//         merchantId: product.categoryId.merchantId || null,
+//         inventory: product.inventory || null,
+//         description: product.description || null,
+//         isFavorite: true,
+//       })
+//     );
+
+//     res.status(200).json(formattedResponse);
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const getFavoriteProductsController = async (req, res, next) => {
   try {
     const customer = await Customer.findById(req.userAuth)
@@ -585,29 +688,51 @@ const getFavoriteProductsController = async (req, res, next) => {
         path: "customerDetails.favoriteProducts",
         select:
           "productName price productImageURL description categoryId inventory",
-        populate: {
-          path: "categoryId",
-          select: "businessCategoryId merchantId",
-        },
+        populate: [
+          {
+            path: "categoryId",
+            select: "businessCategoryId merchantId",
+            populate: {
+              path: "merchantId",
+              select: "merchantDetail isBlocked isApproved",
+            },
+          },
+        ],
       })
       .select("customerDetails.favoriteProducts");
 
     if (!customer) return next(appError("Customer not found", 404));
 
     const formattedResponse = customer.customerDetails.favoriteProducts?.map(
-      (product) => ({
-        productId: product._id,
-        productName: product.productName || null,
-        price: product.price || null,
-        productImageURL:
-          product.productImageURL ||
-          "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
-        businessCategoryId: product.categoryId.businessCategoryId || null,
-        merchantId: product.categoryId.merchantId || null,
-        inventory: product.inventory || null,
-        description: product.description || null,
-        isFavorite: true,
-      })
+      (product) => {
+        // Determine redirectable based on specific conditions
+        const redirectable = !!(
+          product.categoryId?.merchantId?.merchantDetail?.pricing?.[0] &&
+          product.categoryId?.merchantId?.merchantDetail?.pricing?.[0]
+            ?.modelType &&
+          product.categoryId?.merchantId?.merchantDetail?.pricing?.[0]
+            ?.modelId &&
+          product.categoryId?.merchantId?.merchantDetail?.location?.length >
+            0 &&
+          !product.categoryId?.merchantId?.isBlocked &&
+          product.categoryId?.merchantId?.isApproved === "Approved"
+        );
+
+        return {
+          productId: product._id,
+          productName: product.productName || null,
+          price: product.price || null,
+          productImageURL:
+            product.productImageURL ||
+            "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
+          businessCategoryId: product.categoryId.businessCategoryId || null,
+          merchantId: product.categoryId.merchantId._id || null,
+          inventory: product.inventory || null,
+          description: product.description || null,
+          isFavorite: true,
+          redirectable: redirectable, // Add redirectable field based on conditions
+        };
+      }
     );
 
     res.status(200).json(formattedResponse);
@@ -1689,10 +1814,38 @@ const searchProductAndMerchantController = async (req, res) => {
       isApproved: "Approved",
       "merchantDetail.merchantName": { $regex: query, $options: "i" },
       "merchantDetail.location": { $exists: true, $ne: [] },
+      "merchantDetail.pricing.0": { $exists: true },
+      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelId": { $exists: true },
     };
 
+    const merchantFilterForProduct = {
+      isBlocked: false,
+      isApproved: "Approved",
+      "merchantDetail.location": { $exists: true, $ne: [] },
+      "merchantDetail.pricing.0": { $exists: true },
+      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelId": { $exists: true },
+    };
     // Product search filter
-    const productFilter = { productName: { $regex: query, $options: "i" } };
+    // const productFilter = { productName: { $regex: query, $options: "i" } };
+
+    const availableMerchants = await Merchant.find(merchantFilterForProduct)
+      .select("_id")
+      .lean();
+
+    const availableMerchantIds = availableMerchants.map(
+      (merchant) => merchant._id
+    );
+
+    const productFilter = {
+      productName: { $regex: query, $options: "i" },
+      categoryId: {
+        $in: await Category.find({
+          merchantId: { $in: availableMerchantIds },
+        }).select("_id"),
+      },
+    };
 
     // Fetch merchants and populate business categories
     const merchants = await Merchant.find(merchantFilter)
@@ -1723,7 +1876,9 @@ const searchProductAndMerchantController = async (req, res) => {
             _id: merchant._id,
             name: merchant.merchantDetail.merchantName,
             address: merchant.merchantDetail.displayAddress,
-            image: merchant.merchantDetail.merchantImageURL,
+            image:
+              merchant.merchantDetail.merchantImageURL ||
+              "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
             averageRating: parseFloat(averageRating),
             type: "merchant",
             businessCategoryId: category?._id || null,
@@ -1736,7 +1891,9 @@ const searchProductAndMerchantController = async (req, res) => {
           _id: merchant._id,
           name: merchant.merchantDetail.merchantName,
           address: merchant.merchantDetail.displayAddress,
-          image: merchant.merchantDetail.merchantImageURL,
+          image:
+            merchant.merchantDetail.merchantImageURL ||
+            "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
           averageRating: parseFloat(averageRating),
           type: "merchant",
           businessCategoryId: businessCategories[0]?._id || null,
@@ -1748,7 +1905,7 @@ const searchProductAndMerchantController = async (req, res) => {
 
     // Fetch products and populate category to get businessCategoryId
     const products = await Product.find(productFilter)
-      .select("_id productName productImageURL categoryId")
+      .select("_id productName productImageURL categoryId type")
       .populate({
         path: "categoryId",
         select: "businessCategoryId name",
@@ -1767,10 +1924,12 @@ const searchProductAndMerchantController = async (req, res) => {
       if (!seenProductNames.has(product.productName)) {
         seenProductNames.add(product.productName);
         uniqueProducts.push({
-          _id: product._id,
-          name: product.productName,
-          image: product.productImageURL,
-          type: "dish",
+          _id: product?._id,
+          name: product?.productName,
+          image:
+            product?.productImageURL ||
+            "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
+          type: product?.type,
           businessCategoryId:
             product.categoryId?.businessCategoryId?._id || null,
           businessCategoryName:
