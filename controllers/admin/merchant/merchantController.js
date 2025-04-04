@@ -703,6 +703,7 @@ const fetchAllMerchantsController = async (req, res, next) => {
       .select("fullName phoneNumber isApproved status merchantDetail")
       .populate("merchantDetail.geofenceId", "name")
       .sort({
+        isApproved: -1,
         "merchantDetail.merchantName": 1,
         phoneNumber: 1,
       })

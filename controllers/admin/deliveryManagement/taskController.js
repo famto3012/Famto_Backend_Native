@@ -19,24 +19,6 @@ const { formatDate, formatTime } = require("../../../utils/formatters");
 const Manager = require("../../../models/Manager");
 const ManagerRoles = require("../../../models/ManagerRoles");
 
-//TODO: Remove after panel v2
-const getTaskFilterController = async (req, res, next) => {
-  try {
-    const { filter } = req.query;
-
-    const tasks = await Task.find({ taskStatus: filter })
-      .populate("agentId")
-      .populate("orderId");
-
-    res.status(201).json({
-      message: "Task fetched successfully",
-      data: tasks,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
 const getTaskByIdController = async (req, res, next) => {
   try {
     const { taskId } = req.params;
@@ -48,29 +30,6 @@ const getTaskByIdController = async (req, res, next) => {
     res.status(201).json({
       message: "Task fetched successfully",
       data: task,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-//TODO: Remove after panel v2
-const getAgentByStatusController = async (req, res, next) => {
-  try {
-    const { filter } = req.query;
-
-    let agent;
-    if (filter === "Free") {
-      agent = await Agent.find({ status: "Free", isApproved: "Approved" });
-    } else if (filter === "Busy") {
-      agent = await Agent.find({ status: "Busy", isApproved: "Approved" });
-    } else {
-      agent = await Agent.find({ status: "Inactive", isApproved: "Approved" });
-    }
-
-    res.status(201).json({
-      message: "Agent fetched successfully",
-      data: agent,
     });
   } catch (err) {
     next(appError(err.message));
@@ -181,10 +140,150 @@ const assignAgentToTaskController = async (req, res, next) => {
   }
 };
 
+// const getAgentsAccordingToGeofenceController = async (req, res, next) => {
+//   try {
+//     const { taskId, geofenceStatus, name } = req.query;
+
+//     const task = await Task.findById(taskId).populate({
+//       path: "orderId",
+//       populate: {
+//         path: "merchantId",
+//         populate: {
+//           path: "merchantDetail.geofenceId",
+//         },
+//       },
+//     });
+
+//     const matchCriteria = {
+//       isApproved: "Approved",
+//       location: { $exists: true, $ne: [] },
+//     };
+
+//     if (name && name?.trim()) {
+//       matchCriteria.fullName = { $regex: name.trim(), $options: "i" };
+//     }
+
+//     let geofence;
+
+//     const agents = await Agent.find(matchCriteria).select(
+//       "fullName workStructure.tag status location"
+//     );
+
+//     if (task?.orderId?.orderDetail?.deliveryMode === "Custom Order") {
+//       // const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+//       const responseData = await Promise.all(
+//         agents.map(async (agent) => {
+//           // const { distanceInKM } = await getDistanceFromPickupToDelivery(
+//           //   agent.location,
+//           //   deliveryLocation
+//           // );
+//           return {
+//             _id: agent?._id,
+//             name: agent?.fullName,
+//             workStructure: agent?.workStructure?.tag,
+//             status: agent?.status,
+//             distance: 0,
+//           };
+//         })
+//       );
+
+//       res.status(200).json({
+//         success: true,
+//         data: responseData,
+//       });
+//     } else if (task?.orderId?.orderDetail?.deliveryMode === "Pick and Drop") {
+//       const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+//       const responseData = await Promise.all(
+//         agents.map(async (agent) => {
+//           const { distanceInKM } = await getDistanceFromPickupToDelivery(
+//             agent.location,
+//             deliveryLocation
+//           );
+//           return {
+//             _id: agent?._id,
+//             name: agent?.fullName,
+//             workStructure: agent?.workStructure?.tag,
+//             status: agent?.status,
+//             distance: distanceInKM,
+//           };
+//         })
+//       );
+
+//       res.status(200).json({
+//         success: true,
+//         data: responseData,
+//       });
+//     } else {
+//       const merchantLocation =
+//         task?.orderId?.merchantId?.merchantDetail?.location;
+//       geofence = task?.orderId?.merchantId?.merchantDetail?.geofenceId;
+//       const coordinates = geofence?.coordinates;
+
+//       if (coordinates[0] !== coordinates[coordinates?.length - 1]) {
+//         coordinates.push(coordinates[0]);
+//       }
+
+//       const geofencePolygon = turf.polygon([coordinates]);
+
+//       if (geofenceStatus) {
+//         const agentsWithinGeofence = agents.filter((agent) => {
+//           const agentPoint = turf.point(agent.location);
+//           return turf.booleanPointInPolygon(agentPoint, geofencePolygon);
+//         });
+
+//         const responseData = await Promise.all(
+//           agentsWithinGeofence.map(async (agent) => {
+//             const { distanceInKM } = await getDistanceFromPickupToDelivery(
+//               agent.location,
+//               merchantLocation
+//             );
+//             return {
+//               _id: agent._id,
+//               name: agent.fullName,
+//               workStructure: agent?.workStructure?.tag,
+//               status: agent.status,
+//               distance: distanceInKM,
+//             };
+//           })
+//         );
+
+//         res.status(200).json({
+//           success: true,
+//           data: responseData,
+//         });
+//       } else {
+//         const responseData = await Promise.all(
+//           agents.map(async (agent) => {
+//             const { distanceInKM } = await getDistanceFromPickupToDelivery(
+//               agent.location,
+//               merchantLocation
+//             );
+
+//             return {
+//               _id: agent._id,
+//               name: agent.fullName,
+//               workStructure: agent?.workStructure?.tag,
+//               status: agent.status,
+//               distance: distanceInKM,
+//             };
+//           })
+//         );
+
+//         res.status(200).json({
+//           success: true,
+//           data: responseData,
+//         });
+//       }
+//     }
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const getAgentsAccordingToGeofenceController = async (req, res, next) => {
   try {
-    const { taskId } = req.params;
-    const { geofenceStatus } = req.body;
+    const { taskId, geofenceStatus, name } = req.query;
+
     const task = await Task.findById(taskId).populate({
       path: "orderId",
       populate: {
@@ -195,187 +294,87 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       },
     });
 
-    let geofence;
-    const agents = await Agent.find({
+    const deliveryMode = task?.orderId?.orderDetail?.deliveryMode;
+    const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+    const merchant = task?.orderId?.merchantId;
+    const merchantLocation = merchant?.merchantDetail?.location;
+    const geofence = merchant?.merchantDetail?.geofenceId;
+
+    // Match Criteria
+    const matchCriteria = {
       isApproved: "Approved",
       location: { $exists: true, $ne: [] },
-    });
+    };
 
-    if (task?.orderId?.orderDetail?.deliveryMode === "Custom Order") {
-      // const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
-      const responseData = await Promise.all(
-        agents.map(async (agent) => {
-          // const { distanceInKM } = await getDistanceFromPickupToDelivery(
-          //   agent.location,
-          //   deliveryLocation
-          // );
-          return {
-            _id: agent?._id,
-            name: agent?.fullName,
-            workStructure: agent?.workStructure?.tag,
-            status: agent?.status,
-            distance: 0,
-          };
-        })
-      );
+    if (name?.trim()) {
+      matchCriteria.fullName = { $regex: name.trim(), $options: "i" };
+    }
 
-      res.status(200).json({
-        success: true,
-        data: responseData,
-      });
-    } else if (task?.orderId?.orderDetail?.deliveryMode === "Pick and Drop") {
-      const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
-      const responseData = await Promise.all(
-        agents.map(async (agent) => {
-          const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agent.location,
-            deliveryLocation
-          );
-          return {
-            _id: agent?._id,
-            name: agent?.fullName,
-            workStructure: agent?.workStructure?.tag,
-            status: agent?.status,
-            distance: distanceInKM, // distance in kilometers, rounded to 2 decimal places
-          };
-        })
-      );
+    const agents = await Agent.find(matchCriteria).select(
+      "fullName workStructure.tag status location"
+    );
 
-      res.status(200).json({
-        success: true,
-        data: responseData,
-      });
-    } else {
-      const merchantLocation =
-        task?.orderId?.merchantId?.merchantDetail?.location;
-      geofence = task?.orderId?.merchantId?.merchantDetail?.geofenceId;
-      const coordinates = geofence?.coordinates;
+    let filteredAgents = agents;
 
-      if (coordinates[0] !== coordinates[coordinates?.length - 1]) {
+    // Filter by geofence if required
+    if (
+      deliveryMode !== "Custom Order" &&
+      geofenceStatus &&
+      geofence?.coordinates?.length
+    ) {
+      const coordinates = [...geofence.coordinates];
+
+      // Ensure polygon is closed
+      if (
+        coordinates.length &&
+        (coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
+          coordinates[0][1] !== coordinates[coordinates.length - 1][1])
+      ) {
         coordinates.push(coordinates[0]);
       }
 
       const geofencePolygon = turf.polygon([coordinates]);
 
-      if (geofenceStatus) {
-        const agentsWithinGeofence = agents.filter((agent) => {
-          const agentPoint = turf.point(agent.location);
-          return turf.booleanPointInPolygon(agentPoint, geofencePolygon);
-        });
-
-        const responseData = await Promise.all(
-          agentsWithinGeofence.map(async (agent) => {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
-              agent.location,
-              merchantLocation
-            );
-            return {
-              _id: agent._id,
-              name: agent.fullName,
-              workStructure: agent?.workStructure?.tag,
-              status: agent.status,
-              distance: distanceInKM, // distance in kilometers, rounded to 2 decimal places
-            };
-          })
-        );
-
-        // Return the found agents
-        res.status(200).json({
-          success: true,
-          data: responseData,
-        });
-      } else {
-        const responseData = await Promise.all(
-          agents.map(async (agent) => {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
-              agent.location,
-              merchantLocation
-            );
-            return {
-              _id: agent._id,
-              name: agent.fullName,
-              workStructure: agent?.workStructure?.tag,
-              status: agent.status,
-              distance: distanceInKM,
-            };
-          })
-        );
-
-        res.status(200).json({
-          success: true,
-          data: responseData,
-        });
-      }
+      filteredAgents = agents.filter((agent) =>
+        turf.booleanPointInPolygon(turf.point(agent.location), geofencePolygon)
+      );
     }
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
 
-//TODO: Remove after panel v2
-const getOrderByOrderIdController = async (req, res, next) => {
-  try {
-    const { orderId } = req.body;
+    // Response Mapper
+    const responseData = await Promise.all(
+      filteredAgents.map(async (agent) => {
+        let distance = 0;
 
-    const order = await Task.find({
-      orderId: { $regex: orderId, $options: "i" },
-    });
+        if (deliveryMode === "Pick and Drop") {
+          const { distanceInKM } = await getDistanceFromPickupToDelivery(
+            agent.location,
+            deliveryLocation
+          );
+          distance = distanceInKM;
+        } else if (deliveryMode !== "Custom Order") {
+          const { distanceInKM } = await getDistanceFromPickupToDelivery(
+            agent.location,
+            merchantLocation
+          );
+          distance = distanceInKM;
+        }
+
+        return {
+          _id: agent._id,
+          name: agent.fullName,
+          workStructure: agent?.workStructure?.tag,
+          status: agent.status,
+          distance,
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
-      data: order,
+      data: responseData,
     });
   } catch (err) {
     next(appError(err.message));
-  }
-};
-
-//TODO: Remove after panel v2
-const getAgentByNameController = async (req, res, next) => {
-  try {
-    const { fullName } = req.query;
-    if (!fullName) {
-      return res.status(400).json({ message: "Full name is required" });
-    }
-
-    const agents = await Agent.find({
-      fullName: new RegExp(fullName, "i"),
-      isApproved: "Approved", // Case-insensitive search
-    });
-
-    if (agents.length === 0) {
-      return res.status(404).json({ message: "No agents found" });
-    }
-
-    res.status(200).json(agents);
-  } catch (error) {
-    next(appError(err.message));
-  }
-};
-
-//TODO: Remove after panel v2
-const getTaskByDateRangeController = async (req, res, next) => {
-  try {
-    const { startDate, endDate } = req.query;
-
-    // Convert to ISO strings for querying
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-
-    // Fetch data between the startDate and endDate
-    const taskData = await Task.find({
-      createdAt: {
-        $gte: start,
-        $lte: end,
-      },
-    });
-
-    // Send the response
-    res.status(200).json(taskData);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 };
 
@@ -461,14 +460,9 @@ const getAgentsController = async (req, res, next) => {
 };
 
 module.exports = {
-  getTaskFilterController,
-  getAgentByStatusController,
+  getTaskByIdController,
   assignAgentToTaskController,
   getAgentsAccordingToGeofenceController,
-  getOrderByOrderIdController,
-  getAgentByNameController,
-  getTaskByDateRangeController,
-  getTaskByIdController,
   getTasksController,
   getAgentsController,
 };

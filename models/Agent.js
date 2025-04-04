@@ -261,7 +261,7 @@ const agentSchema = mongoose.Schema(
     },
     isApproved: {
       type: String,
-      enum: ["Approved", "Pending"],
+      enum: ["Pending", "Approved"],
       default: "Pending",
     },
     loginStartTime: {
