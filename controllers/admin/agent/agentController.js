@@ -640,7 +640,10 @@ const filterAgentsController = async (req, res, next) => {
       "_id fullName email phoneNumber workStructure geofenceId status isApproved"
     )
       .populate("workStructure.managerId", "name")
-      .populate("geofenceId", "name");
+      .populate("geofenceId", "name")
+      .sort({
+        isApproved: -1,
+      });
 
     const formattedResponse = results.map((agent) => {
       return {
