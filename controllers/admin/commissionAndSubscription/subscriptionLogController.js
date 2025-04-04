@@ -539,6 +539,119 @@ const getMerchantSubscriptionLogsByStartDate = async (req, res, next) => {
   }
 };
 
+// const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
+//   try {
+//     let {
+//       page = 1,
+//       limit = 50,
+//       merchantId,
+//       merchantName,
+//       date,
+//       status,
+//     } = req.query;
+
+//     page = parseInt(page, 10);
+//     limit = parseInt(limit, 10);
+
+//     const skip = (page - 1) * limit;
+
+//     // Build filter criteria
+//     const filterCriteria = { typeOfUser: "Merchant" };
+
+//     if (date) {
+//       const startOfDay = new Date(date);
+//       startOfDay.setHours(0, 0, 0, 0);
+//       const endOfDay = new Date(date);
+//       endOfDay.setHours(23, 59, 59, 999);
+//       filterCriteria.startDate = { $gte: startOfDay, $lte: endOfDay };
+//     }
+
+//     if (merchantName) {
+//       const merchants = await Merchant.find({
+//         "merchantDetail.merchantName": {
+//           $regex: merchantName.trim(),
+//           $options: "i",
+//         },
+//       }).select("_id");
+
+//       if (!merchants.length) {
+//         return res.status(200).json({ data: [], total: 0 });
+//       }
+
+//       filterCriteria.userId = { $in: merchants.map((m) => m._id.toString()) };
+//     }
+
+//     if (merchantId && merchantId.toLowerCase() !== "all")
+//       filterCriteria.userId = merchantId.trim();
+
+//     if (status && status.toLowerCase() !== "all") {
+//       if (status.toLowerCase() === "active") {
+//         filterCriteria.endDate = { $gt: new Date() };
+//       }
+//       if (status.toLowerCase() === "expired") {
+//         filterCriteria.endDate = { $lt: new Date() };
+//       }
+//     }
+
+//     const [logs, totalDocuments] = await Promise.all([
+//       SubscriptionLog.find(filterCriteria)
+//         .skip(skip)
+//         .limit(limit)
+//         .sort({ startDate: -1 })
+//         .lean(),
+//       SubscriptionLog.countDocuments(filterCriteria),
+//     ]);
+
+//     if (!logs.length) {
+//       return res.status(200).json({ data: [], total: totalDocuments });
+//     }
+
+//     // Extract plan and merchant IDs
+//     const planIds = [...new Set(logs.map((log) => log.planId))];
+//     const userIds = [...new Set(logs.map((log) => log.userId))];
+
+//     // Fetch related data in parallel
+//     const [plans, merchants] = await Promise.all([
+//       MerchantSubscription.find({ _id: { $in: planIds } })
+//         .select("_id name")
+//         .lean(),
+//       Merchant.find({ _id: { $in: userIds } })
+//         .select("_id merchantDetail.merchantName")
+//         .lean(),
+//     ]);
+
+//     // Convert data to lookup maps
+//     const planMap = plans.reduce((acc, plan) => {
+//       acc[plan._id] = plan.name;
+//       return acc;
+//     }, {});
+
+//     const merchantMap = merchants.reduce((acc, merchant) => {
+//       acc[merchant._id] = merchant.merchantDetail?.merchantName || null;
+//       return acc;
+//     }, {});
+
+//     // Format response
+//     const formattedResponse = logs.map((log) => ({
+//       logId: log._id,
+//       merchantName: merchantMap[log.userId] || null,
+//       planName: planMap[log.planId] || null,
+//       amount: log.amount || null,
+//       paymentMode: log.paymentMode || null,
+//       startDate: formatDate(log.startDate),
+//       status: log.paymentStatus || null,
+//     }));
+
+//     res.status(200).json({ data: formattedResponse, total: totalDocuments });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
+// Customer
+
+// TODO: Remove after panel V2
+
 const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
   try {
     let {
@@ -554,8 +667,6 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
     limit = parseInt(limit, 10);
 
     const skip = (page - 1) * limit;
-
-    // Build filter criteria
     const filterCriteria = { typeOfUser: "Merchant" };
 
     if (date) {
@@ -577,30 +688,49 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
       if (!merchants.length) {
         return res.status(200).json({ data: [], total: 0 });
       }
-
       filterCriteria.userId = { $in: merchants.map((m) => m._id.toString()) };
     }
 
-    if (merchantId && merchantId.toLowerCase() !== "all")
+    if (merchantId && merchantId.toLowerCase() !== "all") {
       filterCriteria.userId = merchantId.trim();
+    }
+
+    // Fetch all subscription logs
+    const allLogs = await SubscriptionLog.find(filterCriteria)
+      .sort({ startDate: -1 })
+      .lean();
+
+    // Group logs by merchantId
+    const merchantLogsMap = allLogs.reduce((acc, log) => {
+      if (!acc[log.userId]) acc[log.userId] = [];
+      acc[log.userId].push(log);
+      return acc;
+    }, {});
+
+    // Filter merchants based on active/expired status
+    let filteredMerchantIds = Object.keys(merchantLogsMap);
 
     if (status && status.toLowerCase() !== "all") {
+      const now = new Date();
       if (status.toLowerCase() === "active") {
-        filterCriteria.endDate = { $gt: new Date() };
-      }
-      if (status.toLowerCase() === "expired") {
-        filterCriteria.endDate = { $lt: new Date() };
+        filteredMerchantIds = filteredMerchantIds.filter((merchantId) =>
+          merchantLogsMap[merchantId].some((log) => log.endDate > now)
+        );
+      } else if (status.toLowerCase() === "expired") {
+        filteredMerchantIds = filteredMerchantIds.filter((merchantId) =>
+          merchantLogsMap[merchantId].every((log) => log.endDate < now)
+        );
       }
     }
 
-    const [logs, totalDocuments] = await Promise.all([
-      SubscriptionLog.find(filterCriteria)
-        .skip(skip)
-        .limit(limit)
-        .sort({ startDate: -1 })
-        .lean(),
-      SubscriptionLog.countDocuments(filterCriteria),
-    ]);
+    // Apply pagination
+    const paginatedMerchantIds = filteredMerchantIds.slice(skip, skip + limit);
+
+    const logs = allLogs.filter((log) =>
+      paginatedMerchantIds.includes(log.userId)
+    );
+
+    const totalDocuments = filteredMerchantIds.length;
 
     if (!logs.length) {
       return res.status(200).json({ data: [], total: totalDocuments });
@@ -616,7 +746,7 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
         .select("_id name")
         .lean(),
       Merchant.find({ _id: { $in: userIds } })
-        .select("_id merchantDetail.merchantName")
+        .select("_id merchantDetail.merchantName merchantDetail.displayAddress")
         .lean(),
     ]);
 
@@ -627,7 +757,9 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
     }, {});
 
     const merchantMap = merchants.reduce((acc, merchant) => {
-      acc[merchant._id] = merchant.merchantDetail?.merchantName || null;
+      const merchantName = merchant.merchantDetail?.merchantName || "Unknown";
+      const displayAddress = merchant.merchantDetail?.displayAddress || "-";
+      acc[merchant._id] = `${merchantName} - ${displayAddress}`;
       return acc;
     }, {});
 
@@ -648,9 +780,6 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
   }
 };
 
-// Customer
-
-// TODO: Remove after panel V2
 const getAllCustomerSubscriptionLogController = async (req, res, next) => {
   try {
     // Step 1: Fetch all subscription logs for Customers
