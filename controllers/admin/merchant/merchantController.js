@@ -1032,7 +1032,9 @@ const getAllMerchantsForDropDownController = async (req, res, next) => {
     const formattedResponse = merchantsFound?.map((merchant) => {
       return {
         _id: merchant._id,
-        merchantName: merchant?.merchantDetail?.merchantName || "-",
+        merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${
+          merchant?.merchantDetail?.displayAddress || "-"
+        }`,
       };
     });
 

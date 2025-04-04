@@ -7,6 +7,7 @@ const Merchant = require("../../../models/Merchant");
 const appError = require("../../../utils/appError");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const csvWriter = require("csv-writer").createObjectCsvWriter;
+const fs = require("fs");
 
 // TODO: remove after finishing Panel V2
 const searchUserByRoleController = async (req, res, next) => {

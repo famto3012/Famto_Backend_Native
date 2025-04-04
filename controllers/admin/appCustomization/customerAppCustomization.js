@@ -31,6 +31,7 @@ const getCustomerCustomizationController = async (req, res, next) => {
         endTime: customization?.pickAndDropOrderCustomization?.endTime || null,
         taxId: customization?.pickAndDropOrderCustomization?.taxId || null,
       },
+      appUpdateType: customization.appUpdateType,
     };
 
     res.status(200).json(formattedResponse);
