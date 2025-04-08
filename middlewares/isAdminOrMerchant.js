@@ -17,7 +17,7 @@ const isAdminOrMerchant = async (req, res, next) => {
     req.userName = decodedUser.name;
 
     const roleExists = await ManagerRoles.findOne({
-      roleName: decodedUser.role.roleName,
+      roleName: decodedUser.role,
     });
 
     if (decodedUser.role === "Admin" || decodedUser.role === "Merchant") {

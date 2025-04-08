@@ -736,78 +736,36 @@ const fetchAllMerchantsController = async (req, res, next) => {
   }
 };
 
-// TODO: Remove after Panel V2
-// Search merchant controller
-const searchMerchantController = async (req, res, next) => {
+// Search merchant for order controller
+const searchMerchantForOrderController = async (req, res, next) => {
   try {
-    let { query, page = 1, limit = 20 } = req.query;
-
-    if (!query || query.trim() === "") {
-      return res.status(400).json({
-        message: "Search query cannot be empty",
-      });
-    }
-
-    // Convert to integers
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
-    const skip = (page - 1) * limit;
-
-    const searchTerm = query.toLowerCase();
+    let { query } = req.query;
 
     const searchCriteria = {
-      "merchantDetail.merchantName": { $regex: searchTerm, $options: "i" },
+      "merchantDetail.merchantName": { $regex: query?.trim(), $options: "i" },
     };
 
     // Perform search with geofenceId populated
     const searchResults = await Merchant.find(searchCriteria)
-      .select("fullName phoneNumber isApproved status merchantDetail")
-      .populate("merchantDetail.geofenceId", "name")
+      .select(
+        "merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.businessCategoryId"
+      )
       .populate("merchantDetail.businessCategoryId", "title")
       .sort({
         "merchantDetail.merchantName": 1,
-        phoneNumber: 1,
-      })
-      .skip(skip)
-      .limit(limit);
+      });
 
-    // Count total documents
-    const totalDocuments = await Merchant.countDocuments(searchCriteria);
-
-    const merchantsWithDetails = searchResults.map((merchant) => {
+    const formattedResponse = searchResults.map((merchant) => {
       return {
         _id: merchant._id,
         merchantName: merchant?.merchantDetail?.merchantName || "-",
-        phoneNumber: merchant.phoneNumber,
-        isApproved: merchant.isApproved,
-        subscriptionStatus:
-          merchant?.merchantDetail?.pricing?.length === 0
-            ? "Inactive"
-            : "Active",
-        status: merchant.status,
-        geofence: merchant?.merchantDetail?.geofenceId?.name || "-",
-        averageRating: merchant?.merchantDetail?.averageRating,
+        displayAddress: merchant?.merchantDetail?.displayAddress || "-",
         isServiceableToday: merchant.status ? "Open" : "Closed",
         businessCategory: merchant.merchantDetail.businessCategoryId,
       };
     });
 
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Searched merchant results",
-      data: merchantsWithDetails,
-      pagination,
-    });
+    res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -2484,7 +2442,7 @@ module.exports = {
   sponsorshipPaymentByMerchantController,
   verifyPaymentByMerchantController,
   updateMerchantDetailsController,
-  searchMerchantController,
+  searchMerchantForOrderController,
   getRatingsAndReviewsByCustomerController,
   getAllMerchantsController,
   getSingleMerchantController,

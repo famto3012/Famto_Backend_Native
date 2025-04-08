@@ -72,8 +72,16 @@ const loginController = async (req, res, next) => {
     const fullName =
       role === "Merchant"
         ? user?.merchantDetail?.merchantName || user?.fullName || "-"
-        : user.fullName || user.name;
-    const token = generateToken(user._id, user.role, fullName, "2hr");
+        : role === "Manager"
+        ? user.name || "-"
+        : user.fullName || "-";
+
+    const userRole = role === "Manager" ? user.role.roleName : user.role;
+
+    console.log("in Login: ", user.role);
+    console.log("userRole in Login: ", userRole);
+
+    const token = generateToken(user._id, userRole, fullName, "1min");
 
     let refreshToken = user.refreshToken;
     try {
@@ -81,13 +89,13 @@ const loginController = async (req, res, next) => {
       if (refreshToken) {
         verifyToken(refreshToken);
       } else {
-        refreshToken = generateToken(user._id, user.role, fullName, "30d");
+        refreshToken = generateToken(user._id, userRole, fullName, "30d");
         user.refreshToken = refreshToken;
         await user.save();
       }
     } catch {
       // Generate a new refresh token if expired/invalid
-      refreshToken = generateToken(user._id, user.role, fullName, "30d");
+      refreshToken = generateToken(user._id, userRole, fullName, "30d");
       user.refreshToken = refreshToken;
       await user.save();
     }
@@ -98,7 +106,7 @@ const loginController = async (req, res, next) => {
       email: user.email,
       token,
       refreshToken,
-      role: role === "Manager" ? user.role.roleName : user.role,
+      role: userRole,
     });
   } catch (err) {
     next(appError(err.message));
@@ -123,14 +131,19 @@ const refreshTokenController = async (req, res, next) => {
     const { role, id } = decoded;
 
     // Ensure role is valid
-    const modelMap = { Admin, Manager, Merchant, Customer, Agent };
-    const UserModel = modelMap[role];
+    const modelMap = { Admin, Merchant, Customer, Agent };
+    const UserModel = modelMap[role] || Manager;
+
     if (!UserModel) {
       return next(appError("Invalid role", 400));
     }
 
     // Check if refresh token exists in database
-    const user = await UserModel.findOne({ refreshToken, _id: id });
+    const user = await UserModel.findOne({ refreshToken, _id: id }).populate(
+      typeof UserModel !== "string" ? "role" : ""
+    );
+
+    const userRole = typeof UserModel !== "string" ? role : user.role;
 
     if (!user) {
       return next(appError("Invalid refresh token or user not found", 401));
@@ -148,7 +161,7 @@ const refreshTokenController = async (req, res, next) => {
     }
 
     // Issue a new access token
-    const newToken = generateToken(user._id, user.role, user.fullName, "2hr");
+    const newToken = generateToken(user._id, userRole, user.fullName, "1min");
 
     res.status(200).json({ newToken });
   } catch (err) {
