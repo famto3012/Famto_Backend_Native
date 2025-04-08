@@ -1,14 +1,15 @@
-const { default: mongoose } = require("mongoose");
+const mongoose = require("mongoose");
 const Agent = require("../models/Agent");
 const AgentAppCustomization = require("../models/AgentAppCustomization");
 const Merchant = require("../models/Merchant");
+const fs = require("fs");
+const path = require("path");
 
 const automaticStatusOfflineForAgent = async () => {
   const nowUTC = new Date();
   const nowIST = new Date(
     nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
   );
-  console.log("Converted IST Time:", nowIST.toISOString());
 
   // Fetch all free and approved agents at once
   const agents = await Agent.find({ isApproved: "Approved", status: "Free" });
@@ -69,7 +70,7 @@ const automaticStatusOfflineForAgent = async () => {
       return nowIST >= start && nowIST <= end;
     });
 
-    if (!isWithinWorkingHours) {
+    if (!isWithinWorkingHours && agent.status !== "Busy") {
       bulkOps.push({
         updateOne: {
           filter: { _id: agent._id },
@@ -107,11 +108,6 @@ const automaticStatusToggleForMerchant = async () => {
   const formattedTime = currentTime.startsWith("24")
     ? `00${currentTime.slice(2)}`
     : currentTime;
-
-  //console.log("currentTime", currentTime)
-  //console.log("formattedTime", formattedTime )
-
-  //console.log("current day", currentDay)
 
   // Fetch only relevant merchants
   const merchants = await Merchant.find({
@@ -191,12 +187,38 @@ const automaticStatusToggleForMerchant = async () => {
       }
     );
   }
+};
 
-  // console.log("Merchants opened: ", merchantsToOpen.length, merchantsToOpen);
-  // console.log("Merchants closed: ", merchantsToClose.length, merchantsToClose);
+const deleteOldLogs = () => {
+  const logsDir = path.join(__dirname, "../middlewares/logs");
+  const retentionDays = 3;
+  const now = Date.now();
+
+  fs.readdir(logsDir, (err, files) => {
+    if (err) return console.error("Failed to read logs directory:", err);
+
+    files.forEach((file) => {
+      if (file.startsWith("error-") && file.endsWith(".log")) {
+        const filePath = path.join(logsDir, file);
+
+        fs.stat(filePath, (err, stats) => {
+          if (err) return console.error("Failed to get file stats:", err);
+
+          const ageInDays = (now - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+          if (ageInDays > retentionDays) {
+            fs.unlink(filePath, (err) => {
+              if (err) console.error("Error deleting log file:", file, err);
+              else console.log("🧹 Deleted old log file:", file);
+            });
+          }
+        });
+      }
+    });
+  });
 };
 
 module.exports = {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
+  deleteOldLogs,
 };

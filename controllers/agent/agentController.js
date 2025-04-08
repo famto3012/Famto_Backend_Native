@@ -236,7 +236,7 @@ const agentLoginController = async (req, res, next) => {
           agentFound._id,
           agentFound.role,
           agentFound?.fullName,
-          "30d"
+          "15d"
         );
         agentFound.refreshToken = refreshToken;
         await agentFound.save();
@@ -247,7 +247,7 @@ const agentLoginController = async (req, res, next) => {
         agentFound._id,
         agentFound.role,
         agentFound?.fullName,
-        "30d"
+        "15d"
       );
       agentFound.refreshToken = refreshToken;
       await agentFound.save();
@@ -258,7 +258,8 @@ const agentLoginController = async (req, res, next) => {
       token: generateToken(
         agentFound._id,
         agentFound.role,
-        agentFound?.fullName
+        agentFound?.fullName,
+        "1min"
       ),
       refreshToken: refreshToken,
       _id: agentFound._id,

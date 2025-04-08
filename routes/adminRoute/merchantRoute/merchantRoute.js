@@ -13,7 +13,6 @@ const {
   searchMerchantForOrderController,
   blockMerchant,
   editMerchantController,
-  filterMerchantsController,
   updateMerchantDetailsByMerchantController,
   addMerchantController,
   getMerchantProfileController,
@@ -124,15 +123,6 @@ merchantRoute.get(
   isAuthenticated,
   isAdmin,
   searchMerchantForOrderController
-);
-
-// TODO: Remove after panel V2
-//  Filter merchant
-merchantRoute.get(
-  "/admin/filter",
-  isAuthenticated,
-  isAdmin,
-  filterMerchantsController
 );
 
 // TODO: Remove after panel V2
