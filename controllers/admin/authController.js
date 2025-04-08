@@ -128,7 +128,7 @@ const refreshTokenController = async (req, res, next) => {
       return next(appError("Invalid refresh token format", 401));
     }
 
-    const { role, id } = decoded;
+    const { role, id, name } = decoded;
 
     // Ensure role is valid
     const modelMap = { Admin, Merchant, Customer, Agent };
@@ -161,7 +161,7 @@ const refreshTokenController = async (req, res, next) => {
     }
 
     // Issue a new access token
-    const newToken = generateToken(user._id, userRole, user.fullName, "1min");
+    const newToken = generateToken(user._id, userRole, name, "2hr");
 
     res.status(200).json({ newToken });
   } catch (err) {

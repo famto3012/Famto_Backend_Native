@@ -771,105 +771,6 @@ const searchMerchantForOrderController = async (req, res, next) => {
   }
 };
 
-// TODO: Remove after Panel V2
-// Filter merchant
-const filterMerchantsController = async (req, res, next) => {
-  try {
-    let {
-      serviceable,
-      businessCategory,
-      geofence,
-      page = 1,
-      limit = 20,
-    } = req.query;
-
-    // Convert to integers
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
-    const skip = (page - 1) * limit;
-
-    const filterCriteria = {};
-
-    // Add filters based on query parameters
-    if (serviceable && serviceable.toLowerCase() !== "all") {
-      if (!["true", "false"].includes(serviceable.toLowerCase())) {
-        return res.status(400).json({ message: "Invalid serviceable value" });
-      }
-      filterCriteria.status = serviceable.toLowerCase();
-    }
-
-    if (businessCategory && businessCategory.toLowerCase() !== "all") {
-      try {
-        filterCriteria["merchantDetail.businessCategoryId"] =
-          mongoose.Types.ObjectId.createFromHexString(businessCategory.trim());
-      } catch (err) {
-        return res
-          .status(400)
-          .json({ message: "Invalid business category ID" });
-      }
-    }
-
-    if (geofence && geofence.toLowerCase() !== "all") {
-      try {
-        filterCriteria["merchantDetail.geofenceId"] =
-          mongoose.Types.ObjectId.createFromHexString(geofence.trim());
-      } catch (err) {
-        return res.status(400).json({ message: "Invalid geofence ID" });
-      }
-    }
-
-    // Fetch merchants based on the constructed filter criteria
-    const filteredMerchants = await Merchant.find(filterCriteria)
-      .select("fullName phoneNumber isApproved status merchantDetail")
-      .populate("merchantDetail.geofenceId", "name")
-      .sort({
-        "merchantDetail.merchantName": 1,
-        phoneNumber: 1,
-      })
-      .skip(skip)
-      .limit(limit);
-
-    // Count total documents
-    const totalDocuments = await Merchant.countDocuments(filterCriteria);
-
-    const merchantsWithDetails = filteredMerchants.map((merchant) => {
-      return {
-        _id: merchant._id,
-        merchantName: merchant?.merchantDetail?.merchantName || "-",
-        phoneNumber: merchant.phoneNumber,
-        isApproved: merchant.isApproved,
-        subscriptionStatus:
-          merchant?.merchantDetail?.pricing?.length === 0
-            ? "Inactive"
-            : "Active",
-        status: merchant.status,
-        geofence: merchant?.merchantDetail?.geofenceId?.name || "-",
-        averageRating: merchant?.merchantDetail?.averageRating,
-        isServiceableToday: merchant.status ? "Open" : "Closed",
-      };
-    });
-
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Filtered merchants",
-      data: merchantsWithDetails,
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
 // Get ratings and reviews by customer
 const getRatingsAndReviewsByCustomerController = async (req, res, next) => {
   try {
@@ -2454,7 +2355,6 @@ module.exports = {
   blockMerchant,
   addMerchantController,
   editMerchantController,
-  filterMerchantsController,
   addMerchantsFromCSVController,
   downloadMerchantSampleCSVController,
   downloadMerchantCSVController,
