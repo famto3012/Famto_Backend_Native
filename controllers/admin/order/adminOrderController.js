@@ -2497,8 +2497,6 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
 
-    console.log("Here");
-
     const {
       oneTimeDeliveryCharge,
       surgeCharges,
@@ -2516,8 +2514,6 @@ const createInvoiceByAdminController = async (req, res, next) => {
       pickupLocation,
       selectedBusinessCategory
     );
-
-    console.log("Here 2");
 
     let merchantDiscountAmount;
     if (merchantFound) {
@@ -2537,6 +2533,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       taxAmount || 0,
       addedTip || 0
     );
+
+    console.log("scheduledDetails", scheduledDetails);
 
     const cart = await saveCustomerCart(
       deliveryMode,
@@ -2598,19 +2596,34 @@ const createInvoiceByAdminController = async (req, res, next) => {
 const getScheduledOrderDetailByAdminController = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { deliveryMode } = req.query;
 
-    const orderFound = await ScheduledOrder.findOne({
-      _id: id,
-    })
-      .populate({
-        path: "customerId",
-        select: "fullName phoneNumber email",
+    let orderFound;
+
+    if (["Home Delivery", "Take Away"].includes(deliveryMode)) {
+      orderFound = await ScheduledOrder.findOne({
+        _id: id,
       })
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail",
-      })
-      .exec();
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .populate({
+          path: "merchantId",
+          select: "merchantDetail",
+        })
+        .exec();
+    } else {
+      orderFound = await scheduledPickAndCustom
+        .findOne({
+          _id: id,
+        })
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .exec();
+    }
 
     if (!orderFound) {
       return next(appError("Order not found", 404));

@@ -7,6 +7,8 @@ const isAuthenticated = (req, res, next) => {
 
   const decodedUser = verifyToken(token);
 
+  // console.log("decodedUser: ", decodedUser);
+
   req.userAuth = decodedUser.id;
   req.userRole = decodedUser.role;
   req.userName = decodedUser.name;

@@ -10,7 +10,7 @@ const {
   verifyPaymentController,
   changeMerchantStatusController,
   changeMerchantStatusByMerchantController,
-  searchMerchantController,
+  searchMerchantForOrderController,
   blockMerchant,
   editMerchantController,
   filterMerchantsController,
@@ -118,13 +118,12 @@ merchantRoute.get(
   fetchAllMerchantsController
 );
 
-// TODO: Remove after panel V2
-//  Search merchant
+//  Search merchant for order
 merchantRoute.get(
   "/admin/search",
   isAuthenticated,
   isAdmin,
-  searchMerchantController
+  searchMerchantForOrderController
 );
 
 // TODO: Remove after panel V2
