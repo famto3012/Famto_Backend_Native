@@ -6,8 +6,6 @@ const verifyToken = (token) => {
 
     return decoded;
   } catch (err) {
-    // console.error("JWT VERIFICATION ERROR:", err.message);
-
     if (err.name === "TokenExpiredError") {
       console.error("⚠️ Token has expired!");
     } else if (err.name === "JsonWebTokenError") {
