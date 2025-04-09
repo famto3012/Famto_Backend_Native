@@ -308,8 +308,7 @@ const calculateAgentEarnings = async (agent, order) => {
   }
 
   let orderSalary =
-    (order.detailAddedByAgent.distanceCoveredByAgent +
-      order.orderDetail.distance) *
+    order.detailAddedByAgent.distanceCoveredByAgent *
     agentPricing.baseDistanceFarePerKM;
 
   let totalPurchaseFare = 0;
