@@ -124,6 +124,8 @@ const refreshTokenController = async (req, res, next) => {
     // Decode token without verifying (to check expiration)
     const decoded = jwt.decode(refreshToken);
 
+    console.log("DECODED in refresh controller: ", decoded);
+
     if (!decoded) {
       return next(appError("Invalid refresh token format", 401));
     }

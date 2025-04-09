@@ -31,7 +31,6 @@ const Order = require("../../models/Order");
 
 const {
   getDistanceFromPickupToDelivery,
-  getDeliveryAndSurgeCharge,
 } = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
@@ -259,7 +258,7 @@ const agentLoginController = async (req, res, next) => {
         agentFound._id,
         agentFound.role,
         agentFound?.fullName,
-        "1min"
+        "5hr"
       ),
       refreshToken: refreshToken,
       _id: agentFound._id,
@@ -1389,7 +1388,8 @@ const getCheckoutDetailController = async (req, res, next) => {
 
     const formattedData = {
       orderId: taskFound.orderId,
-      distance: taskFound.orderId.orderDetail.distance,
+      distance:
+        taskFound?.orderId?.detailAddedByAgent?.distanceCoveredByAgent || 0,
       timeTaken: taskFound?.orderId?.orderDetail?.timeTaken
         ? formatToHours(taskFound.orderId.orderDetail.timeTaken)
         : "0 h 0 min",
@@ -1398,7 +1398,7 @@ const getCheckoutDetailController = async (req, res, next) => {
         : "0 h 0 min",
       paymentType: taskFound.orderId.paymentMode,
       paymentStatus: taskFound.orderId.paymentStatus,
-      grandTotal: taskFound?.orderId?.billDetail?.grandTotal,
+      grandTotal: taskFound?.orderId?.billDetail?.grandTotal || 0,
     };
 
     res.status(200).json({

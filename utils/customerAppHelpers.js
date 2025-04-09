@@ -667,10 +667,10 @@ const reduceProductAvailableQuantity = async (purchasedItems, merchantId) => {
 
       productFound.availableQuantity -= item.quantity;
 
-      if (productFound.availableQuantity <= 0) {
-        productFound.availableQuantity = 0;
-        productFound.inventory = false;
-      }
+      // if (productFound.availableQuantity <= 0) {
+      //   productFound.availableQuantity = 0;
+      //   productFound.inventory = false;
+      // }
 
       await productFound.save();
 

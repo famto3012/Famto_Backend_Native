@@ -1480,6 +1480,21 @@ io.on("connection", async (socket) => {
         });
       }
 
+      if (
+        taskFound.pickupDetail.pickupStatus === "Completed" &&
+        taskFound.deliveryDetail.deliveryStatus === "Started"
+      ) {
+        const agentSocketId = userSocketMap[agentId]?.socketId;
+        if (agentSocketId) {
+          io.to(agentSocketId).emit(eventName, {
+            data: "Delivery successfully started",
+            success: true,
+          });
+        }
+
+        return;
+      }
+
       const orderFound = await Order.findById(taskFound.orderId).populate(
         "customerId",
         "customerDetails.geofenceId"
@@ -1493,11 +1508,11 @@ io.on("connection", async (socket) => {
       }
 
       let distanceCoveredByAgent = 0;
-      if (taskFound.deliveryMode !== "Custom Order") {
-        distanceCoveredByAgent =
-          (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-          (orderFound?.orderDetail?.distance || 0);
-      }
+      // if (taskFound.deliveryMode !== "Custom Order") {
+      distanceCoveredByAgent =
+        (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+        (orderFound?.orderDetail?.distance || 0);
+      // }
 
       taskFound.pickupDetail.pickupStatus = "Completed";
       taskFound.deliveryDetail.deliveryStatus = "Started";
@@ -1511,8 +1526,9 @@ io.on("connection", async (socket) => {
         location,
       };
 
-      orderFound.detailAddedByAgent.distanceCoveredByAgent =
-        distanceCoveredByAgent;
+      orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+        distanceCoveredByAgent.toFixed(2)
+      );
       orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
 
       if (orderFound.orderDetail.deliveryMode === "Custom Order") {
