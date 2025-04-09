@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const moment = require("moment-timezone");
 
 const globalErrorHandler = (err, req, res, next) => {
   const message = err.message || "Internal Server Error";
@@ -9,13 +10,13 @@ const globalErrorHandler = (err, req, res, next) => {
 
   // Skip logging for specific errors
   if (message !== "Invalid / Expired token") {
-    const now = new Date();
-    const formattedDate = now.toISOString().split("T")[0]; // e.g., 2025-04-08
+    const now = moment().tz("Asia/Kolkata");
+    const formattedDate = now.format("YYYY-MM-DD");
     const logFileName = `error-${formattedDate}.log`;
     const logFilePath = path.join(__dirname, "logs", logFileName);
 
     const log = `
-[${now.toISOString()}]
+[${now.format()}] // ISO format in IST
 Status: ${status}
 StatusCode: ${statusCode}
 Message: ${message}
