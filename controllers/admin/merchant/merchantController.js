@@ -1960,6 +1960,7 @@ const getMerchantPayoutController = async (req, res, next) => {
       endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
       dateFilter.$lte = endDate;
     }
+    console.log("Filter criteria", filterCriteria);
 
     // Aggregation query with filters applied to payoutDetail
     const merchantPayoutQuery = Merchant.aggregate([
@@ -2026,6 +2027,7 @@ const getMerchantPayoutController = async (req, res, next) => {
 
     // Execute the query and transform data as required
     const merchants = await merchantPayoutQuery.exec();
+    console.log("Merchants:", merchants);
     const data = merchants.map((merchant) => ({
       merchantId: merchant._id,
       merchantName: merchant.merchantDetail.merchantName,

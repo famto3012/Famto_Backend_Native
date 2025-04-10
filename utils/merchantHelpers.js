@@ -36,6 +36,7 @@ const preparePayoutForMerchant = async () => {
         $gte: startTime,
         $lte: endTime,
       },
+      "orderDetail.deliveryMode": "Home Delivery",
       status: "Completed",
     })
       .select("merchantId purchasedItems")
@@ -58,7 +59,8 @@ const preparePayoutForMerchant = async () => {
 
     // Aggregate data for each order and calculate total cost price
     for (const order of allOrders) {
-      const merchantId = order.merchantId.toString();
+      console.log("Order", order);
+      const merchantId = order?.merchantId?.toString();
       const { purchasedItems } = order;
       let totalCostPrice = 0;
 
@@ -88,6 +90,7 @@ const preparePayoutForMerchant = async () => {
 
       // Update the payout map for this merchant
       if (!merchantPayouts.has(merchantId)) {
+        console.log("Merchant Id", merchantId);
         merchantPayouts.set(merchantId, {
           totalCostPrice: 0,
           completedOrders: 0,
@@ -122,8 +125,8 @@ const preparePayoutForMerchant = async () => {
       };
     });
 
-    // console.log(`Preparing ${bulkOperations.length} bulk update operations.`);
-
+    console.log(`Preparing ${bulkOperations.length} bulk update operations.`);
+    console.log("Data", bulkOperations);
     // Execute all bulk operations at once
     if (bulkOperations.length > 0) {
       await Merchant.bulkWrite(bulkOperations);

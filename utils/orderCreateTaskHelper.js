@@ -38,22 +38,22 @@ const orderCreateTaskHelper = async (orderId) => {
 
     const autoAllocation = await AutoAllocation.findOne();
 
-    if (autoAllocation.isActive) {
-      if (autoAllocation.autoAllocationType === "All") {
-        if (autoAllocation.priorityType === "Default") {
-          await notifyAgents(order, autoAllocation.priorityType, io);
-        } else {
-          await notifyAgents(order, autoAllocation.priorityType, io);
-        }
-      } else {
-        await notifyNearestAgents(
-          order,
-          autoAllocation.priorityType,
-          autoAllocation.maxRadius,
-          io
-        );
-      }
-    }
+    // if (autoAllocation.isActive) {
+    //   if (autoAllocation.autoAllocationType === "All") {
+    //     if (autoAllocation.priorityType === "Default") {
+    //       await notifyAgents(order, autoAllocation.priorityType, io);
+    //     } else {
+    //       await notifyAgents(order, autoAllocation.priorityType, io);
+    //     }
+    //   } else {
+    //     await notifyNearestAgents(
+    //       order,
+    //       autoAllocation.priorityType,
+    //       autoAllocation.maxRadius,
+    //       io
+    //     );
+    //   }
+    // }
 
     return true;
   } catch (err) {
