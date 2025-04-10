@@ -2595,13 +2595,103 @@ const createInvoiceByAdminController = async (req, res, next) => {
   }
 };
 
+// const getScheduledOrderDetailByAdminController = async (req, res, next) => {
+//   try {
+//     const { id } = req.params;
+
+//     const orderFound = await ScheduledOrder.findOne({
+//       _id: id,
+//     })
+//       .populate({
+//         path: "customerId",
+//         select: "fullName phoneNumber email",
+//       })
+//       .populate({
+//         path: "merchantId",
+//         select: "merchantDetail",
+//       })
+//       .exec();
+
+//     if (!orderFound) {
+//       return next(appError("Order not found", 404));
+//     }
+
+//     const formattedResponse = {
+//       _id: orderFound._id,
+//       orderStatus: orderFound.status || "-",
+//       paymentStatus: orderFound.paymentStatus || "-",
+//       paymentMode: orderFound.paymentMode || "-",
+//       deliveryMode: orderFound.orderDetail.deliveryMode || "-",
+//       deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+//       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
+//         orderFound.startDate
+//       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
+//         orderFound.endDate
+//       )}`,
+//       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
+//         orderFound.time
+//       )}`,
+//       customerDetail: {
+//         _id: orderFound.customerId._id,
+//         name:
+//           orderFound.customerId.fullName ||
+//           orderFound.orderDetail.deliveryAddress.fullName ||
+//           "-",
+//         email: orderFound.customerId.email || "-",
+//         phone: orderFound.customerId.phoneNumber || "-",
+//         address: orderFound.orderDetail.deliveryAddress || "-",
+//         ratingsToDeliveryAgent: {
+//           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
+//           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
+//         },
+//         ratingsByDeliveryAgent: {
+//           rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
+//           review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
+//         },
+//       },
+//       merchantDetail: {
+//         _id: orderFound?.merchantId?._id || "-",
+//         name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
+//         instructionsByCustomer:
+//           orderFound?.orderDetail?.instructionToMerchant || "-",
+//         merchantEarnings: orderFound?.commissionDetail?.merchantEarnings || "-",
+//         famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
+//       },
+//       deliveryAgentDetail: {
+//         _id: "-",
+//         name: "-",
+//         phoneNumber: "-",
+//         avatar: "-",
+//         team: "-",
+//         instructionsByCustomer: "-",
+//         distanceTravelled: "-",
+//         timeTaken: "-",
+//         delayedBy: "-",
+//       },
+//       items: orderFound.items || null,
+//       billDetail: orderFound.billDetail || null,
+//       pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
+//       deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+//       agentLocation: orderFound?.agentId?.location || null,
+//       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
+//         ? orderFound.orderDetailStepper
+//         : [orderFound.orderDetailStepper],
+//     };
+
+//     res.status(200).json({
+//       message: "Single order detail",
+//       data: formattedResponse,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const getScheduledOrderDetailByAdminController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const orderFound = await ScheduledOrder.findOne({
-      _id: id,
-    })
+    let orderFound = await ScheduledOrder.findOne({ _id: id })
       .populate({
         path: "customerId",
         select: "fullName phoneNumber email",
@@ -2612,17 +2702,65 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       })
       .exec();
 
+    let isScheduledOrder = true;
+
+    // If not found in ScheduledOrder, check ScheduledPickAndCustom
+    if (!orderFound) {
+      isScheduledOrder = false;
+      orderFound = await scheduledPickAndCustom
+        .findOne({ _id: id })
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .exec();
+    }
+
     if (!orderFound) {
       return next(appError("Order not found", 404));
     }
+
+    const orderDetail = isScheduledOrder
+      ? orderFound.orderDetail
+      : orderFound.orderDetail;
+
+    const customerDetail = {
+      _id: orderFound.customerId._id,
+      name:
+        orderFound.customerId.fullName ||
+        orderDetail?.deliveryAddress?.fullName ||
+        "-",
+      email: orderFound.customerId.email || "-",
+      phone: orderFound.customerId.phoneNumber || "-",
+      address: orderDetail?.deliveryAddress || "-",
+      ratingsToDeliveryAgent: {
+        rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
+        review: orderFound?.orderRating?.ratingToDeliveryAgent?.review || "-",
+      },
+      ratingsByDeliveryAgent: {
+        rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
+        review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
+      },
+    };
+
+    const merchantDetail = isScheduledOrder
+      ? {
+          _id: orderFound?.merchantId?._id || "-",
+          name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
+          instructionsByCustomer: orderDetail?.instructionToMerchant || "-",
+          merchantEarnings:
+            orderFound?.commissionDetail?.merchantEarnings || "-",
+          famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
+        }
+      : null;
 
     const formattedResponse = {
       _id: orderFound._id,
       orderStatus: orderFound.status || "-",
       paymentStatus: orderFound.paymentStatus || "-",
       paymentMode: orderFound.paymentMode || "-",
-      deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-      deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+      deliveryMode: orderDetail?.deliveryMode || "-",
+      deliveryOption: orderDetail?.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
         orderFound.startDate
       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
@@ -2631,32 +2769,8 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
         orderFound.time
       )}`,
-      customerDetail: {
-        _id: orderFound.customerId._id,
-        name:
-          orderFound.customerId.fullName ||
-          orderFound.orderDetail.deliveryAddress.fullName ||
-          "-",
-        email: orderFound.customerId.email || "-",
-        phone: orderFound.customerId.phoneNumber || "-",
-        address: orderFound.orderDetail.deliveryAddress || "-",
-        ratingsToDeliveryAgent: {
-          rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
-          review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
-        },
-        ratingsByDeliveryAgent: {
-          rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
-          review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
-        },
-      },
-      merchantDetail: {
-        _id: orderFound?.merchantId?._id || "-",
-        name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
-        instructionsByCustomer:
-          orderFound?.orderDetail?.instructionToMerchant || "-",
-        merchantEarnings: orderFound?.commissionDetail?.merchantEarnings || "-",
-        famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
-      },
+      customerDetail,
+      merchantDetail,
       deliveryAgentDetail: {
         _id: "-",
         name: "-",
@@ -2670,8 +2784,8 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       },
       items: orderFound.items || null,
       billDetail: orderFound.billDetail || null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+      pickUpLocation: orderDetail?.pickupLocation || null,
+      deliveryLocation: orderDetail?.deliveryLocation || null,
       agentLocation: orderFound?.agentId?.location || null,
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper
