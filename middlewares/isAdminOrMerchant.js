@@ -17,12 +17,17 @@ const isAdminOrMerchant = async (req, res, next) => {
     req.userName = decodedUser.name;
 
     const roleExists = await ManagerRoles.findOne({
-      roleName: decodedUser.role.roleName,
+      roleName:
+        typeof decodedUser.role !== "string"
+          ? decodedUser.role.roleName
+          : decodedUser.role,
     });
 
-    if (decodedUser.role === "Admin" || decodedUser.role === "Merchant") {
-      return next();
-    } else if (roleExists) {
+    if (
+      decodedUser.role === "Admin" ||
+      decodedUser.role === "Merchant" ||
+      roleExists
+    ) {
       return next();
     } else {
       return next(appError("Access denied", 403));

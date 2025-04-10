@@ -394,6 +394,7 @@ const getSingleCustomerController = async (req, res, next) => {
       fullName: customerFound.fullName || "-",
       email: customerFound.email || "-",
       phoneNumber: customerFound.phoneNumber,
+      referralCode: customerFound.customerDetails.referralCode || "",
       customerImageURL: customerFound?.customerDetails?.customerImageURL || "",
       lastPlatformUsed: customerFound.lastPlatformUsed,
       location: customerFound.customerDetails.location || [],
@@ -458,27 +459,25 @@ const editCustomerDetailsController = async (req, res, next) => {
   } = req.body;
 
   try {
-    const customerFound = await Customer.findById(req.params.customerId);
+    const customer = await Customer.findById(req.params.customerId);
 
-    if (!customerFound) {
+    if (!customer) {
       return next(appError("Customer not found", 404));
     }
-
-    const updatedFields = {
-      fullName,
-      email,
-      phoneNumber,
-      customerDetails: {
-        homeAddress,
-        workAddress,
-        otherAddress,
-      },
-    };
 
     await Customer.findByIdAndUpdate(
       req.params.customerId,
       {
-        $set: updatedFields,
+        $set: {
+          fullName,
+          email,
+          phoneNumber,
+          "customerDetails.homeAddress": homeAddress,
+          "customerDetails.workAddress": workAddress,
+          "customerDetails.otherAddress": otherAddress,
+          "customerDetails.customerImageURL":
+            customer.customerDetails.customerImageURL,
+        },
       },
       { new: true }
     );

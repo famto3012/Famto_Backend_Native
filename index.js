@@ -88,10 +88,11 @@ const {
   deleteOldActivityLogs,
 } = require("./controllers/admin/activityLogs/activityLogController.js");
 const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
+const { deleteOldLogs } = require("./libs/automatic.js");
 
 //middlewares
 app.use(express.json());
-app.use(morgan("tiny"));
+// app.use(morgan("tiny"));
 app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
@@ -204,6 +205,7 @@ cron.schedule("30 18 * * *", async () => {
     removeExpiredMerchantDiscounts(),
     removeExpiredProductDiscount(),
     removeExpiredPromoCode(),
+    deleteOldLogs(),
   ]);
 });
 

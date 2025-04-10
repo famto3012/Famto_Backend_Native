@@ -1139,6 +1139,13 @@ const fetchPromoCodesController = async (req, res, next) => {
       validUpTo: formatDate(promo.toDate),
       minOrderAmount: promo.minOrderAmount,
       status: promo.status,
+      promoType:
+        promo.promoType === "Percentage-discount"
+          ? "Percentage"
+          : "Flat discount",
+      discount: promo.discount,
+      description: promo.description,
+      maxDiscountValue: promo.maxDiscountValue,
     }));
 
     res.status(200).json(formattedResponse);

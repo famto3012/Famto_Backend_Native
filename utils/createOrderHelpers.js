@@ -100,40 +100,6 @@ const findOrCreateCustomer = async ({
   }
 };
 
-// Get the scheduled details
-// const processSchedule = (ifScheduled) => {
-//   const { startDate, endDate } = ifScheduled;
-//   const time = ifScheduled.time
-//     ? convertISTToUTC(startDate, ifScheduled.time)
-//     : null;
-
-//   if (!startDate || !endDate || !time) {
-//     return { startDate: null, endDate: null, time: null, numOfDays: null };
-//   }
-
-//   const adjustedStartDate = new Date(startDate);
-//   adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
-//   adjustedStartDate.setUTCHours(18, 30, 0, 0);
-
-//   const adjustedTime = new Date(time);
-//   adjustedTime.setUTCHours(adjustedTime.getUTCHours() - 1);
-
-//   const adjustedEndDate = new Date(endDate);
-//   adjustedEndDate.setUTCHours(18, 29, 59, 999);
-
-//   const numOfDays = getTotalDaysBetweenDates(
-//     adjustedStartDate,
-//     adjustedEndDate
-//   );
-
-//   return {
-//     startDate: adjustedStartDate,
-//     endDate: adjustedEndDate,
-//     time: adjustedTime,
-//     numOfDays,
-//   };
-// };
-
 const processSchedule = (ifScheduled) => {
   if (
     !ifScheduled ||
@@ -146,11 +112,23 @@ const processSchedule = (ifScheduled) => {
 
   // Convert DD/MM/YYYY to YYYY-MM-DD for proper parsing
   const parseDate = (dateStr) => {
+    if (!dateStr) return null;
+
+    // Try detecting format: if it contains "-", assume YYYY-MM-DD
+    if (dateStr.includes("-")) {
+      const [year, month, day] = dateStr.split("-").map(Number);
+      if (!day || !month || !year) {
+        throw new Error(`Invalid date format: ${dateStr}`);
+      }
+      return new Date(year, month - 1, day);
+    }
+
+    // Fallback to DD/MM/YYYY
     const [day, month, year] = dateStr.split("/").map(Number);
     if (!day || !month || !year) {
       throw new Error(`Invalid date format: ${dateStr}`);
     }
-    return new Date(year, month - 1, day); // Month is 0-indexed
+    return new Date(year, month - 1, day);
   };
 
   let startDate, endDate;
@@ -196,6 +174,11 @@ const processSchedule = (ifScheduled) => {
     adjustedStartDate,
     adjustedEndDate
   );
+
+  console.log("adjustedStartDate", adjustedStartDate);
+  console.log("adjustedEndDate", adjustedEndDate);
+  console.log("adjustedTime", adjustedTime);
+  console.log("numOfDays", numOfDays);
 
   return {
     startDate: adjustedStartDate,
