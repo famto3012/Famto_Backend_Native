@@ -118,10 +118,8 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
           path: "merchantId",
           select: "merchantDetail.merchantName merchantDetail.deliveryTime",
         })
-        .populate({
-          path: "customerId",
-          select: "fullName",
-        })
+        .populate({ path: "customerId", select: "fullName" })
+        .populate({ path: "agentId", select: "fullName" })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -137,6 +135,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
           order?.customerId?.fullName ||
           order?.orderDetail?.deliveryAddress?.fullName ||
           null,
+        assignedAgent: order?.agentId?.fullName || "Unassigned",
         deliveryMode: order?.orderDetail?.deliveryMode || null,
         orderDate: formatDate(order?.createdAt) || null,
         orderTime: formatTime(order?.createdAt) || null,
