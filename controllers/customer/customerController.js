@@ -88,8 +88,6 @@ const registerAndLoginController = async (req, res, next) => {
         location,
         geofenceId: geofence?._id ? geofence?._id : null,
       };
-
-      await customer.save();
     }
 
     if (customer.customerDetails.isBlocked) {
@@ -117,39 +115,20 @@ const registerAndLoginController = async (req, res, next) => {
       }
     }
 
-    let refreshToken = customer?.refreshToken;
-    try {
-      // Verify if the refresh token is still valid
-      if (refreshToken) {
-        verifyToken(refreshToken);
-      } else {
-        refreshToken = generateToken(
-          customer?._id,
-          customer?.role,
-          customer?.fullName ? customer?.fullName : "",
-          "30d"
-        );
-        customer.refreshToken = refreshToken;
-        await customer.save();
-      }
-    } catch {
-      // Generate a new refresh token if expired/invalid
-      refreshToken = generateToken(
-        customer?._id,
-        customer?.role,
-        customer?.fullName ? customer?.fullName : "",
-        "30d"
-      );
-      customer.refreshToken = refreshToken;
-      await customer.save();
-    }
-
+    const refreshToken = generateToken(
+      customer?._id,
+      customer?.role,
+      customer?.fullName ? customer?.fullName : "",
+      "30d"
+    );
     const token = generateToken(
       customer?.id,
       customer?.role,
       customer?.fullName ? customer?.fullName : "",
       "2hr"
     );
+
+    await customer.save();
 
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,

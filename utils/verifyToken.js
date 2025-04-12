@@ -6,11 +6,11 @@ const verifyToken = (token) => {
 
     return decoded;
   } catch (err) {
-    if (err.name === "TokenExpiredError") {
-      console.error("⚠️ Token has expired!");
-    } else if (err.name === "JsonWebTokenError") {
-      console.error("⚠️ Invalid Token Signature!");
-    }
+    // if (err.name === "TokenExpiredError") {
+    //   console.error("⚠️ Token has expired!");
+    // } else if (err.name === "JsonWebTokenError") {
+    //   console.error("⚠️ Invalid Token Signature!");
+    // }
 
     return false;
   }

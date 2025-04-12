@@ -21,20 +21,14 @@ const {
   downloadCSVByMerchantController,
 } = require("../../../controllers/admin/order/merchantOrderController");
 const {
-  getAllOrdersForAdminController,
   confirmOrderByAdminController,
   rejectOrderByAdminController,
-  searchOrderByIdByAdminController,
-  filterOrdersByAdminController,
   getOrderDetailByAdminController,
   createInvoiceByAdminController,
   createOrderByAdminController,
-  getAllScheduledOrdersForAdminController,
   downloadOrdersCSVByAdminController,
   downloadInvoiceBillController,
   downloadOrderBillController,
-  filterScheduledOrdersByAdminController,
-  searchScheduledOrderByIdByAdminController,
   orderMarkAsReadyController,
   markTakeAwayOrderCompletedController,
   getScheduledOrderDetailByAdminController,
@@ -192,48 +186,6 @@ orderRoute.get(
   isAuthenticated,
   isAdmin,
   fetchAllScheduledOrdersByAdminController
-);
-
-orderRoute.get(
-  "/admin/search-order",
-  isAuthenticated,
-  isAdmin,
-  searchOrderByIdByAdminController
-);
-
-orderRoute.get(
-  "/admin/search-scheduled-order",
-  isAuthenticated,
-  isAdmin,
-  searchScheduledOrderByIdByAdminController
-);
-
-orderRoute.get(
-  "/admin/filter",
-  isAuthenticated,
-  isAdmin,
-  filterOrdersByAdminController
-);
-
-orderRoute.get(
-  "/admin/filter-scheduled",
-  isAuthenticated,
-  isAdmin,
-  filterScheduledOrdersByAdminController
-);
-
-orderRoute.get(
-  "/admin/all-orders",
-  isAuthenticated,
-  isAdmin,
-  getAllOrdersForAdminController
-);
-
-orderRoute.get(
-  "/admin/all-scheduled-orders",
-  isAuthenticated,
-  isAdmin,
-  getAllScheduledOrdersForAdminController
 );
 
 orderRoute.get(

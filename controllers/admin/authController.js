@@ -9,9 +9,7 @@ const Agent = require("../../models/Agent");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const ejs = require("ejs");
-const fs = require("fs");
 const path = require("path");
-const verifyToken = require("../../utils/verifyToken");
 const Customer = require("../../models/Customer");
 const jwt = require("jsonwebtoken");
 
@@ -45,22 +43,26 @@ const loginController = async (req, res, next) => {
     const user = await UserModel.findOne({ email: normalizedEmail }).populate(
       role === "Manager" ? "role" : ""
     );
-    if (!user)
+
+    if (!user) {
       return res.status(500).json({
         errors: { general: "Invalid credentials" },
       });
+    }
 
     const isPasswordCorrect = await bcrypt.compare(
       password,
       user.password || ""
     );
-    if (!isPasswordCorrect)
+
+    if (!isPasswordCorrect) {
       return res.status(500).json({
         errors: { general: "Invalid credentials" },
       });
+    }
 
     if (
-      role !== "Manager" &&
+      role === "Merchant" &&
       (user.isBlocked || user.isApproved !== "Approved")
     ) {
       return res.status(403).json({
@@ -71,34 +73,18 @@ const loginController = async (req, res, next) => {
     // Generate tokens
     const fullName =
       role === "Merchant"
-        ? user?.merchantDetail?.merchantName || user?.fullName || "-"
+        ? user?.merchantDetail?.merchantName || `Merchant - ${user._id}`
         : role === "Manager"
         ? user.name || "-"
         : user.fullName || "-";
 
     const userRole = role === "Manager" ? user.role.roleName : user.role;
 
-    console.log("in Login: ", user.role);
-    console.log("userRole in Login: ", userRole);
+    const token = generateToken(user._id, userRole, fullName, "2hr");
+    const refreshToken = generateToken(user._id, userRole, fullName, "30d");
 
-    const token = generateToken(user._id, userRole, fullName, "1min");
-
-    let refreshToken = user.refreshToken;
-    try {
-      // Verify if the refresh token is still valid
-      if (refreshToken) {
-        verifyToken(refreshToken);
-      } else {
-        refreshToken = generateToken(user._id, userRole, fullName, "30d");
-        user.refreshToken = refreshToken;
-        await user.save();
-      }
-    } catch {
-      // Generate a new refresh token if expired/invalid
-      refreshToken = generateToken(user._id, userRole, fullName, "30d");
-      user.refreshToken = refreshToken;
-      await user.save();
-    }
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(200).json({
       _id: user.id,
@@ -121,18 +107,14 @@ const refreshTokenController = async (req, res, next) => {
       return next(appError("Refresh token is required", 400));
     }
 
-    // Decode token without verifying (to check expiration)
+    // Decode token first
     const decoded = jwt.decode(refreshToken);
 
-    console.log("DECODED in refresh controller: ", decoded);
-
     if (!decoded) {
-      return next(appError("Invalid refresh token format", 401));
+      return next(appError("Invalid refresh token", 401));
     }
 
-    const { role, id, name } = decoded;
-
-    // Ensure role is valid
+    const { id, role, name } = decoded;
     const modelMap = { Admin, Merchant, Customer, Agent };
     const UserModel = modelMap[role] || Manager;
 
@@ -141,31 +123,33 @@ const refreshTokenController = async (req, res, next) => {
     }
 
     // Check if refresh token exists in database
-    const user = await UserModel.findOne({ refreshToken, _id: id }).populate(
-      typeof UserModel !== "string" ? "role" : ""
-    );
-
-    const userRole = typeof UserModel !== "string" ? role : user.role;
+    const user = await UserModel.findOne({ refreshToken, _id: id });
 
     if (!user) {
-      return next(appError("Invalid refresh token or user not found", 401));
+      return next(appError("Invalid refresh token or user not found", 404));
     }
 
-    // If the token is expired, don't reject it – just issue a new one
+    let isExpired = false;
     try {
       jwt.verify(refreshToken, process.env.JWT_SECRET_KEY);
     } catch (err) {
       if (err.name === "TokenExpiredError") {
-        console.warn("⚠️ Refresh token expired, generating a new one...");
+        isExpired = true;
       } else {
-        return next(appError("Invalid refresh token", 401));
+        return next(appError("Invalid refresh token", 400));
       }
     }
 
     // Issue a new access token
-    const newToken = generateToken(user._id, userRole, name, "2hr");
+    const newToken = generateToken(user._id, role, name, "2hr");
+    let newRefreshToken;
+    if (isExpired) {
+      newRefreshToken = generateToken(user._id, role, name, "30d");
+      user.refreshToken = newRefreshToken;
+      await user.save();
+    }
 
-    res.status(200).json({ newToken });
+    res.status(200).json({ newToken, newRefreshToken });
   } catch (err) {
     next(appError(err.message || "Failed to refresh token", 500));
   }
