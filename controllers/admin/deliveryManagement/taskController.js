@@ -304,6 +304,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     const matchCriteria = {
       isApproved: "Approved",
       location: { $exists: true, $ne: [] },
+      isBlocked: false,
     };
 
     if (name?.trim()) {
