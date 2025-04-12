@@ -1,0 +1,464 @@
+
+[2025-04-12T13:51:47+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 401
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\authController.js:152:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T13:51:47+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 401
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\authController.js:152:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T14:04:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'roleName')
+Stack: Error: Cannot read properties of undefined (reading 'roleName')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at isAdmin (D:\Famto_Works\Famto_Backend_Native\middlewares\isAdmin.js:32:17)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:175:3)
+URL: /api/v1/admin/delivery-management/agent-filter?filter=Free&fullName=
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T14:04:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'roleName')
+Stack: Error: Cannot read properties of undefined (reading 'roleName')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at isAdmin (D:\Famto_Works\Famto_Backend_Native\middlewares\isAdmin.js:32:17)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:175:3)
+URL: /api/v1/admin/delivery-management/task-filter?filter=Unassigned&orderId=&startDate=2025-04-12T08:34:20.900Z&endDate=2025-04-12T08:34:20.900Z
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T14:04:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'roleName')
+Stack: Error: Cannot read properties of undefined (reading 'roleName')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at isAdmin (D:\Famto_Works\Famto_Backend_Native\middlewares\isAdmin.js:32:17)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:175:3)
+URL: /api/v1/admin/auto-allocation/get
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T14:04:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'roleName')
+Stack: Error: Cannot read properties of undefined (reading 'roleName')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at isAdmin (D:\Famto_Works\Famto_Backend_Native\middlewares\isAdmin.js:32:17)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:175:3)
+URL: /api/v1/admin/delivery-management/task-filter?filter=Unassigned&orderId=&startDate=2025-04-12T08:34:20.886Z&endDate=2025-04-12T08:34:20.886Z
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T14:04:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'roleName')
+Stack: Error: Cannot read properties of undefined (reading 'roleName')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at isAdmin (D:\Famto_Works\Famto_Backend_Native\middlewares\isAdmin.js:32:17)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:284:15
+    at Function.process_params (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\Famto_Works\Famto_Backend_Native\node_modules\express\lib\router\index.js:175:3)
+URL: /api/v1/admin/delivery-management/task-filter?filter=Unassigned&orderId=&startDate=2025-04-12T08:34:20.874Z&endDate=2025-04-12T08:34:20.874Z
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T15:50:44+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+Stack: Error: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at searchProductsInMerchantToOrderController (D:\Famto_Works\Famto_Backend_Native\controllers\customer\universalOrderController.js:786:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/customers/search-products/M24091/null?query=dfds
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T15:50:45+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+Stack: Error: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at searchProductsInMerchantToOrderController (D:\Famto_Works\Famto_Backend_Native\controllers\customer\universalOrderController.js:786:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/customers/search-products/M24091/null?query=dfds
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T15:50:48+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+Stack: Error: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at searchProductsInMerchantToOrderController (D:\Famto_Works\Famto_Backend_Native\controllers\customer\universalOrderController.js:786:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/customers/search-products/M24091/null?query=biri
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T15:50:49+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+Stack: Error: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at searchProductsInMerchantToOrderController (D:\Famto_Works\Famto_Backend_Native\controllers\customer\universalOrderController.js:786:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/customers/search-products/M24091/null?query=biri
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T15:50:51+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+Stack: Error: Cast to ObjectId failed for value "null" (type string) at path "businessCategoryId" for model "Category"
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at searchProductsInMerchantToOrderController (D:\Famto_Works\Famto_Backend_Native\controllers\customer\universalOrderController.js:786:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/customers/search-products/M24091/null?query=biri
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:15:11+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:15:12+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:15:15+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:15:19+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:21:21+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:21:22+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:21:24+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:21:28+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:48:23+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:48:24+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:48:26+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:48:30+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:50:38+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Delivery address not found
+Stack: Error: Delivery address not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at createInvoiceByAdminController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\order\adminOrderController.js:1972:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/orders/admin/create-order-invoice
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:51:34+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:51:35+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:51:37+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T16:51:41+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T17:00:59+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T17:01:00+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T17:01:02+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-04-12T17:01:06+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:984:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/merchants/admin/null
+Method: GET
+IP: ::1
+--------------------------------------------------------

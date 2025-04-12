@@ -1,12 +1,10 @@
 const Commission = require("../models/Commission");
 const CommissionLogs = require("../models/CommissionLog");
 const Merchant = require("../models/Merchant");
-const Order = require("../models/Order");
 const appError = require("./appError");
 
-const orderCommissionLogHelper = async (orderId) => {
+const orderCommissionLogHelper = async (order) => {
   try {
-    const order = await Order.findById(orderId);
     if (!order) {
       throw new Error("Order not found");
     }
@@ -56,4 +54,36 @@ const orderCommissionLogHelper = async (orderId) => {
   }
 };
 
-module.exports = { orderCommissionLogHelper };
+const calculateMerchantAndFamtoEarnings = async (order) => {
+  try {
+    const purchasedItems = order.purchasedItems;
+
+    if (purchasedItems.length === 0)
+      return {
+        merchantEarnings: 0,
+        famtoEarnings: 0,
+      };
+
+    const totalPrice = purchasedItems.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
+
+    const totalCostPrice = purchasedItems.reduce(
+      (total, item) => total + item.costPrice * item.quantity,
+      0
+    );
+
+    return {
+      merchantEarnings: totalCostPrice,
+      famtoEarnings: totalPrice - totalCostPrice,
+    };
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
+module.exports = {
+  orderCommissionLogHelper,
+  calculateMerchantAndFamtoEarnings,
+};

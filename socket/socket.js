@@ -141,7 +141,7 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
     console.log(
       `Successfully sent message with project1 for token: ${fcmToken}`
     );
-    return true; // Return true if the notification was sent successfully with project1
+    return true;
   } catch (error1) {
     console.error(
       `Error sending message with project1 for token: ${fcmToken}`,
@@ -154,13 +154,13 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
       console.log(
         `Successfully sent message with project2 for token: ${fcmToken}`
       );
-      return true; // Return true if the notification was sent successfully with project2
+      return true;
     } catch (error2) {
       console.error(
         `Error sending message with project2 for token: ${fcmToken}`,
         error2
       );
-      return false; // Return false if there was an error with both projects
+      return false;
     }
   }
 };

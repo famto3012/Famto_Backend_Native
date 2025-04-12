@@ -212,7 +212,14 @@ const agentLoginController = async (req, res, next) => {
     }
 
     // Check for approval status
-    if (agentFound.isApproved === "Pending" || agentFound.isBlocked) {
+
+    if (agentFound.isApproved === "Pending") {
+      return res.status(403).json({
+        errors: { general: "Pending registration approval" },
+      });
+    }
+
+    if (agentFound.isBlocked) {
       return res.status(403).json({
         errors: { general: "Login is restricted" },
       });
@@ -225,42 +232,25 @@ const agentLoginController = async (req, res, next) => {
       { upsert: true, new: true }
     );
 
-    let refreshToken = agentFound?.refreshToken;
-    try {
-      // Verify if the refresh token is still valid
-      if (refreshToken) {
-        verifyToken(refreshToken);
-      } else {
-        refreshToken = generateToken(
-          agentFound._id,
-          agentFound.role,
-          agentFound?.fullName,
-          "15d"
-        );
-        agentFound.refreshToken = refreshToken;
-        await agentFound.save();
-      }
-    } catch {
-      // Generate a new refresh token if expired/invalid
-      refreshToken = generateToken(
-        agentFound._id,
-        agentFound.role,
-        agentFound?.fullName,
-        "15d"
-      );
-      agentFound.refreshToken = refreshToken;
-      await agentFound.save();
-    }
+    const refreshToken = generateToken(
+      agentFound._id,
+      agentFound.role,
+      agentFound?.fullName,
+      "30d"
+    );
+    const token = generateToken(
+      agentFound._id,
+      agentFound.role,
+      agentFound?.fullName,
+      "2hr"
+    );
+
+    await agentFound.save();
 
     res.status(200).json({
       message: "Agent Login successful",
-      token: generateToken(
-        agentFound._id,
-        agentFound.role,
-        agentFound?.fullName,
-        "5hr"
-      ),
-      refreshToken: refreshToken,
+      token,
+      refreshToken,
       _id: agentFound._id,
       fullName: agentFound.fullName,
       agentImageURL: agentFound.agentImageURL,

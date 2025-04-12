@@ -7,6 +7,7 @@ const appError = require("../../../utils/appError");
 const { formatTime, formatDate } = require("../../../utils/formatters");
 const {
   orderCommissionLogHelper,
+  calculateMerchantAndFamtoEarnings,
 } = require("../../../utils/orderCommissionLogHelper");
 const {
   orderCreateTaskHelper,
@@ -14,7 +15,6 @@ const {
 const { razorpayRefund } = require("../../../utils/razorpayPayment");
 const {
   reduceProductAvailableQuantity,
-  filterProductIdAndQuantity,
 } = require("../../../utils/customerAppHelpers");
 const CustomerCart = require("../../../models/CustomerCart");
 const {
@@ -31,7 +31,6 @@ const {
   getCartByDeliveryMode,
   calculateDeliveryTime,
   prepareOrderDetails,
-  createNewOrder,
   clearCart,
   updateCustomerTransaction,
 } = require("../../../utils/createOrderHelpers");
@@ -52,284 +51,10 @@ const fs = require("fs");
 const mongoose = require("mongoose");
 const puppeteer = require("puppeteer");
 const AgentAnnouncementLogs = require("../../../models/AgentAnnouncementLog");
-const Task = require("../../../models/Task");
 const ActivityLog = require("../../../models/ActivityLog");
 const Agent = require("../../../models/Agent");
 const Manager = require("../../../models/Manager");
 const ManagerRoles = require("../../../models/ManagerRoles");
-
-// TODO: Remove after panel V2
-const getAllOrdersForAdminController = async (req, res, next) => {
-  try {
-    // Get page and limit from query parameters with default values
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Fetch orders with pagination
-    const allOrders = await Order.find({})
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    // Count total documents
-    const totalDocuments = await Order.countDocuments({});
-
-    // Format orders
-    const formattedOrders = allOrders.map((order) => {
-      return {
-        _id: order._id,
-        orderStatus: order.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName ||
-          "-",
-        deliveryMode: order?.orderDetail?.deliveryMode,
-        isReady: order?.orderDetail?.isReady ? true : false,
-        orderDate: formatDate(order.createdAt),
-        orderTime: formatTime(order.createdAt),
-        deliveryDate: order?.orderDetail?.deliveryTime
-          ? formatDate(order.orderDetail.deliveryTime)
-          : "-",
-        deliveryTime: order?.orderDetail?.deliveryTime
-          ? formatTime(order.orderDetail.deliveryTime)
-          : "-",
-        paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order.paymentMode,
-        deliveryOption: order?.orderDetail?.deliveryOption,
-        amount: order.billDetail.grandTotal,
-      };
-    });
-
-    // Calculate total pages
-    const totalPages = Math.ceil(totalDocuments / limit);
-
-    // Prepare pagination details
-    const pagination = {
-      totalDocuments,
-      totalPages,
-      currentPage: page,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "All orders of merchant",
-      data: formattedOrders,
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: Remove after panel V2
-const filterOrdersByAdminController = async (req, res, next) => {
-  try {
-    let {
-      page = 1,
-      limit = 25,
-      status,
-      paymentMode,
-      deliveryMode,
-      merchantId,
-      startDate,
-      endDate,
-    } = req.query;
-
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-    const skip = (page - 1) * limit;
-
-    const filterCriteria = {};
-
-    if (status && status?.trim()?.toLowerCase() !== "all") {
-      filterCriteria.status = { $regex: status.trim(), $options: "i" };
-    }
-
-    if (paymentMode && paymentMode?.trim()?.toLowerCase() !== "all") {
-      filterCriteria.paymentMode = {
-        $regex: paymentMode.trim(),
-        $options: "i",
-      };
-    }
-
-    if (deliveryMode && deliveryMode?.trim()?.toLowerCase() !== "all") {
-      filterCriteria["orderDetail.deliveryMode"] = {
-        $regex: deliveryMode.trim(),
-        $options: "i",
-      };
-    }
-
-    if (merchantId && merchantId?.trim()?.toLowerCase() !== "all") {
-      filterCriteria.merchantId = merchantId;
-    }
-
-    if (startDate && endDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
-
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
-
-      filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
-    }
-
-    const filteredOrderResults = await Order.find(filterCriteria)
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Count total documents
-    const totalDocuments = (await Order.countDocuments(filterCriteria)) || 1;
-
-    const formattedOrders = filteredOrderResults.map((order) => {
-      return {
-        _id: order._id,
-        orderStatus: order?.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName ||
-          null,
-        deliveryMode: order?.orderDetail?.deliveryMode || null,
-        orderDate: formatDate(order?.createdAt) || null,
-        orderTime: formatTime(order?.createdAt) || null,
-        deliveryDate: order?.orderDetail?.deliveryTime
-          ? formatDate(order.orderDetail.deliveryTime)
-          : "-",
-        deliveryTime: order?.orderDetail?.deliveryTime
-          ? formatTime(order.orderDetail.deliveryTime)
-          : "-",
-        paymentMethod:
-          order?.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order?.paymentMode,
-        deliveryOption: order?.orderDetail?.deliveryOption || null,
-        amount: order.billDetail.grandTotal,
-      };
-    });
-
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Filtered orders",
-      data: formattedOrders,
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: Remove after panel V2
-const searchOrderByIdByAdminController = async (req, res, next) => {
-  try {
-    let { query, page = 1, limit = 15 } = req.query;
-
-    if (!query || query.trim() === "") {
-      return res.status(400).json({
-        message: "Search query cannot be empty",
-      });
-    }
-
-    // Convert to integers
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
-    const skip = (page - 1) * limit;
-
-    const searchCriteria = {
-      $or: [
-        { _id: { $regex: query, $options: "i" } },
-        { scheduledOrderId: { $regex: query, $options: "i" } },
-      ],
-    };
-
-    const ordersFound = await Order.find(searchCriteria)
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Count total documents
-    const totalDocuments = (await Order.countDocuments(searchCriteria)) || 1;
-
-    const formattedOrders = ordersFound?.map((order) => {
-      return {
-        _id: order._id,
-        orderStatus: order.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          order.customerId.fullName ||
-          order.orderDetail.deliveryAddress.fullName,
-        deliveryMode: order.orderDetail.deliveryMode,
-        orderDate: formatDate(order?.orderDetail?.deliveryTime),
-        orderTime: formatTime(order.createdAt),
-        deliveryDate: formatDate(order?.orderDetail?.deliveryTime),
-        deliveryTime: formatTime(order?.orderDetail?.deliveryTime),
-        paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order.paymentMode,
-        deliveryOption: order.orderDetail.deliveryOption,
-        amount: order.billDetail.grandTotal,
-      };
-    });
-
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Search result of order",
-      data: formattedOrders || [],
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {
@@ -434,355 +159,6 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     res.status(200).json({
       totalCount,
       data: formattedOrders,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: Remove after panel V2
-const getAllScheduledOrdersForAdminController = async (req, res, next) => {
-  try {
-    // Get page and limit from query parameters with default values
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-    const skip = (page - 1) * limit;
-
-    // Fetch documents from both collections with pagination
-    const scheduledOrders = await ScheduledOrder.find({})
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .lean(); // Convert MongoDB documents to plain JavaScript objects
-
-    const customOrders = await scheduledPickAndCustom
-      .find({})
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .lean(); // Convert MongoDB documents to plain JavaScript objects
-
-    // Combine the results from both collections
-    const allOrders = [...scheduledOrders, ...customOrders];
-
-    // Sort the combined results by createdAt in descending order
-    const sortedOrders = allOrders.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    );
-
-    // Paginate the sorted orders
-    const paginatedOrders = sortedOrders.slice(skip, skip + limit);
-
-    const formattedResponse = paginatedOrders?.map((order) => {
-      return {
-        _id: order._id,
-        orderStatus: order.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName ||
-          "-",
-        deliveryMode: order?.orderDetail?.deliveryMode,
-        orderDate: formatDate(order.createdAt),
-        orderTime: formatTime(order.createdAt),
-        deliveryDate: order?.time ? formatDate(order.time) : "",
-        deliveryTime: order?.time ? formatTime(order.time) : "",
-        paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order.paymentMode,
-        deliveryOption: order?.orderDetail?.deliveryOption,
-        amount: order?.billDetail?.grandTotal,
-        isViewed: order?.isViewed || false,
-      };
-    });
-
-    // Count total documents in both collections
-    const totalDocuments =
-      (await ScheduledOrder.countDocuments({})) +
-      (await scheduledPickAndCustom.countDocuments({}));
-
-    // Calculate total pages
-    const totalPages = Math.ceil(totalDocuments / limit);
-
-    // Prepare pagination details
-    const pagination = {
-      totalDocuments,
-      totalPages,
-      currentPage: page,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "All scheduled orders and custom orders",
-      data: formattedResponse,
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: Remove after panel V2
-const searchScheduledOrderByIdByAdminController = async (req, res, next) => {
-  try {
-    let { query, page = 1, limit = 15 } = req.query;
-
-    if (!query || query.trim() === "") {
-      return res.status(400).json({
-        message: "Search query cannot be empty",
-      });
-    }
-
-    // Convert to integers
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
-    const skip = (page - 1) * limit;
-
-    // Define the search criteria for both collections
-    const searchCriteria = {
-      _id: { $regex: query.trim(), $options: "i" },
-    };
-
-    // Search in ScheduledOrder collection
-    const scheduledOrders = await ScheduledOrder.find(searchCriteria)
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Search in ScheduledPickAndCustom collection
-    const scheduledPickAndCustomOrders = await scheduledPickAndCustom
-      .find(searchCriteria)
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-      })
-      .populate({
-        path: "customerId",
-        select: "fullName",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Combine both results
-    const combinedOrders = [
-      ...scheduledOrders,
-      ...scheduledPickAndCustomOrders,
-    ];
-
-    // Count total documents in both collections
-
-    const [totalUniversal, totalPickAndDrop] = await Promise.all([
-      ScheduledOrder.countDocuments(searchCriteria),
-      scheduledPickAndCustom.countDocuments(searchCriteria),
-    ]);
-
-    const totalDocuments = (totalUniversal || 0) + (totalPickAndDrop || 0) || 1;
-
-    // Format the orders
-    const formattedOrders = combinedOrders.map((order) => ({
-      _id: order._id,
-      orderStatus: order.status,
-      merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-      customerName:
-        order.customerId.fullName || order.orderDetail.deliveryAddress.fullName,
-      deliveryMode: order.orderDetail.deliveryMode,
-      orderDate: formatDate(order?.orderDetail?.deliveryTime),
-      orderTime: formatTime(order.createdAt),
-      deliveryDate: formatDate(order?.orderDetail?.deliveryTime),
-      deliveryTime: formatTime(order?.orderDetail?.deliveryTime),
-      paymentMethod:
-        order.paymentMode === "Cash-on-delivery"
-          ? "Pay-on-delivery"
-          : order.paymentMode,
-      deliveryOption: order.orderDetail.deliveryOption,
-      amount: order.billDetail.grandTotal,
-    }));
-
-    // Pagination info
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Search result of order",
-      data: formattedOrders || [],
-      pagination,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: Remove after panel V2
-const filterScheduledOrdersByAdminController = async (req, res, next) => {
-  try {
-    let {
-      page = 1,
-      limit = 25,
-      status,
-      paymentMode,
-      deliveryMode,
-      merchantId,
-      startDate,
-      endDate,
-    } = req.query;
-
-    // Convert to integers
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
-    const skip = (page - 1) * limit;
-
-    // Building filter criteria
-    const filterCriteria = {};
-
-    if (status && status.trim().toLowerCase() !== "all") {
-      filterCriteria.status = { $regex: status.trim(), $options: "i" };
-    }
-
-    if (paymentMode && paymentMode.trim().toLowerCase() !== "all") {
-      filterCriteria.paymentMode = {
-        $regex: paymentMode.trim(),
-        $options: "i",
-      };
-    }
-
-    if (deliveryMode && deliveryMode.trim().toLowerCase() !== "all") {
-      filterCriteria["orderDetail.deliveryMode"] = {
-        $regex: deliveryMode.trim(),
-        $options: "i",
-      };
-    }
-
-    if (merchantId && merchantId.trim().toLowerCase() !== "all") {
-      filterCriteria.merchantId = merchantId;
-    }
-
-    if (startDate && endDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
-
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
-
-      filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
-    }
-
-    // Aggregation pipeline to merge and filter both collections
-    const results = await ScheduledOrder.aggregate([
-      {
-        $match: filterCriteria,
-      },
-      {
-        $unionWith: {
-          coll: "scheduledpickandcustoms", // Name of the second collection
-          pipeline: [{ $match: filterCriteria }],
-        },
-      },
-      // Populate merchantId if available
-      {
-        $lookup: {
-          from: "merchants", // Collection name for merchants
-          localField: "merchantId",
-          foreignField: "_id",
-          as: "merchantData",
-        },
-      },
-      {
-        $unwind: {
-          path: "$merchantData",
-          preserveNullAndEmptyArrays: true, // Keep documents without a merchantId
-        },
-      },
-      // Populate customerId
-      {
-        $lookup: {
-          from: "customers", // Collection name for customers
-          localField: "customerId",
-          foreignField: "_id",
-          as: "customerData",
-        },
-      },
-      {
-        $unwind: {
-          path: "$customerData",
-          preserveNullAndEmptyArrays: true, // Keep documents without a customerId
-        },
-      },
-      {
-        $sort: { createdAt: -1 },
-      },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: limit,
-      },
-    ]);
-
-    const totalDocuments =
-      (await ScheduledOrder.countDocuments(filterCriteria)) || 1;
-    // Formatting the results
-    const formattedOrders = results.map((order) => {
-      return {
-        _id: order._id,
-        orderStatus: order.status,
-        merchantName: order?.merchantData?.merchantDetail?.merchantName || "-", // Fallback if no merchantId
-        customerName:
-          order.customerId.fullName ||
-          order.orderDetail.deliveryAddress.fullName,
-        deliveryMode: order.orderDetail.deliveryMode,
-        orderDate: formatDate(order.createdAt),
-        orderTime: formatTime(order.createdAt),
-        deliveryDate: order?.time ? formatDate(order?.time) : "-",
-        deliveryTime: order?.time ? formatTime(order?.time) : "-",
-        paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order.paymentMode,
-        deliveryOption: order.orderDetail.deliveryOption,
-        amount: order.billDetail.grandTotal,
-      };
-    });
-
-    let pagination = {
-      totalDocuments: totalDocuments || 0,
-      totalPages: Math.ceil(totalDocuments / limit),
-      currentPage: page || 1,
-      pageSize: limit,
-      hasNextPage: page < Math.ceil(totalDocuments / limit),
-      hasPrevPage: page > 1,
-    };
-
-    res.status(200).json({
-      message: "Filtered orders",
-      data: formattedOrders,
-      pagination,
     });
   } catch (err) {
     next(appError(err.message));
@@ -959,13 +335,18 @@ const confirmOrderByAdminController = async (req, res, next) => {
 
     if (orderFound?.merchantId && modelType === "Commission") {
       const { payableAmountToFamto, payableAmountToMerchant } =
-        await orderCommissionLogHelper(orderId);
+        await orderCommissionLogHelper(orderFound);
 
       let updatedCommission = {
         merchantEarnings: payableAmountToMerchant,
         famtoEarnings: payableAmountToFamto,
       };
       orderFound.commissionDetail = updatedCommission;
+    } else if (orderFound?.merchantId && modelType === "Subscription") {
+      const { famtoEarnings, merchantEarnings } =
+        await calculateMerchantAndFamtoEarnings(orderFound);
+
+      orderFound.commissionDetail = { famtoEarnings, merchantEarnings };
     }
 
     if (orderFound?.orderDetail?.deliveryMode !== "Take Away") {
@@ -981,13 +362,14 @@ const confirmOrderByAdminController = async (req, res, next) => {
       );
     }
 
-    await orderFound.save();
-
-    await ActivityLog.create({
-      userId: req.userAuth,
-      userType: req.userRole,
-      description: `Order (#${orderId}) is confirmed by Admin (${req.userName} - ${req.userAuth})`,
-    });
+    await Promise.all([
+      orderFound.save(),
+      ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Order (#${orderId}) is confirmed by Admin (${req.userName} - ${req.userAuth})`,
+      }),
+    ]);
 
     const eventName = "orderAccepted";
 
@@ -2534,8 +1916,6 @@ const createInvoiceByAdminController = async (req, res, next) => {
       addedTip || 0
     );
 
-    console.log("scheduledDetails", scheduledDetails);
-
     const cart = await saveCustomerCart(
       deliveryMode,
       deliveryOption,
@@ -2593,112 +1973,23 @@ const createInvoiceByAdminController = async (req, res, next) => {
   }
 };
 
-// const getScheduledOrderDetailByAdminController = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-
-//     const orderFound = await ScheduledOrder.findOne({
-//       _id: id,
-//     })
-//       .populate({
-//         path: "customerId",
-//         select: "fullName phoneNumber email",
-//       })
-//       .populate({
-//         path: "merchantId",
-//         select: "merchantDetail",
-//       })
-//       .exec();
-
-//     if (!orderFound) {
-//       return next(appError("Order not found", 404));
-//     }
-
-//     const formattedResponse = {
-//       _id: orderFound._id,
-//       orderStatus: orderFound.status || "-",
-//       paymentStatus: orderFound.paymentStatus || "-",
-//       paymentMode: orderFound.paymentMode || "-",
-//       deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-//       deliveryOption: orderFound.orderDetail.deliveryOption || "-",
-//       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
-//         orderFound.startDate
-//       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
-//         orderFound.endDate
-//       )}`,
-//       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
-//         orderFound.time
-//       )}`,
-//       customerDetail: {
-//         _id: orderFound.customerId._id,
-//         name:
-//           orderFound.customerId.fullName ||
-//           orderFound.orderDetail.deliveryAddress.fullName ||
-//           "-",
-//         email: orderFound.customerId.email || "-",
-//         phone: orderFound.customerId.phoneNumber || "-",
-//         address: orderFound.orderDetail.deliveryAddress || "-",
-//         ratingsToDeliveryAgent: {
-//           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
-//           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
-//         },
-//         ratingsByDeliveryAgent: {
-//           rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
-//           review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
-//         },
-//       },
-//       merchantDetail: {
-//         _id: orderFound?.merchantId?._id || "-",
-//         name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
-//         instructionsByCustomer:
-//           orderFound?.orderDetail?.instructionToMerchant || "-",
-//         merchantEarnings: orderFound?.commissionDetail?.merchantEarnings || "-",
-//         famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
-//       },
-//       deliveryAgentDetail: {
-//         _id: "-",
-//         name: "-",
-//         phoneNumber: "-",
-//         avatar: "-",
-//         team: "-",
-//         instructionsByCustomer: "-",
-//         distanceTravelled: "-",
-//         timeTaken: "-",
-//         delayedBy: "-",
-//       },
-//       items: orderFound.items || null,
-//       billDetail: orderFound.billDetail || null,
-//       pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-//       deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
-//       agentLocation: orderFound?.agentId?.location || null,
-//       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
-//         ? orderFound.orderDetailStepper
-//         : [orderFound.orderDetailStepper],
-//     };
-
-//     res.status(200).json({
-//       message: "Single order detail",
-//       data: formattedResponse,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
 const getScheduledOrderDetailByAdminController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { deliveryMode } = req.query;
 
-    let orderFound = await ScheduledOrder.findOne({ _id: id })
-      .populate({
-        path: "customerId",
-        select: "fullName phoneNumber email",
-      })
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail",
-      })
+    let orderFound;
+
+    if (["Home Delivery", "Take Away"].includes(deliveryMode)) {
+      orderFound = await ScheduledOrder.findOne({ _id: id })
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .populate({
+          path: "merchantId",
+          select: "merchantDetail",
+        })
         .populate({
           path: "customerId",
           select: "fullName phoneNumber email",
@@ -2721,18 +2012,6 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
     }
 
     let isScheduledOrder = true;
-
-    // If not found in ScheduledOrder, check ScheduledPickAndCustom
-    if (!orderFound) {
-      isScheduledOrder = false;
-      orderFound = await scheduledPickAndCustom
-        .findOne({ _id: id })
-        .populate({
-          path: "customerId",
-          select: "fullName phoneNumber email",
-        })
-        .exec();
-    }
 
     if (!orderFound) {
       return next(appError("Order not found", 404));
@@ -3047,14 +2326,8 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 };
 
 module.exports = {
-  getAllOrdersForAdminController,
-  getAllScheduledOrdersForAdminController,
   confirmOrderByAdminController,
   rejectOrderByAdminController,
-  searchOrderByIdByAdminController,
-  searchScheduledOrderByIdByAdminController,
-  filterOrdersByAdminController,
-  filterScheduledOrdersByAdminController,
   getOrderDetailByAdminController,
   createInvoiceByAdminController,
   createOrderByAdminController,
