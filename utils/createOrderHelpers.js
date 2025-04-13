@@ -30,12 +30,78 @@ const findOrCreateCustomer = async ({
   newCustomer,
   customerAddress,
   deliveryMode,
+  addressType,
+  otherAddressId,
   formattedErrors,
 }) => {
   if (customerId) {
     const customer = await Customer.findById(customerId);
     if (!customer) throw new Error("Customer not found");
-    return customer;
+
+    if (customer.customerDetails.geofenceId) {
+      return customer;
+    } else {
+      if (addressType) {
+        const address = getAddressDetails(
+          customer,
+          addressType,
+          otherAddressId
+        );
+
+        if (!address) throw new Error("Address not found");
+
+        const location = [address?.coordinates[0], address?.coordinates[1]];
+
+        const geofence = await geoLocation(
+          address?.coordinates[0],
+          address?.coordinates[1]
+        );
+
+        if (!geofence) {
+          return { message: "User coordinates are outside defined geofences" };
+        }
+
+        const updatedCustomer = await Customer.findByIdAndUpdate(
+          customerId,
+          {
+            $set: {
+              "customerDetails.location": location,
+              "customerDetails.geofenceId": geofence._id,
+            },
+          },
+          { new: true }
+        );
+
+        return updatedCustomer;
+      } else if (customerAddress?.latitude && customerAddress?.longitude) {
+        const location = [
+          customerAddress?.latitude,
+          customerAddress?.longitude,
+        ];
+
+        const geofence = await geoLocation(
+          customerAddress?.latitude,
+          customerAddress?.longitude
+        );
+
+        if (!geofence) {
+          return { message: "User coordinates are outside defined geofences" };
+        }
+
+        const updatedCustomer = await Customer.findByIdAndUpdate(
+          customerId,
+          {
+            $set: {
+              location,
+              "customerDetails.geofenceId": geofence._id,
+            },
+          },
+          { new: true }
+        );
+
+        return updatedCustomer;
+      }
+    }
   }
 
   const existingCustomer = await Customer.findOne({
@@ -45,7 +111,74 @@ const findOrCreateCustomer = async ({
     ],
   });
 
-  if (existingCustomer) return existingCustomer;
+  if (existingCustomer && existingCustomer.customerDetails.geofenceId)
+    return existingCustomer;
+
+  if (
+    existingCustomer &&
+    !existingCustomer.customerDetails.geofenceId &&
+    customerAddress?.latitude &&
+    customerAddress?.longitude
+  ) {
+    const location = [customerAddress?.latitude, customerAddress?.longitude];
+
+    const geofence = await geoLocation(
+      customerAddress?.latitude,
+      customerAddress?.longitude
+    );
+
+    if (!geofence) {
+      return { message: "User coordinates are outside defined geofences" };
+    }
+
+    const updatedCustomer = await Customer.findByIdAndUpdate(
+      existingCustomer._id,
+      {
+        $set: {
+          location,
+          "customerDetails.geofenceId": geofence._id,
+        },
+      },
+      { new: true }
+    );
+
+    return updatedCustomer;
+  }
+
+  if (addressType) {
+    console.log("Here");
+    const address = getAddressDetails(
+      existingCustomer,
+      addressType,
+      otherAddressId
+    );
+
+    if (!address) throw new Error("Address not found");
+
+    const location = [address?.coordinates[0], address?.coordinates[1]];
+
+    const geofence = await geoLocation(
+      address?.coordinates[0],
+      address?.coordinates[1]
+    );
+
+    if (!geofence) {
+      return { message: "User coordinates are outside defined geofences" };
+    }
+
+    const updatedCustomer = await Customer.findByIdAndUpdate(
+      existingCustomer._id,
+      {
+        $set: {
+          location,
+          "customerDetails.geofenceId": geofence._id,
+        },
+      },
+      { new: true }
+    );
+
+    return updatedCustomer;
+  }
 
   if (newCustomer && deliveryMode === "Take Away") {
     const customer = await Customer.create({

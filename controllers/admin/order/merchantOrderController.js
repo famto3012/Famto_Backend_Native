@@ -2036,14 +2036,17 @@ const createInvoiceController = async (req, res, next) => {
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
     const customerAddress = newCustomerAddress;
+    const addressType = customerAddressType || "";
+    const otherAddressId = customerAddressOtherAddressId || "";
 
     const customer = await findOrCreateCustomer({
       customerId,
       newCustomer,
       customerAddress,
-      formattedErrors,
-      res,
       deliveryMode,
+      addressType,
+      otherAddressId,
+      formattedErrors,
     });
     if (!customer) return res.status(409).json({ errors: formattedErrors });
 
