@@ -26,7 +26,10 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
     const AgentPricing = require("../models/AgentPricing");
     const mongoose = require("mongoose");
 
-    const agents = await Agent.find({ isApproved: "Approved" })
+    const agents = await Agent.find({
+      isApproved: "Approved",
+      isBlocked: false,
+    })
       .lean()
       .select([
         "_id",
