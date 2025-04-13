@@ -872,7 +872,7 @@ const confirmOrderController = async (req, res, next) => {
       orderFound.orderDetailStepper.accepted = stepperData;
 
       const modelType =
-        orderFound.merchantId.merchantDetail.pricing[0].modelType;
+        orderFound?.merchantId?.merchantDetail?.pricing[0]?.modelType;
 
       if (modelType === "Commission") {
         const { payableAmountToFamto, payableAmountToMerchant } =
@@ -1464,7 +1464,7 @@ const createOrderController = async (req, res, next) => {
           description: `New order (#${newOrder._id}) is created by Merchant (${req.userName} - ${req.userAuth})`,
         });
 
-        const modelType = merchant.merchantDetail.pricing[0].modelType;
+        const modelType = merchant?.merchantDetail?.pricing[0]?.modelType;
 
         if (modelType === "Commission") {
           const { payableAmountToFamto, payableAmountToMerchant } =
@@ -1553,7 +1553,7 @@ const createOrderController = async (req, res, next) => {
           purchasedItems,
         });
 
-        const modelType = merchant.merchantDetail.pricing[0].modelType;
+        const modelType = merchant?.merchantDetail?.pricing[0]?.modelType;
 
         if (modelType === "Commission") {
           const { payableAmountToFamto, payableAmountToMerchant } =
