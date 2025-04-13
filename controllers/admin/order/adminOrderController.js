@@ -1842,12 +1842,17 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     const customerAddress =
       newCustomerAddress || newPickupAddress || newDeliveryAddress;
+    const addressType = customerAddressType || deliveryAddressType || "";
+    const otherAddressId =
+      customerAddressOtherAddressId || deliveryAddressOtherAddressId || "";
 
     const customer = await findOrCreateCustomer({
       customerId,
       newCustomer,
       customerAddress,
       deliveryMode,
+      addressType,
+      otherAddressId,
       formattedErrors,
     });
 
