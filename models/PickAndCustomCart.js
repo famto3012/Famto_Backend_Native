@@ -198,6 +198,11 @@ const pickAndCustomCartSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    merchantId: {
+      type: String,
+      ref: "Merchant",
+      required: false,
+    },
     cartDetail: cartDetailSchema,
     billDetail: billSchema,
     items: [cartItemSchema],

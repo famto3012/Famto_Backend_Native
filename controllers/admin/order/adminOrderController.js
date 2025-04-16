@@ -341,7 +341,9 @@ const confirmOrderByAdminController = async (req, res, next) => {
         famtoEarnings: payableAmountToFamto,
       };
       orderFound.commissionDetail = updatedCommission;
-    } else if (orderFound?.merchantId && modelType === "Subscription") {
+    }
+
+    if (orderFound?.merchantId && modelType !== "Commission") {
       const { famtoEarnings, merchantEarnings } =
         await calculateMerchantAndFamtoEarnings(orderFound);
 
@@ -366,7 +368,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `Order (#${orderId}) is confirmed by Admin (${req.userName} - ${req.userAuth})`,
+        description: `Order (#${orderId}) is confirmed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
     ]);
 
@@ -533,7 +535,7 @@ const rejectOrderByAdminController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Order (#${orderId}) is rejected by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Order (#${orderId}) is rejected by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     const eventName = "orderRejected";
@@ -691,7 +693,8 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         team: orderFound?.agentId?.workStructure?.managerId?.name || "-",
         instructionsByCustomer:
           orderFound?.orderDetail?.instructionToDeliveryAgent || "-",
-        distanceTravelled: orderFound?.orderDetail?.distance,
+        distanceTravelled:
+          orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0,
         timeTaken: formatToHours(orderFound?.orderDetail?.timeTaken) || "-",
         delayedBy: formatToHours(orderFound?.orderDetail?.delayedBy) || "-",
       },
