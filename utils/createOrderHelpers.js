@@ -579,6 +579,7 @@ const handleAddressDetails = async (
 
   // Set pickup and delivery details for "Pick and Drop"
   if (deliveryMode === "Pick and Drop") {
+    console.log("In pick");
     if (newPickupAddress) {
       pickupLocation = [newPickupAddress.latitude, newPickupAddress.longitude];
       pickupAddress = newPickupAddress;
@@ -593,6 +594,7 @@ const handleAddressDetails = async (
     }
 
     if (pickUpAddressType) {
+      console.log("Have pick add type");
       const address = getAddressDetails(
         customer,
         pickUpAddressType,
@@ -605,6 +607,7 @@ const handleAddressDetails = async (
     }
 
     if (newDeliveryAddress) {
+      console.log("Have new delivery addre");
       deliveryLocation = [
         newDeliveryAddress.latitude,
         newDeliveryAddress.longitude,
@@ -702,7 +705,13 @@ const handleDeliveryMode = async (
   customerAddressOtherAddressId,
   newCustomer,
   newCustomerAddress,
-  merchant
+  merchant,
+  pickUpAddressType,
+  pickUpAddressOtherAddressId,
+  deliveryAddressType,
+  deliveryAddressOtherAddressId,
+  newPickupAddress,
+  newDeliveryAddress
 ) => {
   const addressDetails = await handleAddressDetails(
     deliveryMode,
@@ -711,7 +720,13 @@ const handleDeliveryMode = async (
     customerAddressOtherAddressId,
     newCustomer,
     newCustomerAddress,
-    merchant
+    merchant,
+    pickUpAddressType,
+    pickUpAddressOtherAddressId,
+    deliveryAddressType,
+    deliveryAddressOtherAddressId,
+    newPickupAddress,
+    newDeliveryAddress
   );
 
   let distance = 0;
@@ -732,7 +747,7 @@ const handleDeliveryMode = async (
 };
 
 // Function to calculate delivery charges
-const calculateDeliveryChargesHelper = async (
+const calculateDeliveryChargesHelper = async ({
   deliveryMode,
   distanceInKM,
   merchantFound,
@@ -740,8 +755,10 @@ const calculateDeliveryChargesHelper = async (
   items,
   scheduledDetails,
   selectedBusinessCategory,
-  isSuperMarketOrder
-) => {
+  isSuperMarketOrder,
+  vehicleType,
+  pickupLocation,
+}) => {
   let oneTimeDeliveryCharge = null;
   let surgeCharges = null;
   let deliveryChargeForScheduledOrder = null;
@@ -806,6 +823,16 @@ const calculateDeliveryChargesHelper = async (
       merchantFound.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
+    );
+  }
+
+  if (deliveryMode === "Pick and Drop") {
+    return await pickAndDropCharges(
+      distanceInKM,
+      scheduledDetails,
+      vehicleType,
+      items,
+      pickupLocation
     );
   }
 
