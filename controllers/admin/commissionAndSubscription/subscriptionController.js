@@ -400,7 +400,7 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
       await ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `Customer subscription plan (${name}) is updated by Admin (${req.userName} - ${req.userAuth})`,
+        description: `Customer subscription plan (${name}) is updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
     ]);
 

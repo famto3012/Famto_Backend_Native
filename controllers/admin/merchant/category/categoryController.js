@@ -274,7 +274,7 @@ const changeCategoryStatusByAdminController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Category status (${categoryFound.categoryName}) is updated by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Category status (${categoryFound.categoryName}) is updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({
