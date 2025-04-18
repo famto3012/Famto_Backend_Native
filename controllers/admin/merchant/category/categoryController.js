@@ -130,7 +130,7 @@ const addCategoryByAdminController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `New category (${categoryName}) is added by Admin (${req.userName} - ${req.userAuth})`,
+      description: `New category (${categoryName}) is added by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(201).json({
@@ -192,7 +192,7 @@ const editCategoryByAdminController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Category (${categoryName}) is updated by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Category (${categoryName}) is updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({
@@ -240,7 +240,7 @@ const deleteCategoryByAdminController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Category (${categoryToDelete.categoryName}) is deleted by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Category (${categoryToDelete.categoryName}) is deleted by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({

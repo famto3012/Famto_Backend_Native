@@ -564,7 +564,7 @@ const addMoneyToWalletController = async (req, res, next) => {
 
     let customerTransation = {
       madeOn: new Date(),
-      transactionType: "Credited by Admin",
+      transactionType: `Credited by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       transactionAmount: amountToAdd,
       type: "Credit",
     };
@@ -615,7 +615,7 @@ const deductMoneyFromWalletCOntroller = async (req, res, next) => {
 
     let customerTransation = {
       madeOn: new Date(),
-      transactionType: "Debited by Admin",
+      transactionType: `Debited by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       transactionAmount: amount,
       type: "Debit",
     };

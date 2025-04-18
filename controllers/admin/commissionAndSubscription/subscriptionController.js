@@ -47,7 +47,7 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `New Merchant subscription plan (${name}) is created by Admin (${req.userName} - ${req.userAuth})`,
+      description: `New Merchant subscription plan (${name}) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(201).json({
@@ -136,7 +136,7 @@ const editMerchantSubscriptionPlanController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Merchant subscription plan (${updatedSubscriptionPlan.name}) updated by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Merchant subscription plan (${updatedSubscriptionPlan.name}) updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({
@@ -184,7 +184,7 @@ const deleteMerchantSubscriptionPlanController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Merchant subscription plan (${plan.name}) is deleted by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Merchant subscription plan (${plan.name}) is deleted by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({
@@ -292,7 +292,7 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
       await ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `New Customer subscription plan (${name}) is created by Admin (${req.userName} - ${req.userAuth})`,
+        description: `New Customer subscription plan (${name}) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
     ]);
 
@@ -449,7 +449,7 @@ const deleteCustomerSubscriptionPlanController = async (req, res, next) => {
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Customer subscription plan (${plan.name}) is deleted by Admin (${req.userName} - ${req.userAuth})`,
+      description: `Customer subscription plan (${plan.name}) is deleted by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     res.status(200).json({

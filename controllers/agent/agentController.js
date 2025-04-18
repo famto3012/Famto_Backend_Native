@@ -1781,15 +1781,25 @@ const updateCustomOrderStatusController = async (req, res, next) => {
         ? shopUpdates[shopUpdates.length - 1]?.location
         : null;
 
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
-      lastLocation,
-      location
-    );
+    if (
+      shopUpdates?.length !== 1 &&
+      orderFound?.orderDetail?.pickupLocation?.length === 2
+    ) {
+      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        lastLocation,
+        location
+      );
 
-    // Update order details
-    const newDistance = distanceInKM || 0;
-    orderFound.orderDetail.distance =
-      (orderFound.orderDetail?.distance || 0) + newDistance;
+      // Update order details
+      const newDistance = distanceInKM || 0;
+      const oldDistanceCoveredByAgent =
+        orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
+
+      orderFound.orderDetail.distance =
+        (orderFound.orderDetail?.distance || 0) + newDistance;
+      orderFound.detailAddedByAgent.distanceCoveredByAgent =
+        oldDistanceCoveredByAgent + newDistance;
+    }
 
     // Initialize pickup location if not set
     if (!orderFound.orderDetail.pickupLocation && shopUpdates.length === 0) {

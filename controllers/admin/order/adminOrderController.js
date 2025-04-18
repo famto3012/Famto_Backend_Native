@@ -1638,7 +1638,7 @@ const orderMarkAsReadyController = async (req, res, next) => {
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
-          description: `Order (#${orderId}) is marked as ready by Admin (${req.userName} - ${req.userAuth})`,
+          description: `Order (#${orderId}) is marked as ready by ${req.userRole} (${req.userName} - ${req.userAuth})`,
         }),
       ]);
 
@@ -1773,7 +1773,7 @@ const markTakeAwayOrderCompletedController = async (req, res, next) => {
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
-          description: `Order (#${orderId}) is marked as collected by customer by Admin (${req.userName} - ${req.userAuth})`,
+          description: `Order (#${orderId}) is marked as collected by customer by ${req.userRole} (${req.userName} - ${req.userAuth})`,
         }),
       ]);
 
@@ -2294,13 +2294,19 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     const orderFound = await Order.findOne({
       _id: orderId,
       "orderDetail.deliveryMode": { $ne: "Take Away" },
-    });
+    }).populate("customerId", "fullName");
+
+    if (orderFound.status === "Pending") {
+      return next(appError("Order is not confirmed yet", 400));
+    }
 
     if (
       !orderFound ||
       ["Completed", "Cancelled"].includes(orderFound?.status)
     ) {
-      return next(appError("Order not found", 404));
+      return next(
+        appError("Order not found or already completed / cancelled", 404)
+      );
     }
 
     const agentFound = await Agent.findById(orderFound.agentId);
@@ -2317,14 +2323,32 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       calculatedSalary = await calculateAgentEarnings(agentFound, orderFound);
     }
 
+    const detail = {
+      orderId,
+      deliveryMode: orderFound.orderDetail.deliveryMode,
+      customerName: orderFound.customerId.fullName || "-",
+      completedOn: new Date(),
+      grandTotal: orderFound.billDetail.grandTotal || 0,
+    };
+
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalDistance +=
       orderFound?.detailAddedByAgent?.distanceCoveredByAgent ||
       orderFound?.orderDetail?.distance;
     agentFound.appDetail.orders += 1;
+    agentFound.appDetail.orderDetail.push(detail);
+
     orderFound.status = "Completed";
 
-    await Promise.all([orderFound.save(), agentFound.save()]);
+    await Promise.all([
+      orderFound.save(),
+      agentFound.save(),
+      ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Order (#${orderId}) is marked as completed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+      }),
+    ]);
 
     res.status(200).json({ message: "Order marked as completed" });
   } catch (err) {
