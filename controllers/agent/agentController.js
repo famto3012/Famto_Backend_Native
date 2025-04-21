@@ -2100,9 +2100,9 @@ const getTimeSlotsForAgent = async (req, res, next) => {
     const selectedTimeSlotIds =
       agent.workStructure?.workTimings?.map((id) => id.toString()) || [];
 
-    const timings = customization?.workTime?.map((time) => ({
+    const timings = customization?.workingTime?.map((time) => ({
       id: time._id,
-      time: `${time.startTime} - ${time.endTIme}`,
+      time: `${time.startTime} - ${time.endTime}`,
       selected: selectedTimeSlotIds.includes(time._id.toString()),
     }));
 
@@ -2117,7 +2117,7 @@ const chooseTimeSlot = async (req, res, next) => {
     const { timeSlotId } = req.body;
 
     if (!Array.isArray(timeSlotId) || timeSlotId.length === 0) {
-      return next(appError("timeSlotId must be a non-empty array", 400));
+      return next(appError("At-least one slot is required", 400));
     }
 
     const customization = await AgentAppCustomization.findOne({});
@@ -2129,7 +2129,7 @@ const chooseTimeSlot = async (req, res, next) => {
     if (!agent) return next(appError("Agent not found", 404));
 
     const workTimeIds =
-      customization.workTime?.map((t) => t._id.toString()) || [];
+      customization.workingTime?.map((t) => t._id.toString()) || [];
 
     const allValid = timeSlotId.every((id) => workTimeIds.includes(id));
 

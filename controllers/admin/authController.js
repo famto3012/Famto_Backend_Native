@@ -61,12 +61,15 @@ const loginController = async (req, res, next) => {
       });
     }
 
-    if (
-      role === "Merchant" &&
-      (user.isBlocked || user.isApproved !== "Approved")
-    ) {
+    if (role === "Merchant" && user.isBlocked) {
       return res.status(403).json({
         errors: { general: "Login is restricted" },
+      });
+    }
+
+    if (role === "Merchant" && user.isApproved !== "Approved") {
+      return res.status(403).json({
+        errors: { general: "Pending registration approval" },
       });
     }
 
