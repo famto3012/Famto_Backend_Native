@@ -297,15 +297,45 @@ const getAgentProfileDetailsController = async (req, res, next) => {
     // Use lean query with selected fields for efficiency
     const currentAgent = await Agent.findById(req.userAuth)
       .select(
-        "fullName phoneNumber email agentImageURL governmentCertificateDetail"
+        "fullName phoneNumber email agentImageURL governmentCertificateDetail workStructure.workTimings"
       )
       .lean();
 
-    // Early return if agent is not found
     if (!currentAgent) return next(appError("Agent not found", 404));
 
+    const customization = await AgentAppCustomization.findOne({}).lean();
+    if (!customization || !customization.workingTime) {
+      return next(appError("Customization data not found", 404));
+    }
+
+    // Convert agent timings to string for easy comparison
+    const selectedTimingIds = (
+      currentAgent.workStructure?.workTimings || []
+    ).map((id) => id.toString());
+
+    // Filter customization timings that match agent's selected timings
+    const selectedTimings = customization.workingTime.filter((time) =>
+      selectedTimingIds.includes(time._id.toString())
+    );
+
+    const formattedResponse = {
+      _id: currentAgent._id,
+      fullName: currentAgent.fullName,
+      email: currentAgent.email,
+      phoneNumber: currentAgent.phoneNumber,
+      agentImageURL: currentAgent.agentImageURL,
+      governmentCertificateDetail: currentAgent.governmentCertificateDetail,
+      selectedTimings: selectedTimings?.map((time) => ({
+        startTime: time.startTime,
+        endTime: time.endTime,
+      })),
+    };
+
     // Send agent profile data in response
-    res.status(200).json({ message: "Agent profile data", data: currentAgent });
+    res.status(200).json({
+      message: "Agent profile data",
+      data: formattedResponse,
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -2057,6 +2087,69 @@ const getPocketBalanceForAgent = async (req, res, next) => {
   }
 };
 
+const getTimeSlotsForAgent = async (req, res, next) => {
+  try {
+    const [customization, agent] = await Promise.all([
+      AgentAppCustomization.findOne({}),
+      Agent.findById(req.userAuth),
+    ]);
+
+    if (!customization) return next(appError("Customization not found", 404));
+    if (!agent) return next(appError("Agent not found", 404));
+
+    const selectedTimeSlotIds =
+      agent.workStructure?.workTimings?.map((id) => id.toString()) || [];
+
+    const timings = customization?.workTime?.map((time) => ({
+      id: time._id,
+      time: `${time.startTime} - ${time.endTIme}`,
+      selected: selectedTimeSlotIds.includes(time._id.toString()),
+    }));
+
+    res.status(200).json(timings);
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const chooseTimeSlot = async (req, res, next) => {
+  try {
+    const { timeSlotId } = req.body;
+
+    if (!Array.isArray(timeSlotId) || timeSlotId.length === 0) {
+      return next(appError("timeSlotId must be a non-empty array", 400));
+    }
+
+    const customization = await AgentAppCustomization.findOne({});
+    if (!customization) {
+      return next(appError("Customization settings not found", 404));
+    }
+
+    const agent = await Agent.findById(req.userAuth);
+    if (!agent) return next(appError("Agent not found", 404));
+
+    const workTimeIds =
+      customization.workTime?.map((t) => t._id.toString()) || [];
+
+    const allValid = timeSlotId.every((id) => workTimeIds.includes(id));
+
+    if (!allValid) {
+      return next(appError("One or more time slots are invalid", 400));
+    }
+
+    agent.workStructure.workTimings = timeSlotId;
+
+    await agent.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Timing added successfully",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   updateLocationController,
   registerAgentController,
@@ -2101,4 +2194,6 @@ module.exports = {
   getAllNotificationsController,
   getAllAnnouncementsController,
   getPocketBalanceForAgent,
+  getTimeSlotsForAgent,
+  chooseTimeSlot,
 };
