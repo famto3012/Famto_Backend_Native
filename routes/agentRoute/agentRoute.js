@@ -43,6 +43,8 @@ const {
   checkPaymentStatusOfOrder,
   getAppDrawerDetailsController,
   getPocketBalanceForAgent,
+  getTimeSlotsForAgent,
+  chooseTimeSlot,
 } = require("../../controllers/agent/agentController");
 const { upload } = require("../../utils/imageOperation");
 const isAuthenticated = require("../../middlewares/isAuthenticated");
@@ -316,5 +318,9 @@ agentRoute.get(
   isAuthenticated,
   getPocketBalanceForAgent
 );
+
+agentRoute.get("/time-slots", isAuthenticated, getTimeSlotsForAgent);
+
+agentRoute.patch("/book-time-slots", isAuthenticated, chooseTimeSlot);
 
 module.exports = agentRoute;

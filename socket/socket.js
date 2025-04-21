@@ -300,6 +300,14 @@ const sendSocketData = (userId, eventName, data) => {
   if (socketId) io.to(socketId).emit(eventName, data);
 };
 
+const getUserLocationFromSocket = (userId) => {
+  if (userSocketMap[userId] && userSocketMap[userId]?.location) {
+    return userSocketMap[userId].location;
+  }
+
+  return null;
+};
+
 const populateUserSocketMap = async () => {
   try {
     const tokens = await FcmToken.find({});
@@ -769,6 +777,7 @@ io.on("connection", async (socket) => {
       userSocketMap[userId] = {
         socketId: socket.id,
         fcmToken: user?.token || [],
+        location: [],
       };
     } else {
       userSocketMap[userId].socketId = socket.id;
@@ -776,9 +785,6 @@ io.on("connection", async (socket) => {
   } catch (error) {
     console.log("Error handling socket connection:", error);
   }
-
-  // Get online user socket
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
   // Get realtime data count for Home page
   socket.on("getRealTimeDataOnRefresh", () => {
@@ -790,27 +796,13 @@ io.on("connection", async (socket) => {
   });
 
   // User location update socket
-  socket.on("locationUpdated", async (data) => {
-    const location = [data.latitude, data.longitude];
-    const agent = await Agent.findById(data.userId);
-    const merchant = await Merchant.findById(data.userId);
+  socket.on("locationUpdated", async ({ latitude, longitude, userId }) => {
+    if (!latitude || !longitude) return;
 
-    if (agent) {
-      // console.log(
-      //   `AgentId: ${data.userId} | Location: ${data.latitude} ${data.longitude}}`
-      // );
+    const location = [latitude, longitude];
 
-      await Agent.findByIdAndUpdate(data.userId, {
-        location,
-      });
-    } else if (merchant) {
-      await Merchant.findByIdAndUpdate(data.userId, {
-        "merchantDetail.location": location,
-      });
-    } else {
-      await Customer.findByIdAndUpdate(data.userId, {
-        "customerDetails.location": location,
-      });
+    if (userSocketMap[userId]) {
+      userSocketMap.location = location;
     }
   });
 
@@ -1131,7 +1123,16 @@ io.on("connection", async (socket) => {
       }
 
       const agentLocation =
-        location && location?.length === 2 ? location : agentFound.location;
+        location && location?.length === 2
+          ? location
+          : getUserLocationFromSocket(agentId);
+
+      if (!agentLocation || agentLocation?.length !== 2) {
+        return socket.emit("error", {
+          message: "Invalid location",
+          success: false,
+        });
+      }
 
       const stepperDetail = {
         by: agentFound.fullName,
@@ -1240,7 +1241,16 @@ io.on("connection", async (socket) => {
       const maxRadius = 0.5; // 500 meters in kilometers
       const pickupLocation = orderFound?.orderDetail?.pickupLocation;
       const agentLocation =
-        location && location?.length === 2 ? location : agentFound.location;
+        location && location?.length === 2
+          ? location
+          : getUserLocationFromSocket(agentId);
+
+      if (!agentLocation || agentLocation?.length !== 2) {
+        return socket.emit("error", {
+          message: "Invalid location",
+          success: false,
+        });
+      }
 
       if (
         orderFound.orderDetail.deliveryMode === "Custom Order" &&
@@ -1613,7 +1623,16 @@ io.on("connection", async (socket) => {
 
         const deliveryLocation = taskFound.deliveryDetail.deliveryLocation;
         const agentLocation =
-          location && location?.length === 2 ? location : agentFound.location;
+          location && location?.length === 2
+            ? location
+            : getUserLocationFromSocket(agentId);
+
+        if (!agentLocation || agentLocation?.length !== 2) {
+          return socket.emit("error", {
+            message: "Invalid location",
+            success: false,
+          });
+        }
 
         const distance = turf.distance(
           turf.point(deliveryLocation),
@@ -1961,9 +1980,26 @@ io.on("connection", async (socket) => {
   });
 
   // User disconnected socket
-  socket.on("disconnect", () => {
-    delete userSocketMap[userId].socketId;
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  socket.on("disconnect", async () => {
+    const { userId, role, location } = socket || {};
+
+    try {
+      // If it's an agent, update location
+      if (role === "Agent" && userId) {
+        const agent = await Agent.findById(userId);
+        if (agent) {
+          agent.location = location;
+          await agent.save();
+        }
+      }
+
+      // Disconnect logic for all users (including agents)
+      if (userId && userSocketMap[userId]) {
+        delete userSocketMap[userId].socketId;
+      }
+    } catch (error) {
+      console.error("Error handling disconnect:", error);
+    }
   });
 });
 
@@ -1980,4 +2016,5 @@ module.exports = {
   sendSocketData,
   findRolesToNotify,
   getRealTimeDataCount,
+  getUserLocationFromSocket,
 };
