@@ -324,9 +324,11 @@ const processSchedule = (ifScheduled) => {
 // Calculate the item total in cart
 const calculateItemTotal = (items, numOfDays) => {
   const calculatedTotal = items
-    .reduce((total, item) => total + item.price * item.quantity, 0)
-    .toFixed(2);
-  return numOfDays ? (calculatedTotal * numOfDays).toFixed(2) : calculatedTotal;
+    ?.reduce((total, item) => total + item?.price * item?.quantity, 0)
+    ?.toFixed(2);
+  return numOfDays
+    ? (calculatedTotal * numOfDays)?.toFixed(2)
+    : calculatedTotal;
 };
 
 // Calculate the total weight of items
@@ -334,9 +336,9 @@ const getTotalItemWeight = (deliveryMode, items) => {
   let weight = 0;
 
   if (deliveryMode === "Pick and Drop" || deliveryMode === "Custom Order") {
-    weight = items.reduce((total, item) => {
+    weight = items?.reduce((total, item) => {
       if (item.unit === "kg") {
-        return total + parseFloat(item.quantity * item.numOfUnits);
+        return total + parseFloat(item?.quantity * item?.numOfUnits);
       } else {
         return total + parseFloat(item.weight || 0);
       }
@@ -394,7 +396,7 @@ const calculateGrandTotal = ({
     parseFloat(deliveryCharge) || 0,
     parseFloat(addedTip) || 0,
     parseFloat(taxAmount) || 0,
-  ].reduce((acc, curr) => acc + curr, 0);
+  ]?.reduce((acc, curr) => acc + curr, 0);
 
   return Number(total.toFixed(2));
 };
@@ -750,7 +752,7 @@ const handleDeliveryMode = async (
 const calculateDeliveryChargesHelper = async ({
   deliveryMode,
   distanceInKM,
-  merchantFound,
+  merchant,
   customer,
   items,
   scheduledDetails,
@@ -781,7 +783,7 @@ const calculateDeliveryChargesHelper = async ({
         businessCategoryId,
         geofenceId: customer.customerDetails.geofenceId,
         status: true,
-        merchants: { $in: [merchantFound._id] },
+        merchants: { $in: [merchant._id] },
       });
 
       if (!customerPricing) throw new Error("Customer pricing not found");
@@ -820,7 +822,7 @@ const calculateDeliveryChargesHelper = async ({
 
     taxAmount = await getTaxAmount(
       businessCategoryId,
-      merchantFound.merchantDetail.geofenceId,
+      merchant.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
     );
@@ -1085,15 +1087,15 @@ const calculateDeliveryChargeHelperForAdmin = async (
       };
 
     case "Home Delivery":
-      return await calculateDeliveryChargesHelper(
+      return await calculateDeliveryChargesHelper({
         deliveryMode,
         distanceInKM,
         merchant,
         customer,
         items,
         scheduledDetails,
-        selectedBusinessCategory
-      );
+        selectedBusinessCategory,
+      });
 
     case "Pick and Drop":
       return await pickAndDropCharges(
