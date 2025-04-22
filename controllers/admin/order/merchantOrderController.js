@@ -1899,6 +1899,8 @@ const createInvoiceController = async (req, res, next) => {
       newPickupAddress,
       newDeliveryAddress,
       vehicleType,
+      instructionInPickup,
+      instructionInDelivery,
       addedTip = 0,
       // ifScheduled,
     } = req.body;
@@ -1999,7 +2001,8 @@ const createInvoiceController = async (req, res, next) => {
             pickupAddress,
             deliveryLocation,
             deliveryAddress,
-            instructionToDeliveryAgent,
+            instructionInPickup,
+            instructionInDelivery,
             distance: distanceInKM,
             startDate: scheduledDetails?.startDate || null,
             endDate: scheduledDetails?.endDate || null,
