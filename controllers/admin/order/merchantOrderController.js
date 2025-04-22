@@ -31,6 +31,7 @@ const {
   prepareOrderDetails,
   clearCart,
   updateCustomerTransaction,
+  locationArraysEqual,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -1909,7 +1910,20 @@ const createInvoiceController = async (req, res, next) => {
     const merchantFound = await Merchant.findById(merchantId);
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
-    const customerAddress = newCustomerAddress;
+    const newPickLocation = [
+      newPickupAddress?.latitude,
+      newPickupAddress?.longitude,
+    ];
+    const merchantLocation = merchantFound.merchantDetail.location;
+
+    const customerAddressFromPickOrDrop = locationArraysEqual(
+      newPickLocation,
+      merchantLocation
+    )
+      ? newDeliveryAddress
+      : newPickupAddress;
+
+    const customerAddress = newCustomerAddress || customerAddressFromPickOrDrop;
     const addressType = customerAddressType || "";
     const otherAddressId = customerAddressOtherAddressId || "";
 
@@ -1920,9 +1934,9 @@ const createInvoiceController = async (req, res, next) => {
       deliveryMode,
       addressType,
       otherAddressId,
-      formattedErrors,
     });
-    if (!customer) return res.status(409).json({ errors: formattedErrors });
+
+    if (!customer) return next(appError("Error in getting customer", 400));
 
     const {
       pickupLocation,
