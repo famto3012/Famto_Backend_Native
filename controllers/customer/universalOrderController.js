@@ -1407,16 +1407,16 @@ const confirmOrderDetailController = async (req, res, next) => {
       deliveryChargeForScheduledOrder,
       taxAmount,
       itemTotal,
-    } = await calculateDeliveryChargesHelper(
+    } = await calculateDeliveryChargesHelper({
       deliveryMode,
-      distance,
+      distanceInKM: distance,
       merchant,
       customer,
-      cartItems,
+      items: cartItems,
       scheduledDetails,
-      businessCategoryId,
-      booleanSuperMarketOrder
-    );
+      selectedBusinessCategory: businessCategoryId,
+      isSuperMarketOrder: booleanSuperMarketOrder,
+    });
 
     const merchantDiscountAmount = await applyDiscounts({
       items: cartItems,

@@ -1959,7 +1959,7 @@ const createInvoiceController = async (req, res, next) => {
     } = await calculateDeliveryChargesHelper({
       deliveryMode,
       distanceInKM,
-      merchantFound,
+      merchant: merchantFound,
       customer,
       items,
       scheduledDetails,
