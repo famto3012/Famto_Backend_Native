@@ -905,18 +905,18 @@ const confirmOrderController = async (req, res, next) => {
         if (!task) return next(appError("Task not created"));
       }
 
-      await reduceProductAvailableQuantity(
-        orderFound.purchasedItems,
-        orderFound.merchantId
-      );
-
-      await orderFound.save();
-
-      await ActivityLog.create({
-        userId: req.userAuth,
-        userType: req.userRole,
-        description: `Order (#${orderId}) is confirmed by Merchant (${req.userName} - ${req.userAuth})`,
-      });
+      await Promise.all([
+        reduceProductAvailableQuantity(
+          orderFound.purchasedItems,
+          orderFound.merchantId
+        ),
+        orderFound.save(),
+        ActivityLog.create({
+          userId: req.userAuth,
+          userType: req.userRole,
+          description: `Order (#${orderId}) is confirmed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+        }),
+      ]);
 
       const eventName = "orderAccepted";
 
@@ -1044,8 +1044,7 @@ const rejectOrderController = async (req, res, next) => {
 
       updateOrderStatus(orderFound);
 
-      await customerFound.save();
-      await orderFound.save();
+      await Promise.all([customerFound.save(), orderFound.save()]);
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       updateOrderStatus(orderFound);
 
@@ -1078,14 +1077,13 @@ const rejectOrderController = async (req, res, next) => {
       }
       updateOrderStatus(orderFound);
 
-      await orderFound.save();
-      await customerFound.save();
+      await Promise.all([orderFound.save(), customerFound.save()]);
     }
 
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Order (#${orderId}) is rejected by Merchant (${req.userName} - ${req.userAuth})`,
+      description: `Order (#${orderId}) is rejected by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     const eventName = "orderRejected";
@@ -1904,8 +1902,6 @@ const createInvoiceController = async (req, res, next) => {
       addedTip = 0,
       // ifScheduled,
     } = req.body;
-
-    console.dir(req.body, { depth: null });
 
     const merchantId = req.userAuth;
     const merchantFound = await Merchant.findById(merchantId);
