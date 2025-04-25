@@ -34,6 +34,7 @@ const {
   calculateScheduledCartValue,
   calculatePromoCodeDiscount,
   deductPromoCodeDiscount,
+  applyPromoCodeDiscount,
 } = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
@@ -1577,6 +1578,152 @@ const removeAppliedPromoCode = async (req, res, next) => {
   }
 };
 
+const applyPromoCode = async (req, res, next) => {
+  try {
+    const { cartId, promoCode, deliveryMode } = req.body;
+    const customerId = req.userAuth;
+
+    let cart;
+
+    if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
+      cart = await CustomerCart.findById(cartId);
+    } else {
+      cart = await PickAndCustomCart.findById(cartId);
+    }
+
+    const customer = await Customer.findById(customerId);
+
+    if (!customer) return next(appError("Customer not found", 404));
+    if (!cart) return next(appError("Cart not found", 404));
+
+    const { geofenceId } = customer.customerDetails;
+    const { deliveryOption } = cart.cartDetail;
+    const {
+      itemTotal,
+      originalDeliveryCharge,
+      discountedAmount = 0,
+      promoCodeDiscount = 0,
+    } = cart.billDetail;
+
+    const promoCodeFound = await PromoCode.findOne({
+      promoCode,
+      geofenceId,
+      status: true,
+      deliveryMode,
+    });
+
+    if (!promoCodeFound) {
+      return next(appError("Promo code not found or inactive", 404));
+    }
+
+    const {
+      merchantId: promoMerchants,
+      minOrderAmount,
+      fromDate,
+      toDate,
+      noOfUserUsed,
+      maxAllowedUsers,
+    } = promoCodeFound;
+
+    const merchantId = cart?.merchantId?.toString();
+    if (
+      !promoMerchants.includes(merchantId) &&
+      ["Take Away", "Home Delivery"].includes(deliveryMode)
+    ) {
+      return next(
+        appError("Promo code is not applicable for this merchant", 400)
+      );
+    }
+
+    let totalCartPrice;
+    if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
+      totalCartPrice =
+        deliveryOption === "Scheduled"
+          ? calculateScheduledCartValue(cart, promoCodeFound)
+          : itemTotal;
+    } else if (["Pick and Drop", "Custom Order"].includes(deliveryMode)) {
+      totalCartPrice =
+        deliveryOption === "Scheduled"
+          ? calculateScheduledCartValue(cart, promoCodeFound)
+          : originalDeliveryCharge;
+    }
+
+    if (totalCartPrice < minOrderAmount) {
+      return next(
+        appError(`Minimum order amount should be ${minOrderAmount}`, 400)
+      );
+    }
+
+    const now = new Date();
+    if (now < fromDate || now > toDate) {
+      return next(appError("Promo code is not valid at this time", 400));
+    }
+
+    if (noOfUserUsed >= maxAllowedUsers) {
+      return next(appError("Promo code usage limit reached", 400));
+    }
+
+    const promoDiscount = calculatePromoCodeDiscount(
+      promoCodeFound,
+      totalCartPrice
+    );
+
+    const totalDiscount = Number(
+      (promoDiscount + discountedAmount - promoCodeDiscount).toFixed(2)
+    );
+
+    // Apply discount
+    const updatedCart = applyPromoCodeDiscount(
+      cart,
+      promoCodeFound,
+      totalDiscount
+    );
+
+    await updatedCart.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Promo code ${promoCode} applied`,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const updateOrderTipController = async (req, res, next) => {
+  try {
+    const { cartId, deliveryMode, tip = 0 } = req.body;
+
+    let cart;
+
+    if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
+      cart = await CustomerCart.findById(cartId);
+    } else {
+      cart = await PickAndCustomCart.findById(cartId);
+    }
+
+    if (!cart) return next(appError("Cart not found", 404));
+
+    const { billDetail: cartBill } = cart;
+    if (!cartBill) return next(appError("Billing details not found", 404));
+
+    const oldTip = parseFloat(cartBill.addedTip ?? 0) || 0;
+    const newTip = parseFloat(tip) ?? 0;
+
+    cartBill.addedTip = newTip;
+
+    cartBill.subTotal += newTip - oldTip;
+    cartBill.discountedGrandTotal += newTip - oldTip;
+    cartBill.originalGrandTotal += newTip - oldTip;
+
+    await cart.save();
+
+    res.status(200).json({ success: true, message: "Tip added successfully" });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 const haveValidCart = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
@@ -1829,4 +1976,6 @@ module.exports = {
   haveValidCart,
   searchProductAndMerchantController,
   verifyCustomerAddressLocation,
+  updateOrderTipController,
+  applyPromoCode,
 };

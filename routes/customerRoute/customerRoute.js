@@ -3,7 +3,6 @@ const isAuthenticated = require("../../middlewares/isAuthenticated");
 const { upload } = require("../../utils/imageOperation");
 const {
   customerAuthenticateValidations,
-  updateAddressValidations,
   ratingValidations,
   updateCartProductValidations,
 } = require("../../middlewares/validators/customerAppValidations/customerAppValidations");
@@ -45,6 +44,8 @@ const {
   haveValidCart,
   searchProductAndMerchantController,
   verifyCustomerAddressLocation,
+  updateOrderTipController,
+  applyPromoCode,
 } = require("../../controllers/customer/customerController");
 const {
   getAllBusinessCategoryController,
@@ -55,7 +56,7 @@ const {
   addRatingToMerchantController,
   getTotalRatingOfMerchantController,
   addOrUpdateCartItemController,
-  applyPromoCodeController,
+  // applyPromoCodeController,
   orderPaymentController,
   verifyOnlinePaymentController,
   listRestaurantsController,
@@ -65,7 +66,7 @@ const {
   getProductVariantsByProductIdController,
   getDeliveryOptionOfMerchantController,
   clearCartController,
-  applyTipController,
+  // applyTipController,
   confirmOrderDetailController,
   getCartBillController,
   getOrderTrackingDetail,
@@ -75,15 +76,13 @@ const {
   getSuperMarketMerchant,
   getMerchantData,
   fetchTemporaryOrderOfCustomer,
-  getCategory,
-  getProduct,
   getProductsWithVariantsInCart,
   addItemsToCart,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
   addPickAndDropItemsController,
-  addTipAndApplyPromoCodeInPickAndDropController,
+  // addTipAndApplyPromoCodeInPickAndDropController,
   confirmPickAndDropController,
   verifyPickAndDropPaymentController,
   cancelPickBeforeOrderCreationController,
@@ -97,7 +96,7 @@ const {
   editItemInCartController,
   deleteItemInCartController,
   addDeliveryAddressController,
-  addTipAndApplyPromoCodeInCustomOrderController,
+  // addTipAndApplyPromoCodeInCustomOrderController,
   confirmCustomOrderController,
   cancelCustomBeforeOrderCreationController,
   getSingleItemController,
@@ -141,7 +140,6 @@ customerRoute.put(
 // Update customer address route
 customerRoute.patch(
   "/update-address",
-  // updateAddressValidations,
   isAuthenticated,
   updateCustomerAddressController
 );
@@ -276,13 +274,13 @@ customerRoute.post(
   confirmOrderDetailController
 );
 
-customerRoute.post(
-  "/apply-promocode",
-  isAuthenticated,
-  applyPromoCodeController
-);
+// customerRoute.post(
+//   "/apply-promocode",
+//   isAuthenticated,
+//   applyPromoCodeController
+// );
 
-customerRoute.post("/add-tip", isAuthenticated, applyTipController);
+// customerRoute.post("/add-tip", isAuthenticated, applyTipController);
 
 customerRoute.post("/confirm-order", isAuthenticated, orderPaymentController);
 
@@ -424,11 +422,11 @@ customerRoute.post(
   addPickAndDropItemsController
 );
 
-customerRoute.post(
-  "/add-tip-and-promocode",
-  isAuthenticated,
-  addTipAndApplyPromoCodeInPickAndDropController
-);
+// customerRoute.post(
+//   "/add-tip-and-promocode",
+//   isAuthenticated,
+//   addTipAndApplyPromoCodeInPickAndDropController
+// );
 
 customerRoute.post(
   "/confirm-pick-and-drop",
@@ -491,11 +489,11 @@ customerRoute.post(
   addDeliveryAddressController
 );
 
-customerRoute.post(
-  "/add-custom-tip-and-promocode",
-  isAuthenticated,
-  addTipAndApplyPromoCodeInCustomOrderController
-);
+// customerRoute.post(
+//   "/add-custom-tip-and-promocode",
+//   isAuthenticated,
+//   addTipAndApplyPromoCodeInCustomOrderController
+// );
 
 customerRoute.post(
   "/confirm-custom-order",
@@ -598,5 +596,9 @@ customerRoute.get(
   // isAuthenticated,
   searchProductAndMerchantController
 );
+
+customerRoute.post("/update-tip", isAuthenticated, updateOrderTipController);
+
+customerRoute.post("/apply-promo", isAuthenticated, applyPromoCode);
 
 module.exports = customerRoute;
