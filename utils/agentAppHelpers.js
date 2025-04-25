@@ -46,7 +46,7 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
     const bulkOperations = [];
 
     for (const agent of agents) {
-      // Initialize appDetail if not present
+      // Initialize or reset appDetail
       const appDetail = agent.appDetail || {
         totalEarning: 0,
         orders: 0,
@@ -54,12 +54,13 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
         totalDistance: 0,
         cancelledOrders: 0,
         loginDuration: 0,
+        orderDetail: [],
       };
 
-      // Calculate login duration
-      const loginDuration =
-        currentTime - new Date(agent?.loginStartTime || currentTime);
-      appDetail.loginDuration += loginDuration;
+      // Reset login duration before recalculating
+      const loginStart = new Date(agent?.loginStartTime || currentTime);
+      const loginDuration = currentTime - loginStart;
+      appDetail.loginDuration = loginDuration;
 
       // Fetch agent pricing only once per agent
       const agentPricing = await AgentPricing.findById(
@@ -334,7 +335,7 @@ const calculateAgentEarnings = async (agent, order) => {
   const totalEarnings = orderSalary + totalPurchaseFare;
 
   // Use parseFloat to ensure it's a number with two decimal places
-  return parseFloat(totalEarnings.toFixed(2));
+  return parseFloat(totalEarnings?.toFixed(2));
 };
 
 const updateOrderDetails = (order, calculatedSalary) => {
@@ -431,10 +432,11 @@ const updateCustomerSubscriptionCount = async (customerId) => {
   }
 };
 
-const updateBillOfCustomOrderInDelivery = async (order, task) => {
+const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
   try {
     const reachedPickupAt = task?.pickupDetail?.completedTime;
     const deliveryStartAt = task?.deliveryDetail?.startTime;
+    const pickupStartAt = task?.pickupDetail?.startTime;
     const now = new Date();
 
     let calculatedWaitingFare = 0;
@@ -453,6 +455,8 @@ const updateBillOfCustomOrderInDelivery = async (order, task) => {
       });
     }
 
+    console.log("customerPricing", customerPricing);
+
     const {
       baseFare,
       baseDistance,
@@ -468,19 +472,29 @@ const updateBillOfCustomOrderInDelivery = async (order, task) => {
       fareAfterBaseDistance
     );
 
+    console.log("deliveryCharge", deliveryCharge);
+
     const minutesWaitedAtPickup = Math.floor(
       (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
     );
+
+    console.log("minutesWaitedAtPickup", minutesWaitedAtPickup);
 
     if (minutesWaitedAtPickup > waitingTime) {
       const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
       calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
     }
 
+    console.log("Calculating");
+
     const totalTaskTime = new Date(now) - new Date(pickupStartAt);
+
+    console.log("totalTaskTime", totalTaskTime);
 
     // Convert the difference to minutes
     const diffInHours = Math.ceil(totalTaskTime / 3600000);
+
+    console.log("diffInHours", diffInHours);
 
     let calculatedPurchaseFare = 0;
 
@@ -493,10 +507,14 @@ const updateBillOfCustomOrderInDelivery = async (order, task) => {
     const calculatedDeliveryFare =
       deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
 
+    console.log("calculatedDeliveryFare", calculatedDeliveryFare);
+
     order.billDetail.waitingCharges = calculatedDeliveryFare;
     order.billDetail.deliveryCharge = calculatedDeliveryFare;
     order.billDetail.grandTotal += calculatedDeliveryFare;
     order.billDetail.subTotal += calculatedDeliveryFare;
+
+    await order.save();
   } catch (err) {
     return socket.emit("error", {
       message: `Error in updating bill ${err}`,

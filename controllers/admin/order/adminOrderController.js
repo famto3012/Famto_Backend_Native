@@ -641,6 +641,8 @@ const getOrderDetailByAdminController = async (req, res, next) => {
       return next(appError("Order not found", 404));
     }
 
+    console.log("orderFound", orderFound);
+
     const formattedResponse = {
       _id: orderFound._id,
       scheduledOrderId: orderFound?.scheduledOrderId || null,
@@ -650,6 +652,11 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         orderFound.paymentMode === "Cash-on-delivery"
           ? "Pay-on-delivery"
           : orderFound.paymentMode || "-",
+      paymentCollectedFromCustomer:
+        orderFound.paymentCollectedFromCustomer !== undefined
+          ? orderFound.paymentCollectedFromCustomer
+          : null,
+
       vehicleType: orderFound?.billDetail?.vehicleType || "-",
       deliveryMode: orderFound.orderDetail.deliveryMode || "-",
       deliveryOption: orderFound.orderDetail.deliveryOption || "-",
@@ -707,6 +714,8 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         ? orderFound.orderDetailStepper
         : [orderFound.orderDetailStepper],
     };
+
+    console.log("Response:", formattedResponse);
 
     res.status(200).json({
       message: "Single order detail",
@@ -2356,6 +2365,26 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
   }
 };
 
+const markPaymentCollectedFromCustomer = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      { paymentCollectedFromCustomer: "Completed" },
+      { new: true, upsert: false }
+    );
+
+    if (!updatedOrder) {
+      return next(appError("Order not found", 404));
+    }
+
+    res.status(200).json({ success: true, message: "Payment status updated" });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   confirmOrderByAdminController,
   rejectOrderByAdminController,
@@ -2372,4 +2401,5 @@ module.exports = {
   fetchAllOrdersByAdminController,
   fetchAllScheduledOrdersByAdminController,
   markOrderAsCompletedByAdminController,
+  markPaymentCollectedFromCustomer,
 };

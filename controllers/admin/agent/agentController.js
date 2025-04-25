@@ -696,78 +696,6 @@ const blockAgentController = async (req, res, next) => {
   }
 };
 
-const getDeliveryAgentPayoutController = async (req, res, next) => {
-  try {
-    // Retrieve pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const skip = (page - 1) * limit;
-
-    // Retrieve approved agents with required fields
-    const agents = await Agent.find({ isApproved: "Approved" })
-      .select("fullName phoneNumber appDetailHistory workStructure.cashInHand")
-      .skip(skip)
-      .limit(limit)
-      .lean(); // Retrieve plain JS objects
-
-    // Format the response data
-    const formattedResponse = await Promise.all(
-      agents
-        .filter((agent) => agent.appDetailHistory.length > 0)
-        .map((agent) => {
-          const { cashInHand } = agent.workStructure;
-          const latestHistory = agent.appDetailHistory.at(-1);
-
-          const { totalEarning, loginDuration } = latestHistory.details;
-
-          // Calculate earnings after cash in hand is deducted
-          const calculatedEarnings = Math.max(totalEarning - cashInHand, 0);
-
-          return {
-            agentId: agent._id,
-            fullName: agent.fullName,
-            phoneNumber: agent.phoneNumber,
-            workedDate: latestHistory.date
-              ? formatDate(latestHistory.date)
-              : "-",
-            orders: latestHistory.details.orders || 0,
-            cancelledOrders: latestHistory.details.cancelledOrders || 0,
-            totalDistance: latestHistory.details.totalDistance || 0,
-            loginHours: loginDuration
-              ? formatToHours(loginDuration)
-              : "0:00 hr",
-            cashInHand,
-            totalEarnings: totalEarning,
-            calculatedEarnings,
-            paymentSettled: latestHistory.details.paymentSettled,
-            detailId: latestHistory.detailId,
-          };
-        })
-    );
-
-    // Get total number of approved agents with history
-    const totalDocuments =
-      (await Agent.countDocuments({ isApproved: "Approved" })) || 1;
-    const totalPages = Math.ceil(totalDocuments / limit);
-
-    // Respond with formatted data and pagination
-    res.status(200).json({
-      message: "Agent payout detail",
-      data: formattedResponse,
-      pagination: {
-        totalDocuments,
-        totalPages,
-        currentPage: page,
-        pageSize: limit,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
 const filterAgentPayoutController = async (req, res, next) => {
   try {
     const { status, agent, geofence, date, name } = req.query;
@@ -786,11 +714,16 @@ const filterAgentPayoutController = async (req, res, next) => {
     // Convert date to range in IST timezone
     const dateFilter = {};
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(date);
-      endDate.setDate(endDate.getDate() + 1);
-      endDate.setHours(23, 59, 59, 999);
+      // Get IST start of day in UTC
+      const startDate = new Date(
+        new Date(date).getTime() - 5.5 * 60 * 60 * 1000
+      );
+      startDate.setUTCHours(0, 0, 0, 0);
+
+      const endDate = new Date(startDate);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      endDate.setUTCMilliseconds(-1);
+
       dateFilter.date = { $gte: startDate, $lte: endDate };
     }
 
@@ -1309,7 +1242,6 @@ module.exports = {
   getRatingsByCustomerController,
   filterAgentsController,
   blockAgentController,
-  getDeliveryAgentPayoutController,
   filterAgentPayoutController,
   approvePaymentController,
   changeAgentStatusController,

@@ -6,7 +6,11 @@ const Order = require("../models/Order");
 const Agent = require("../models/Agent");
 const AgentPricing = require("../models/AgentPricing");
 const Merchant = require("../models/Merchant");
-const { io, sendNotification } = require("../socket/socket");
+const {
+  io,
+  sendNotification,
+  getUserLocationFromSocket,
+} = require("../socket/socket");
 const BusinessCategory = require("../models/BusinessCategory");
 const FcmToken = require("../models/fcmToken");
 
@@ -267,7 +271,7 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
       const maxRadius = radius;
       if (maxRadius > 0) {
         const merchantLocation = merchant.merchantDetail.location;
-        const agentLocation = agent.location;
+        const agentLocation = getUserLocationFromSocket(agent._id);
         const distance = turf.distance(
           turf.point(merchantLocation),
           turf.point(agentLocation),
@@ -366,7 +370,7 @@ const fetchNearestAgents = async (merchantId) => {
 
     if (maxRadius > 0) {
       const merchantLocation = merchant.merchantDetail.location;
-      const agentLocation = agent.location;
+      const agentLocation = getUserLocationFromSocket(agent._id);
       const distance = turf.distance(
         turf.point(merchantLocation),
         turf.point(agentLocation),

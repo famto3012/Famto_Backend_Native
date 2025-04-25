@@ -660,7 +660,7 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     const categories = await Category.find({ merchantId, businessCategoryId });
 
     // Extract all category ids to search products within all these categories
-    const categoryIds = categories.map((category) => category._id);
+    const categoryIds = categories.map((category) => category._id.toString());
 
     // Search products within the found categoryIds
     const products = await Product.find({
