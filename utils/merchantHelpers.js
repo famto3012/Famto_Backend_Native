@@ -6,31 +6,15 @@ const Merchant = require("../models/Merchant");
 
 const preparePayoutForMerchant = async () => {
   try {
-    // console.log("Starting payout preparation...");
-
     const allMerchants = await Merchant.find({ isApproved: "Approved" }).lean();
-    // console.log(`Found ${allMerchants.length} approved merchants.`);
 
     let startTime = new Date();
     let endTime = new Date();
 
-    if (process.env.NODE_ENV === "production") {
-      startTime.setUTCDate(startTime.getUTCDate() - 1);
-      startTime.setUTCHours(18, 30, 0, 0);
-      endTime.setUTCHours(18, 29, 59, 999);
-      // console.log(
-      //   `Production mode: Payout range set to ${startTime} - ${endTime}`
-      // );
-    } else {
-      startTime.setDate(startTime.getDate() - 1);
-      startTime.setUTCHours(0, 0, 0, 0);
-      endTime.setUTCHours(23, 59, 59, 999);
-      // console.log(
-      //   `Development mode: Payout range set to ${startTime} - ${endTime}`
-      // );
-    }
+    startTime.setUTCDate(startTime.getUTCDate() - 1);
+    startTime.setUTCHours(18, 30, 0, 0);
+    endTime.setUTCHours(18, 29, 59, 999);
 
-    // Fetch all orders in bulk for the date range and approved merchants
     const allOrders = await Order.find({
       createdAt: {
         $gte: startTime,
@@ -41,25 +25,19 @@ const preparePayoutForMerchant = async () => {
     })
       .select("merchantId purchasedItems")
       .lean();
-    // console.log(`Found ${allOrders.length} completed orders within the range.`);
 
-    // Create a map to aggregate data by merchantId
     const merchantPayouts = new Map();
 
-    // Fetch all products in bulk to avoid querying each product individually
     const productIds = allOrders.flatMap((order) =>
       order.purchasedItems.map((item) => item.productId)
     );
-    // console.log(`Fetching products for ${productIds.length} product IDs.`);
+
     const products = await Product.find({ _id: { $in: productIds } }).lean();
     const productMap = new Map(
       products.map((product) => [product._id.toString(), product])
     );
-    // console.log(`Fetched ${products.length} products.`);
 
-    // Aggregate data for each order and calculate total cost price
     for (const order of allOrders) {
-      console.log("Order", order);
       const merchantId = order?.merchantId?.toString();
       const { purchasedItems } = order;
       let totalCostPrice = 0;
@@ -88,9 +66,7 @@ const preparePayoutForMerchant = async () => {
         }
       }
 
-      // Update the payout map for this merchant
       if (!merchantPayouts.has(merchantId)) {
-        console.log("Merchant Id", merchantId);
         merchantPayouts.set(merchantId, {
           totalCostPrice: 0,
           completedOrders: 0,
@@ -102,11 +78,6 @@ const preparePayoutForMerchant = async () => {
       payout.completedOrders += 1;
     }
 
-    // console.log(
-    //   "Aggregated total cost and completed orders for all merchants."
-    // );
-
-    // Prepare bulk updates for merchants
     const bulkOperations = allMerchants.map((merchant) => {
       const payoutData = {
         payoutId: new mongoose.Types.ObjectId(),
@@ -125,9 +96,6 @@ const preparePayoutForMerchant = async () => {
       };
     });
 
-    console.log(`Preparing ${bulkOperations.length} bulk update operations.`);
-    console.log("Data", bulkOperations);
-    // Execute all bulk operations at once
     if (bulkOperations.length > 0) {
       await Merchant.bulkWrite(bulkOperations);
     }

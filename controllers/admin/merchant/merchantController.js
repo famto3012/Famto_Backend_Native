@@ -1920,6 +1920,9 @@ const getMerchantPayoutController = async (req, res, next) => {
       timezoneOffset = 0,
     } = req.query;
 
+    console.log("startDate:", startDate);
+    console.log("endDate:", endDate);
+
     // Parse and normalize pagination inputs
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
@@ -1948,19 +1951,36 @@ const getMerchantPayoutController = async (req, res, next) => {
 
     // Set start and end date boundaries, adjusting for timezone offset
     const dateFilter = {};
+    // if (startDate) {
+    //   startDate = new Date(startDate);
+    //   startDate.setHours(0, 0, 0, 0);
+    //   startDate.setMinutes(startDate.getMinutes() - timezoneOffset);
+    //   dateFilter.$gte = startDate;
+    // }
+
+    // if (endDate) {
+    //   endDate = new Date(endDate);
+    //   endDate.setHours(23, 59, 59, 999);
+    //   endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
+    //   dateFilter.$lte = endDate;
+    // }
+
     if (startDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
-      startDate.setMinutes(startDate.getMinutes() - timezoneOffset);
+      startDate = new Date(
+        new Date(startDate).getTime() - 5.5 * 60 * 60 * 1000
+      );
+      startDate.setUTCHours(18, 30, 0, 0);
       dateFilter.$gte = startDate;
     }
+
     if (endDate) {
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
-      endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
+      endDate = new Date(new Date(endDate).getTime() - 5.5 * 60 * 60 * 1000);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      endDate.setUTCMilliseconds(-1);
       dateFilter.$lte = endDate;
     }
-    console.log("Filter criteria", filterCriteria);
+
+    console.log("dateFilter", dateFilter);
 
     // Aggregation query with filters applied to payoutDetail
     const merchantPayoutQuery = Merchant.aggregate([
@@ -2027,7 +2047,7 @@ const getMerchantPayoutController = async (req, res, next) => {
 
     // Execute the query and transform data as required
     const merchants = await merchantPayoutQuery.exec();
-    console.log("Merchants:", merchants);
+
     const data = merchants.map((merchant) => ({
       merchantId: merchant._id,
       merchantName: merchant.merchantDetail.merchantName,

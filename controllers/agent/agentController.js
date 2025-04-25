@@ -42,6 +42,7 @@ const {
   sendSocketData,
   sendNotification,
   findRolesToNotify,
+  getUserLocationFromSocket,
 } = require("../../socket/socket");
 const FcmToken = require("../../models/fcmToken");
 const Merchant = require("../../models/Merchant");
@@ -1076,7 +1077,7 @@ const getTaskPreviewController = async (req, res, next) => {
           phoneNumber: task?.pickupDetail?.pickupAddress?.phoneNumber || null,
           location: task?.pickupDetail?.pickupLocation || null,
         },
-        agentLocation: agentFound.location,
+        agentLocation: getUserLocationFromSocket(agentId),
       };
 
       // Construct delivery task
@@ -1094,7 +1095,7 @@ const getTaskPreviewController = async (req, res, next) => {
           phoneNumber: task.deliveryDetail.deliveryAddress.phoneNumber,
           location: task.deliveryDetail.deliveryLocation,
         },
-        agentLocation: agentFound.location,
+        agentLocation: getUserLocationFromSocket(agentId),
       };
 
       // Add tasks to grouped object based on type
@@ -1792,6 +1793,8 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     const { orderId } = req.params;
     const agentId = req.userAuth;
 
+    console.log("data", { body: req.body });
+
     const orderFound = await Order.findOne({
       _id: orderId,
       "orderDetail.deliveryMode": "Custom Order",
@@ -1811,25 +1814,33 @@ const updateCustomOrderStatusController = async (req, res, next) => {
         ? shopUpdates[shopUpdates.length - 1]?.location
         : null;
 
-    if (
-      shopUpdates?.length !== 1 &&
-      orderFound?.orderDetail?.pickupLocation?.length === 2
-    ) {
-      const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        lastLocation,
-        location
-      );
-
-      // Update order details
-      const newDistance = distanceInKM || 0;
-      const oldDistanceCoveredByAgent =
-        orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
-
-      orderFound.orderDetail.distance =
-        (orderFound.orderDetail?.distance || 0) + newDistance;
-      orderFound.detailAddedByAgent.distanceCoveredByAgent =
-        oldDistanceCoveredByAgent + newDistance;
+    if (!lastLocation || lastLocation?.length !== 2) {
+      return next(appError("Error in retrieving last shop location", 400));
     }
+
+    // if (
+    //   shopUpdates?.length !== 1 &&
+    //   orderFound?.orderDetail?.pickupLocation?.length === 2
+    // ) {
+    const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      lastLocation,
+      location
+    );
+
+    console.log("distanceInKM", distanceInKM);
+
+    // Update order details
+    const newDistance = distanceInKM || 0;
+    const oldDistanceCoveredByAgent =
+      orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
+
+    console.log("distance data", { newDistance, oldDistanceCoveredByAgent });
+
+    orderFound.orderDetail.distance =
+      (orderFound.orderDetail?.distance || 0) + newDistance;
+    orderFound.detailAddedByAgent.distanceCoveredByAgent =
+      oldDistanceCoveredByAgent + newDistance;
+    // }
 
     // Initialize pickup location if not set
     if (!orderFound.orderDetail.pickupLocation && shopUpdates.length === 0) {

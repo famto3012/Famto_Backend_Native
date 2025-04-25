@@ -9,6 +9,7 @@ const {
   sendNotification,
   findRolesToNotify,
   sendSocketData,
+  getUserLocationFromSocket,
 } = require("../../../socket/socket");
 
 const appError = require("../../../utils/appError");
@@ -337,7 +338,10 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       const geofencePolygon = turf.polygon([coordinates]);
 
       filteredAgents = agents.filter((agent) =>
-        turf.booleanPointInPolygon(turf.point(agent.location), geofencePolygon)
+        turf.booleanPointInPolygon(
+          turf.point(getUserLocationFromSocket(agent._id)),
+          geofencePolygon
+        )
       );
     }
 
@@ -348,13 +352,13 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         if (deliveryMode === "Pick and Drop") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agent.location,
+            getUserLocationFromSocket(agent._id),
             deliveryLocation
           );
           distance = distanceInKM;
         } else if (deliveryMode !== "Custom Order") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agent.location,
+            getUserLocationFromSocket(agent._id),
             merchantLocation
           );
           distance = distanceInKM;
@@ -450,10 +454,15 @@ const getAgentsController = async (req, res, next) => {
     // Fetch agents based on the constructed query
     const agents = await Agent.find(query);
 
+    const formattedResponse = agents?.map((agent) => ({
+      ...agent,
+      location: getUserLocationFromSocket(agent._id),
+    }));
+
     // Respond with the fetched agents
     res.status(200).json({
       message: "Agents fetched successfully",
-      data: agents,
+      data: formattedResponse,
     });
   } catch (error) {
     next(appError(error.message));
