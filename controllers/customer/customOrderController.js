@@ -533,144 +533,144 @@ const getCustomCartBill = async (req, res, next) => {
   }
 };
 
-const addTipAndApplyPromoCodeInCustomOrderController = async (
-  req,
-  res,
-  next
-) => {
-  try {
-    const customerId = req.userAuth;
-    const { addedTip, promoCode } = req.body;
+// const addTipAndApplyPromoCodeInCustomOrderController = async (
+//   req,
+//   res,
+//   next
+// ) => {
+//   try {
+//     const customerId = req.userAuth;
+//     const { addedTip, promoCode } = req.body;
 
-    const [customerFound, cart] = await Promise.all([
-      Customer.findById(customerId),
-      PickAndCustomCart.findOne({
-        customerId,
-        "cartDetail.deliveryMode": "Custom Order",
-      }),
-    ]);
+//     const [customerFound, cart] = await Promise.all([
+//       Customer.findById(customerId),
+//       PickAndCustomCart.findOne({
+//         customerId,
+//         "cartDetail.deliveryMode": "Custom Order",
+//       }),
+//     ]);
 
-    if (!customerFound) return next(appError("Customer not found", 404));
-    if (!cart) return next(appError("Cart not found", 404));
+//     if (!customerFound) return next(appError("Customer not found", 404));
+//     if (!cart) return next(appError("Cart not found", 404));
 
-    // Ensure existing charges and totals
-    let {
-      originalGrandTotal = 0,
-      originalDeliveryCharge = 0,
-      addedTip: currentTip = 0,
-      discountedAmount = 0,
-    } = cart.billDetail;
+//     // Ensure existing charges and totals
+//     let {
+//       originalGrandTotal = 0,
+//       originalDeliveryCharge = 0,
+//       addedTip: currentTip = 0,
+//       discountedAmount = 0,
+//     } = cart.billDetail;
 
-    // Update the tip if provided
-    const tip = addedTip !== undefined ? parseInt(addedTip) : currentTip;
+//     // Update the tip if provided
+//     const tip = addedTip !== undefined ? parseInt(addedTip) : currentTip;
 
-    cart.billDetail.addedTip = tip;
+//     cart.billDetail.addedTip = tip;
 
-    // Apply the promo code if provided
-    if (promoCode) {
-      const promoCodeFound = await PromoCode.findOne({
-        promoCode,
-        geofenceId: customerFound.customerDetails.geofenceId,
-        appliedOn: "Delivery-charge",
-        status: true,
-        deliveryMode: "Custom Order",
-      });
+//     // Apply the promo code if provided
+//     if (promoCode) {
+//       const promoCodeFound = await PromoCode.findOne({
+//         promoCode,
+//         geofenceId: customerFound.customerDetails.geofenceId,
+//         appliedOn: "Delivery-charge",
+//         status: true,
+//         deliveryMode: "Custom Order",
+//       });
 
-      if (!promoCodeFound) {
-        return next(appError("Promo code not found or inactive", 404));
-      }
+//       if (!promoCodeFound) {
+//         return next(appError("Promo code not found or inactive", 404));
+//       }
 
-      const totalDeliveryPrice =
-        cart.cartDetail.deliveryOption === "Scheduled"
-          ? calculateScheduledCartValue(cart, promoCodeFound)
-          : originalDeliveryCharge;
+//       const totalDeliveryPrice =
+//         cart.cartDetail.deliveryOption === "Scheduled"
+//           ? calculateScheduledCartValue(cart, promoCodeFound)
+//           : originalDeliveryCharge;
 
-      if (totalDeliveryPrice < promoCodeFound.minOrderAmount) {
-        return next(
-          appError(
-            `Minimum order amount is ${promoCodeFound.minOrderAmount}`,
-            400
-          )
-        );
-      }
+//       if (totalDeliveryPrice < promoCodeFound.minOrderAmount) {
+//         return next(
+//           appError(
+//             `Minimum order amount is ${promoCodeFound.minOrderAmount}`,
+//             400
+//           )
+//         );
+//       }
 
-      const now = new Date();
-      if (now < promoCodeFound.fromDate || now > promoCodeFound.toDate) {
-        return next(appError("Promo code is not valid at this time", 400));
-      }
+//       const now = new Date();
+//       if (now < promoCodeFound.fromDate || now > promoCodeFound.toDate) {
+//         return next(appError("Promo code is not valid at this time", 400));
+//       }
 
-      if (promoCodeFound.noOfUserUsed >= promoCodeFound.maxAllowedUsers) {
-        return next(appError("Promo code usage limit reached", 400));
-      }
+//       if (promoCodeFound.noOfUserUsed >= promoCodeFound.maxAllowedUsers) {
+//         return next(appError("Promo code usage limit reached", 400));
+//       }
 
-      // Calculate discount amount
-      discountedAmount = calculatePromoCodeDiscount(
-        promoCodeFound,
-        totalDeliveryPrice
-      );
+//       // Calculate discount amount
+//       discountedAmount = calculatePromoCodeDiscount(
+//         promoCodeFound,
+//         totalDeliveryPrice
+//       );
 
-      cart.billDetail.promoCodeUsed = promoCode;
+//       cart.billDetail.promoCodeUsed = promoCode;
 
-      promoCodeFound.noOfUserUsed += 1;
-      await promoCodeFound.save();
-    }
+//       promoCodeFound.noOfUserUsed += 1;
+//       await promoCodeFound.save();
+//     }
 
-    const discountedDeliveryCharge = Math.max(
-      originalDeliveryCharge - discountedAmount,
-      0
-    );
+//     const discountedDeliveryCharge = Math.max(
+//       originalDeliveryCharge - discountedAmount,
+//       0
+//     );
 
-    const discountedGrandTotal = originalGrandTotal + tip - discountedAmount;
+//     const discountedGrandTotal = originalGrandTotal + tip - discountedAmount;
 
-    cart.billDetail.discountedDeliveryCharge = Math.round(
-      discountedDeliveryCharge
-    );
-    cart.billDetail.discountedGrandTotal = Math.round(discountedGrandTotal);
-    cart.billDetail.discountedAmount = discountedAmount?.toFixed(2);
+//     cart.billDetail.discountedDeliveryCharge = Math.round(
+//       discountedDeliveryCharge
+//     );
+//     cart.billDetail.discountedGrandTotal = Math.round(discountedGrandTotal);
+//     cart.billDetail.discountedAmount = discountedAmount?.toFixed(2);
 
-    await cart.save();
+//     await cart.save();
 
-    const havePickupLocation = cart.cartDetail.pickupLocation.length === 2;
+//     const havePickupLocation = cart.cartDetail.pickupLocation.length === 2;
 
-    const billDetail = {
-      deliveryChargePerDay: cart.billDetail.deliveryChargePerDay || null,
-      originalDeliveryCharge: havePickupLocation
-        ? cart.billDetail.originalDeliveryCharge
-        : null,
-      discountedDeliveryCharge: havePickupLocation
-        ? cart.billDetail.discountedDeliveryCharge
-        : null,
-      discountedAmount: havePickupLocation
-        ? cart.billDetail.discountedAmount
-        : null,
-      originalGrandTotal: havePickupLocation
-        ? cart.billDetail.originalGrandTotal
-        : null,
-      discountedGrandTotal: havePickupLocation
-        ? cart.billDetail.discountedGrandTotal
-        : null,
-      taxAmount: havePickupLocation ? cart.billDetail.taxAmount : null,
-      itemTotal: cart.billDetail.itemTotal || null,
-      addedTip: cart.billDetail.addedTip || null,
-      subTotal: havePickupLocation ? cart.billDetail.subTotal : null,
-      vehicleType: cart.billDetail.vehicleType || null,
-      surgePrice: cart.billDetail.surgePrice || null,
-    };
+//     const billDetail = {
+//       deliveryChargePerDay: cart.billDetail.deliveryChargePerDay || null,
+//       originalDeliveryCharge: havePickupLocation
+//         ? cart.billDetail.originalDeliveryCharge
+//         : null,
+//       discountedDeliveryCharge: havePickupLocation
+//         ? cart.billDetail.discountedDeliveryCharge
+//         : null,
+//       discountedAmount: havePickupLocation
+//         ? cart.billDetail.discountedAmount
+//         : null,
+//       originalGrandTotal: havePickupLocation
+//         ? cart.billDetail.originalGrandTotal
+//         : null,
+//       discountedGrandTotal: havePickupLocation
+//         ? cart.billDetail.discountedGrandTotal
+//         : null,
+//       taxAmount: havePickupLocation ? cart.billDetail.taxAmount : null,
+//       itemTotal: cart.billDetail.itemTotal || null,
+//       addedTip: cart.billDetail.addedTip || null,
+//       subTotal: havePickupLocation ? cart.billDetail.subTotal : null,
+//       vehicleType: cart.billDetail.vehicleType || null,
+//       surgePrice: cart.billDetail.surgePrice || null,
+//     };
 
-    res.status(200).json({
-      message: "Tip and promo code applied successfully",
-      data: {
-        cartId: cart._id,
-        customerId: cart.customerId,
-        cartDetail: cart.cartDetail,
-        items: cart.items,
-        billDetail,
-      },
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
+//     res.status(200).json({
+//       message: "Tip and promo code applied successfully",
+//       data: {
+//         cartId: cart._id,
+//         customerId: cart.customerId,
+//         cartDetail: cart.cartDetail,
+//         items: cart.items,
+//         billDetail,
+//       },
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 const confirmCustomOrderController = async (req, res, next) => {
   try {
@@ -709,13 +709,6 @@ const confirmCustomOrderController = async (req, res, next) => {
       subTotal: cart.billDetail.subTotal,
     };
 
-    let walletTransaction = {
-      closingBalance: customer?.customerDetails?.walletBalance,
-      transactionAmount: orderAmount,
-      date: new Date(),
-      type: "Debit",
-    };
-
     let customerTransaction = {
       madeOn: new Date(),
       transactionType: "Bill",
@@ -740,7 +733,6 @@ const confirmCustomOrderController = async (req, res, next) => {
     });
 
     customer.transactionDetail.push(customerTransaction);
-    customer.walletTransactionDetail.push(walletTransaction);
 
     await customer.save();
 
@@ -786,9 +778,6 @@ const confirmCustomOrderController = async (req, res, next) => {
 
         // Remove the temporary order data from the database
         await TemporaryOrder.deleteOne({ orderId });
-
-        // //? Update order count in realtime for Home page
-        // await updateOrderStatus(newOrder._id, "Pending");
 
         const eventName = "newOrderCreated";
 
@@ -940,7 +929,7 @@ module.exports = {
   editItemInCartController,
   deleteItemInCartController,
   addDeliveryAddressController,
-  addTipAndApplyPromoCodeInCustomOrderController,
+  // addTipAndApplyPromoCodeInCustomOrderController,
   confirmCustomOrderController,
   cancelCustomBeforeOrderCreationController,
   getSingleItemController,
