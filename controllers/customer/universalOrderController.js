@@ -1966,11 +1966,12 @@ const orderPaymentController = async (req, res, next) => {
             }
 
             const walletTransaction = customer.walletTransactionDetail.find(
-              (transaction) =>
-                transaction.orderId.toString() === orderId.toString()
+              (transaction) => {
+                return transaction?.orderId?.toString() === orderId?.toString();
+              }
             );
 
-            walletTransaction.orderId = newOrderCreated._id;
+            walletTransaction.orderId = newOrderCreated?._id;
 
             await Promise.all([
               TemporaryOrder.deleteOne({ orderId }),
