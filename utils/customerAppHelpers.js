@@ -20,8 +20,6 @@ const CustomerCart = require("../models/CustomerCart");
 const { deleteFromFirebase, uploadToFirebase } = require("./imageOperation");
 const ManagerRoles = require("../models/ManagerRoles");
 const Manager = require("../models/Manager");
-const { sendSocketDataAndNotification } = require("./socketHelper");
-const { findRolesToNotify } = require("../socket/socket");
 
 // Helper function to sort merchants by sponsorship
 const sortMerchantsBySponsorship = (merchants) => {
@@ -189,6 +187,9 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       "merchantId"
     );
 
+    const { sendSocketDataAndNotification } = require("./socketHelper");
+    const { findRolesToNotify } = require("../socket/socket");
+
     const eventName = "newOrderCreated";
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
@@ -303,6 +304,9 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
         status: "Completed",
       });
     }
+
+    const { sendSocketDataAndNotification } = require("./socketHelper");
+    const { findRolesToNotify } = require("../socket/socket");
 
     const eventName = "newOrderCreated";
 
