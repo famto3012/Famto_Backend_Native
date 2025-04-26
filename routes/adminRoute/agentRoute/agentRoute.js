@@ -7,7 +7,6 @@ const {
   approveAgentRegistrationController,
   rejectAgentRegistrationController,
   blockAgentController,
-  getDeliveryAgentPayoutController,
   approvePaymentController,
   filterAgentPayoutController,
   changeAgentStatusController,
@@ -46,14 +45,6 @@ adminAgentRoute.get(
   isAuthenticated,
   isAdmin,
   filterAgentPayoutController
-);
-
-// Get payout of agents
-adminAgentRoute.get(
-  "/get-agent-payout",
-  isAuthenticated,
-  isAdmin,
-  getDeliveryAgentPayoutController
 );
 
 // Get Agent by vehicle type

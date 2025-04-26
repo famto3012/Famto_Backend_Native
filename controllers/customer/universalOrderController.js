@@ -665,7 +665,7 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     const categories = await Category.find({ merchantId, businessCategoryId });
 
     // Extract all category ids to search products within all these categories
-    const categoryIds = categories.map((category) => category._id);
+    const categoryIds = categories.map((category) => category._id.toString());
 
     // Search products within the found categoryIds
     const products = await Product.find({
@@ -1524,116 +1524,133 @@ const getCartBillController = async (req, res, next) => {
 };
 
 // Apply Tip
-const applyTipController = async (req, res, next) => {
-  try {
-    const { tip = 0 } = req.body;
-    const customerId = req.userAuth;
+// const applyTipController = async (req, res, next) => {
+//   try {
+//     const { tip = 0 } = req.body;
+//     const customerId = req.userAuth;
 
-    const cartFound = await CustomerCart.findOne({ customerId });
-    if (!cartFound) return next(appError("Cart not found", 404));
+//     const cartFound = await CustomerCart.findOne({ customerId });
+//     if (!cartFound) return next(appError("Cart not found", 404));
 
-    const { billDetail: cartBill } = cartFound;
-    if (!cartBill) return next(appError("Billing details not found", 404));
+//     const { billDetail: cartBill } = cartFound;
+//     if (!cartBill) return next(appError("Billing details not found", 404));
 
-    const oldTip = cartBill.addedTip || 0;
+//     const oldTip = cartBill.addedTip || 0;
 
-    const newTip = parseFloat(tip) || 0;
-    cartBill.addedTip = newTip;
+//     const newTip = parseFloat(tip) || 0;
+//     cartBill.addedTip = newTip;
 
-    // Recalculate totals with the new tip adjustment
-    cartBill.subTotal += newTip - oldTip;
-    cartBill.discountedGrandTotal += newTip - oldTip;
-    cartBill.originalGrandTotal += newTip - oldTip;
+//     // Recalculate totals with the new tip adjustment
+//     cartBill.subTotal += newTip - oldTip;
+//     cartBill.discountedGrandTotal += newTip - oldTip;
+//     cartBill.originalGrandTotal += newTip - oldTip;
 
-    // Save the changes to the cart
-    await cartFound.save();
+//     // Save the changes to the cart
+//     await cartFound.save();
 
-    res.status(200).json(cartFound.billDetail);
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
+//     res.status(200).json(cartFound.billDetail);
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 // Apply Promo code
-const applyPromoCodeController = async (req, res, next) => {
-  try {
-    const { promoCode } = req.body;
-    const customerId = req.userAuth;
+// const applyPromoCodeController = async (req, res, next) => {
+//   try {
+//     const { promoCode } = req.body;
+//     const customerId = req.userAuth;
 
-    const [customerFound, cart] = await Promise.all([
-      Customer.findById(customerId),
-      CustomerCart.findOne({ customerId }),
-    ]);
+//     const [customer, cart] = await Promise.all([
+//       Customer.findById(customerId),
+//       CustomerCart.findOne({ customerId }),
+//     ]);
 
-    if (!customerFound) return next(appError("Customer not found", 404));
-    if (!cart) return next(appError("Cart not found", 404));
+//     if (!customer) return next(appError("Customer not found", 404));
+//     if (!cart) return next(appError("Cart not found", 404));
 
-    // Find the promo code
-    const promoCodeFound = await PromoCode.findOne({
-      promoCode,
-      geofenceId: customerFound.customerDetails.geofenceId,
-      status: true,
-      deliveryMode: cart.cartDetail.deliveryMode,
-    });
+//     const { geofenceId } = customer.customerDetails;
+//     const { deliveryMode, deliveryOption } = cart.cartDetail;
+//     const { itemTotal, discountedAmount = 0 } = cart.billDetail;
 
-    if (!promoCodeFound) {
-      return next(appError("Promo code not found or inactive", 404));
-    }
+//     console.log("Checking promo code with:", {
+//       promoCode,
+//       geofenceId,
+//       deliveryMode,
+//     });
 
-    // Check if promo code's merchant matches cart's merchant
-    if (!promoCodeFound.merchantId.includes(cart.merchantId.toString())) {
-      return next(
-        appError("Promo code is not applicable for this merchant", 400)
-      );
-    }
+//     // Find the promo code
+//     const promoCodeFound = await PromoCode.findOne({
+//       promoCode,
+//       geofenceId,
+//       status: true,
+//       deliveryMode,
+//     });
 
-    const { itemTotal, discountedAmount = 0 } = cart.billDetail;
-    const totalCartPrice =
-      cart.cartDetail.deliveryOption === "Scheduled"
-        ? calculateScheduledCartValue(cart, promoCodeFound)
-        : itemTotal;
+//     if (!promoCodeFound) {
+//       return next(appError("Promo code not found or inactive", 404));
+//     }
 
-    if (totalCartPrice < promoCodeFound.minOrderAmount) {
-      return next(
-        appError(
-          `Minimum order amount is ${promoCodeFound.minOrderAmount}`,
-          400
-        )
-      );
-    }
+//     const {
+//       merchantId: promoMerchants,
+//       minOrderAmount,
+//       fromDate,
+//       toDate,
+//       noOfUserUsed,
+//       maxAllowedUsers,
+//     } = promoCodeFound;
 
-    const now = new Date();
-    if (now < promoCodeFound.fromDate || now > promoCodeFound.toDate) {
-      return next(appError("Promo code is not valid at this time", 400));
-    }
+//     // Check if promo code's merchant matches cart's merchant
+//     const merchantId = cart.merchantId.toString();
+//     if (!promoMerchants.includes(merchantId)) {
+//       return next(
+//         appError("Promo code is not applicable for this merchant", 400)
+//       );
+//     }
 
-    if (promoCodeFound.noOfUserUsed >= promoCodeFound.maxAllowedUsers) {
-      return next(appError("Promo code usage limit reached", 400));
-    }
+//     const totalCartPrice =
+//       deliveryOption === "Scheduled"
+//         ? calculateScheduledCartValue(cart, promoCodeFound)
+//         : itemTotal;
 
-    const promoCodeDiscount = calculatePromoCodeDiscount(
-      promoCodeFound,
-      totalCartPrice
-    );
+//     if (totalCartPrice < minOrderAmount) {
+//       return next(
+//         appError(`Minimum order amount should be ${minOrderAmount}`, 400)
+//       );
+//     }
 
-    const calculatedDiscount = promoCodeDiscount + discountedAmount;
+//     const now = new Date();
+//     if (now < fromDate || now > toDate) {
+//       return next(appError("Promo code is not valid at this time", 400));
+//     }
 
-    // Apply discount
-    const updatedCart = applyPromoCodeDiscount(
-      cart,
-      promoCodeFound,
-      Number(calculatedDiscount.toFixed(2))
-    );
+//     if (noOfUserUsed >= maxAllowedUsers) {
+//       return next(appError("Promo code usage limit reached", 400));
+//     }
 
-    await updatedCart.save();
+//     const promoDiscount = calculatePromoCodeDiscount(
+//       promoCodeFound,
+//       totalCartPrice
+//     );
 
-    const populatedCart = await populateCartDetails(customerId);
+//     const totalDiscount = Number((promoDiscount + discountedAmount).toFixed(2));
 
-    res.status(200).json(populatedCart);
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
+//     // Apply discount
+//     const updatedCart = applyPromoCodeDiscount(
+//       cart,
+//       promoCodeFound,
+//       totalDiscount
+//     );
+
+//     await updatedCart.save();
+
+//     res.status(200).json({
+//       success: true,
+//       message: `Promo code ${promoCode} applied`,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 // Order Product
 const orderPaymentController = async (req, res, next) => {
@@ -1948,11 +1965,10 @@ const orderPaymentController = async (req, res, next) => {
               );
             }
 
-            const walletTransaction =
-              customer.customerDetails.walletTransaction.find(
-                (transaction) =>
-                  transaction.orderId.toString() === orderId.toString()
-              );
+            const walletTransaction = customer.walletTransactionDetail.find(
+              (transaction) =>
+                transaction.orderId.toString() === orderId.toString()
+            );
 
             walletTransaction.orderId = newOrderCreated._id;
 
@@ -2833,12 +2849,12 @@ module.exports = {
   getTotalRatingOfMerchantController,
   addOrUpdateCartItemController,
   getDeliveryOptionOfMerchantController,
-  applyPromoCodeController,
+  // applyPromoCodeController,
   orderPaymentController,
   verifyOnlinePaymentController,
   cancelOrderBeforeCreationController,
   clearCartController,
-  applyTipController,
+  // applyTipController,
   confirmOrderDetailController,
   getCartBillController,
   getOrderTrackingDetail,

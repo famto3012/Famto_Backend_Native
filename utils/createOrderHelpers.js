@@ -146,7 +146,6 @@ const findOrCreateCustomer = async ({
   }
 
   if (addressType) {
-    console.log("Here");
     const address = getAddressDetails(
       existingCustomer,
       addressType,
@@ -180,7 +179,7 @@ const findOrCreateCustomer = async ({
     return updatedCustomer;
   }
 
-  if (newCustomer && deliveryMode === "Take Away") {
+  if (newCustomer) {
     const customer = await Customer.create({
       fullName: newCustomer?.fullName,
       email: newCustomer?.email,
@@ -458,6 +457,8 @@ const updateCustomerAddress = async (
 ) => {
   const location = [newAddress.latitude, newAddress.longitude];
   newAddress.coordinates = location;
+
+  console.log("addressType", addressType);
 
   switch (addressType) {
     case "home":
@@ -1629,6 +1630,15 @@ const processHomeDeliveryDetailInApp = async (
   };
 };
 
+const locationArraysEqual = (a, b) => {
+  return (
+    Array.isArray(a) &&
+    Array.isArray(b) &&
+    a.length === b.length &&
+    a.every((val, i) => val === b[i])
+  );
+};
+
 module.exports = {
   // Invoice
   findOrCreateCustomer,
@@ -1661,4 +1671,5 @@ module.exports = {
   // App
   processDeliveryDetailInApp,
   processHomeDeliveryDetailInApp,
+  locationArraysEqual,
 };

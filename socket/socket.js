@@ -3,7 +3,6 @@ const http = require("http");
 const express = require("express");
 const Task = require("../models/Task");
 const Agent = require("../models/Agent");
-const Customer = require("../models/Customer");
 const Merchant = require("../models/Merchant");
 const turf = require("@turf/turf");
 const Order = require("../models/Order");
@@ -137,28 +136,28 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
   try {
     // Try sending with the first project
     await admin1.messaging(app1).send(mes);
-    console.log(
-      `Successfully sent message with project1 for token: ${fcmToken}`
-    );
+    // console.log(
+    //   `Successfully sent message with project1 for token: ${fcmToken}`
+    // );
     return true;
   } catch (error1) {
-    console.error(
-      `Error sending message with project1 for token: ${fcmToken}`,
-      error1
-    );
+    // console.error(
+    //   `Error sending message with project1 for token: ${fcmToken}`,
+    //   error1
+    // );
 
     try {
       // Try sending with the second project
       await admin2.messaging(app2).send(mes);
-      console.log(
-        `Successfully sent message with project2 for token: ${fcmToken}`
-      );
+      // console.log(
+      //   `Successfully sent message with project2 for token: ${fcmToken}`
+      // );
       return true;
     } catch (error2) {
-      console.error(
-        `Error sending message with project2 for token: ${fcmToken}`,
-        error2
-      );
+      // console.error(
+      //   `Error sending message with project2 for token: ${fcmToken}`,
+      //   error2
+      // );
       return false;
     }
   }
@@ -302,6 +301,7 @@ const sendSocketData = (userId, eventName, data) => {
 
 const getUserLocationFromSocket = (userId) => {
   if (userSocketMap[userId] && userSocketMap[userId]?.location) {
+    console.log(`Location of ${userId} is ${userSocketMap[userId].location}`);
     return userSocketMap[userId].location;
   }
 
@@ -797,12 +797,15 @@ io.on("connection", async (socket) => {
 
   // User location update socket
   socket.on("locationUpdated", async ({ latitude, longitude, userId }) => {
+    console.log("Updating agent location", userId);
+    console.log("location", { latitude, longitude });
+
     if (!latitude || !longitude) return;
 
     const location = [latitude, longitude];
 
     if (userSocketMap[userId]) {
-      userSocketMap.location = location;
+      userSocketMap[userId].location = location;
     }
   });
 
@@ -855,7 +858,7 @@ io.on("connection", async (socket) => {
         by: agent.fullName,
         userId: agent._id,
         date: new Date(),
-        location: agent?.location,
+        location: getUserLocationFromSocket(agentId),
       };
 
       // Update order and task status
@@ -1107,6 +1110,21 @@ io.on("connection", async (socket) => {
           success: false,
         });
       }
+
+      const eventName = "agentPickupStarted";
+
+      if (taskFound.pickupDetail.pickupStatus === "Started") {
+        const agentSocketId = userSocketMap[agentId]?.socketId;
+        if (agentSocketId) {
+          io.to(agentSocketId).emit(eventName, {
+            data: "Pickup successfully started",
+            success: true,
+          });
+        }
+
+        return;
+      }
+
       if (taskFound.pickupDetail.pickupStatus === "Completed") {
         return socket.emit("error", {
           message: "Pickup is already completed",
@@ -1127,12 +1145,16 @@ io.on("connection", async (socket) => {
           ? location
           : getUserLocationFromSocket(agentId);
 
+      console.log("agentLocation", agentLocation);
+
       if (!agentLocation || agentLocation?.length !== 2) {
         return socket.emit("error", {
           message: "Invalid location",
           success: false,
         });
       }
+
+      console.log("Have location");
 
       const stepperDetail = {
         by: agentFound.fullName,
@@ -1181,8 +1203,6 @@ io.on("connection", async (socket) => {
       }
 
       await Promise.all([orderFound.save(), taskFound.save()]);
-
-      const eventName = "agentPickupStarted";
 
       const data = {
         orderDetailStepper: stepperDetail,
@@ -1454,6 +1474,8 @@ io.on("connection", async (socket) => {
         Task.findById(taskId),
       ]);
 
+      const eventName = "agentDeliveryStarted";
+
       if (!agentFound) {
         return socket.emit("error", {
           message: "Agent not found",
@@ -1496,11 +1518,21 @@ io.on("connection", async (socket) => {
       }
 
       let distanceCoveredByAgent = 0;
-      // if (taskFound.deliveryMode !== "Custom Order") {
-      distanceCoveredByAgent =
-        (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-        (orderFound?.orderDetail?.distance || 0);
-      // }
+
+      if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+        const { distanceInKM } = await getDistanceFromPickupToDelivery(
+          location,
+          orderFound.orderDetail.deliveryLocation
+        );
+
+        distanceCoveredByAgent =
+          (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+          distanceInKM;
+      } else {
+        distanceCoveredByAgent =
+          (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+          (orderFound?.orderDetail?.distance || 0);
+      }
 
       taskFound.pickupDetail.pickupStatus = "Completed";
       taskFound.deliveryDetail.deliveryStatus = "Started";
@@ -1520,13 +1552,12 @@ io.on("connection", async (socket) => {
       orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
 
       if (orderFound.orderDetail.deliveryMode === "Custom Order") {
-        await updateBillOfCustomOrderInDelivery(orderFound, taskFound);
+        await updateBillOfCustomOrderInDelivery(orderFound, taskFound, socket);
       }
 
       await Promise.all([orderFound.save(), taskFound.save()]);
 
       // Notify roles
-      const eventName = "agentDeliveryStarted";
       const { rolesToNotify } = await findRolesToNotify(eventName);
 
       for (const role of rolesToNotify) {
@@ -1569,8 +1600,10 @@ io.on("connection", async (socket) => {
           success: true,
         });
       }
+
+      console.log("6");
     } catch (err) {
-      console.log("Agent failed to start delivery");
+      console.log("Agent failed to start delivery", err);
 
       return socket.emit("error", {
         message: `Error in starting delivery trip: ${err}`,
@@ -1627,6 +1660,8 @@ io.on("connection", async (socket) => {
             ? location
             : getUserLocationFromSocket(agentId);
 
+        console.log("locations", { deliveryLocation, agentLocation });
+
         if (!agentLocation || agentLocation?.length !== 2) {
           return socket.emit("error", {
             message: "Invalid location",
@@ -1639,6 +1674,8 @@ io.on("connection", async (socket) => {
           turf.point(agentLocation),
           { units: "kilometers" }
         );
+
+        console.log("distance", distance);
 
         if (distance < maxRadius) {
           const pickupStartAt = taskFound?.pickupDetail?.startTime;
@@ -1763,8 +1800,6 @@ io.on("connection", async (socket) => {
     "cancelCustomOrderByAgent",
     async ({ status, description, orderId, latitude, longitude }) => {
       try {
-        // console.log("Trying to cancel order");
-
         const [orderFound, taskFound] = await Promise.all([
           Order.findById(orderId),
           Task.findOne({ orderId }),
@@ -1814,6 +1849,8 @@ io.on("connection", async (socket) => {
         const newDistance = parseFloat(distanceInKM);
 
         orderFound.orderDetail.distance = oldDistance + newDistance;
+        orderFound.detailAddedByAgent.distanceCoveredByAgent =
+          orderFound.detailAddedByAgent.distanceCoveredByAgent + newDistance;
 
         // Calculate delivery charges
         const { deliveryCharges } = await getDeliveryAndSurgeCharge(

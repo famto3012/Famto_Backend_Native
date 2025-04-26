@@ -14,6 +14,7 @@ const csvWriter = require("csv-writer").createObjectCsvWriter;
 const fs = require("fs");
 const BusinessCategory = require("../../../../models/BusinessCategory");
 const ActivityLog = require("../../../../models/ActivityLog");
+const Merchant = require("../../../../models/Merchant");
 
 // ------------------------------------------------------
 // ----------------For Merchant and Admin----------------
@@ -849,6 +850,17 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
     // Create a readable stream from the CSV data
     const stream = Readable.from(csvData);
 
+    const merchant = await Merchant.findById(merchantId)
+      .select("merchantDetail.businessCategoryId")
+      .populate("merchantDetail.businessCategoryId", "title")
+      .lean();
+
+    const businessCategoryTitles =
+      merchant?.merchantDetail?.businessCategoryId?.map((cat) => cat.title);
+
+    const categoryTypeArray = ["Veg", "Non-veg", "Both"];
+    const productTypeArray = ["Veg", "Non-veg", "Other"];
+
     // Parse the CSV data
     stream
       .pipe(csvParser())
@@ -862,6 +874,30 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
           const categoryName = row["Category Name*"]?.trim();
           const productName = row["Product Name*"]?.trim();
           const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
+          const categoryType = row["Category Type*"]?.trim();
+          const productType = row["Product Type*"]?.trim();
+
+          if (!businessCategoryTitles.includes(businessCategoryName)) {
+            await deleteFromFirebase(fileUrl);
+            return next(
+              appError(
+                "One or more business categories does not match the merchant's business categories",
+                400
+              )
+            );
+          }
+
+          if (!categoryTypeArray.includes(categoryType)) {
+            await deleteFromFirebase(fileUrl);
+            return next(
+              appError("One or more category types are invalid", 400)
+            );
+          }
+
+          if (!productTypeArray.includes(productType)) {
+            await deleteFromFirebase(fileUrl);
+            return next(appError("One or more product types are invalid", 400));
+          }
 
           if (!categoriesMap.has(categoryKey)) {
             categoriesMap.set(categoryKey, {
@@ -869,7 +905,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
                 merchantId,
                 businessCategoryName, // Ensure businessCategoryName is set correctly
                 categoryName,
-                type: row["Category Type*"]?.trim(),
+                type: categoryType,
                 status:
                   row["Category Status*"]?.trim() === "TRUE" ||
                   row["Category Status*"]?.trim() === "true"
@@ -926,7 +962,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
               preparationTime: row["Preparation Time"]?.trim() || "",
               description: row["Description"]?.trim() || "",
               longDescription: row["Long Description"]?.trim() || "",
-              type: row["Product Type*"]?.trim(),
+              type: productType,
               inventory:
                 row["Inventory"]?.trim() === "TRUE" ||
                 row["Inventory"]?.trim() === "true"

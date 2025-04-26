@@ -32,6 +32,7 @@ const {
   prepareOrderDetails,
   clearCart,
   updateCustomerTransaction,
+  locationArraysEqual,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -910,18 +911,18 @@ const confirmOrderController = async (req, res, next) => {
         if (!task) return next(appError("Task not created"));
       }
 
-      await reduceProductAvailableQuantity(
-        orderFound.purchasedItems,
-        orderFound.merchantId?._id
-      );
-
-      await orderFound.save();
-
-      await ActivityLog.create({
-        userId: req.userAuth,
-        userType: req.userRole,
-        description: `Order (#${orderId}) is confirmed by Merchant (${req.userName} - ${req.userAuth})`,
-      });
+      await Promise.all([
+        reduceProductAvailableQuantity(
+          orderFound.purchasedItems,
+          orderFound.merchantId
+        ),
+        orderFound.save(),
+        ActivityLog.create({
+          userId: req.userAuth,
+          userType: req.userRole,
+          description: `Order (#${orderId}) is confirmed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+        }),
+      ]);
 
       const eventName = "orderAccepted";
 
@@ -1024,8 +1025,7 @@ const rejectOrderController = async (req, res, next) => {
 
       updateOrderStatus(orderFound);
 
-      await customerFound.save();
-      await orderFound.save();
+      await Promise.all([customerFound.save(), orderFound.save()]);
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       updateOrderStatus(orderFound);
 
@@ -1058,14 +1058,13 @@ const rejectOrderController = async (req, res, next) => {
       }
       updateOrderStatus(orderFound);
 
-      await orderFound.save();
-      await customerFound.save();
+      await Promise.all([orderFound.save(), customerFound.save()]);
     }
 
     await ActivityLog.create({
       userId: req.userAuth,
       userType: req.userRole,
-      description: `Order (#${orderId}) is rejected by Merchant (${req.userName} - ${req.userAuth})`,
+      description: `Order (#${orderId}) is rejected by ${req.userRole} (${req.userName} - ${req.userAuth})`,
     });
 
     const eventName = "orderRejected";
@@ -1825,17 +1824,30 @@ const createInvoiceController = async (req, res, next) => {
       newPickupAddress,
       newDeliveryAddress,
       vehicleType,
+      instructionInPickup,
+      instructionInDelivery,
       addedTip = 0,
       // ifScheduled,
     } = req.body;
-
-    console.dir(req.body, { depth: null });
 
     const merchantId = req.userAuth;
     const merchantFound = await Merchant.findById(merchantId);
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
-    const customerAddress = newCustomerAddress;
+    const newPickLocation = [
+      newPickupAddress?.latitude,
+      newPickupAddress?.longitude,
+    ];
+    const merchantLocation = merchantFound.merchantDetail.location;
+
+    const customerAddressFromPickOrDrop = locationArraysEqual(
+      newPickLocation,
+      merchantLocation
+    )
+      ? newDeliveryAddress
+      : newPickupAddress;
+
+    const customerAddress = newCustomerAddress || customerAddressFromPickOrDrop;
     const addressType = customerAddressType || "";
     const otherAddressId = customerAddressOtherAddressId || "";
 
@@ -1846,9 +1858,9 @@ const createInvoiceController = async (req, res, next) => {
       deliveryMode,
       addressType,
       otherAddressId,
-      formattedErrors,
     });
-    if (!customer) return res.status(409).json({ errors: formattedErrors });
+
+    if (!customer) return next(appError("Error in getting customer", 400));
 
     const {
       pickupLocation,
@@ -1927,7 +1939,8 @@ const createInvoiceController = async (req, res, next) => {
             pickupAddress,
             deliveryLocation,
             deliveryAddress,
-            instructionToDeliveryAgent,
+            instructionInPickup,
+            instructionInDelivery,
             distance: distanceInKM,
             startDate: scheduledDetails?.startDate || null,
             endDate: scheduledDetails?.endDate || null,
