@@ -20,6 +20,11 @@ const appBannerSchema = new mongoose.Schema(
       ref: "Geofence",
       required: true,
     },
+    businessCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BusinessCategory",
+      required: true,
+    },
     status: {
       type: Boolean,
       default: true,

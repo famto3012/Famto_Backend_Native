@@ -284,7 +284,10 @@ const searchCustomerByNameForOrderController = async (req, res, next) => {
     }
 
     const searchResults = await Customer.find({
-      fullName: { $regex: query.trim(), $options: "i" },
+      $or: [
+        { fullName: { $regex: query.trim(), $options: "i" } },
+        { phoneNumber: { $regex: query.trim(), $options: "i" } },
+      ],
       "customerDetails.isBlocked": false,
     })
       .select(
@@ -401,8 +404,8 @@ const getSingleCustomerController = async (req, res, next) => {
       isBlocked: customerFound?.customerDetails?.isBlocked || false,
       registrationDate: formatDate(customerFound.createdAt),
       walletBalance: customerFound?.customerDetails?.walletBalance,
-      homeAddress: customerFound?.customerDetails?.homeAddress || {},
-      workAddress: customerFound?.customerDetails?.workAddress || {},
+      homeAddress: customerFound?.customerDetails?.homeAddress ?? null,
+      workAddress: customerFound?.customerDetails?.workAddress ?? null,
       otherAddress: customerFound?.customerDetails?.otherAddress || [],
       walletDetails: formattedCustomerTransactions || [],
       orderDetails: formattedCustomerOrders || [],

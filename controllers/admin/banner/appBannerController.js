@@ -20,7 +20,7 @@ const addAppBannerController = async (req, res, next) => {
   }
 
   try {
-    const { name, merchantId, geofenceId } = req.body;
+    const { name, merchantId, geofenceId, businessCategoryId } = req.body;
 
     let imageUrl = "";
     if (req.file) {
@@ -38,6 +38,7 @@ const addAppBannerController = async (req, res, next) => {
       geofenceId,
       imageUrl,
       merchantId,
+      businessCategoryId,
     });
 
     newAppBanner = await newAppBanner.populate("geofenceId", "name");
@@ -54,7 +55,7 @@ const addAppBannerController = async (req, res, next) => {
 const editAppBannerController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, merchantId, geofenceId } = req.body;
+    const { name, merchantId, geofenceId, businessCategoryId } = req.body;
 
     const appBanner = await AppBanner.findById(id);
 
@@ -84,6 +85,7 @@ const editAppBannerController = async (req, res, next) => {
         imageUrl, // Only update imageUrl if a new file is uploaded
         merchantId,
         geofenceId,
+        businessCategoryId,
       },
       { new: true }
     );
