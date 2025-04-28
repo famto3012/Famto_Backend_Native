@@ -939,8 +939,6 @@ const applyPromoCodeDiscount = (cart, promo, discountValue) => {
     promoCodeDiscount = 0,
   } = cart.billDetail;
 
-  console.log({ detail: cart.billDetail });
-
   const { appliedOn, promoCode } = promo;
 
   let discountAmount = 0;
@@ -965,8 +963,6 @@ const applyPromoCodeDiscount = (cart, promo, discountValue) => {
       discountAmount,
     0
   );
-
-  console.log({ discountAmount });
 
   cart.billDetail = {
     ...cart.billDetail,

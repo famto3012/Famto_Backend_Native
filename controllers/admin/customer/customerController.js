@@ -657,15 +657,13 @@ const addCustomerFromCSVController = async (req, res, next) => {
 
     // Upload the CSV file to Firebase and get the download URL
     const fileUrl = await uploadToFirebase(req.file, "csv-uploads");
-    console.log("File uploaded to Firebase, file URL:", fileUrl); // Log the file URL
 
     const customers = [];
 
     // Download the CSV data from Firebase Storage
     const response = await axios.get(fileUrl);
-    console.log("response", response);
+
     const csvData = response.data;
-    console.log("CSV Data received:", csvData); // Log the received CSV data
 
     // Create a readable stream from the CSV data
     const stream = Readable.from(csvData);
@@ -674,7 +672,6 @@ const addCustomerFromCSVController = async (req, res, next) => {
     stream
       .pipe(csvParser())
       .on("data", (row) => {
-        console.log("Parsed row:", row); // Log each row to ensure proper parsing
         const isRowEmpty = Object.values(row).every(
           (value) => value.trim() === ""
         );
@@ -695,8 +692,6 @@ const addCustomerFromCSVController = async (req, res, next) => {
         }
       })
       .on("end", async () => {
-        console.log("Finished parsing CSV data. Customers:", customers); // Log the final customers array
-
         try {
           const customerPromise = customers.map(async (customerData) => {
             // Check if the customer already exists
@@ -706,8 +701,6 @@ const addCustomerFromCSVController = async (req, res, next) => {
                 { phoneNumber: customerData.phoneNumber },
               ],
             });
-
-            console.log("Existing customer check:", existingCustomer); // Log if customer exists
 
             if (existingCustomer) {
               // Prepare the update object
@@ -720,14 +713,12 @@ const addCustomerFromCSVController = async (req, res, next) => {
               if (customerData.phoneNumber)
                 updateData.phoneNumber = customerData.phoneNumber;
 
-              console.log("Updating customer:", existingCustomer._id); // Log the update operation
               await Customer.findByIdAndUpdate(
                 existingCustomer._id,
                 { $set: updateData },
                 { new: true }
               );
             } else {
-              console.log("Creating new customer:", customerData); // Log the creation operation
               await Customer.create({
                 ...customerData,
                 "customerDetails.isBlocked": false,
@@ -747,7 +738,6 @@ const addCustomerFromCSVController = async (req, res, next) => {
           next(appError(err.message));
         } finally {
           // Ensure file is deleted from Firebase
-          console.log("Deleting file from Firebase:", fileUrl); // Log before deletion
           await deleteFromFirebase(fileUrl);
         }
       })

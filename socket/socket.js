@@ -1145,16 +1145,12 @@ io.on("connection", async (socket) => {
           ? location
           : getUserLocationFromSocket(agentId);
 
-      console.log("agentLocation", agentLocation);
-
       if (!agentLocation || agentLocation?.length !== 2) {
         return socket.emit("error", {
           message: "Invalid location",
           success: false,
         });
       }
-
-      console.log("Have location");
 
       const stepperDetail = {
         by: agentFound.fullName,
@@ -1600,8 +1596,6 @@ io.on("connection", async (socket) => {
           success: true,
         });
       }
-
-      console.log("6");
     } catch (err) {
       console.log("Agent failed to start delivery", err);
 
@@ -1660,8 +1654,6 @@ io.on("connection", async (socket) => {
             ? location
             : getUserLocationFromSocket(agentId);
 
-        console.log("locations", { deliveryLocation, agentLocation });
-
         if (!agentLocation || agentLocation?.length !== 2) {
           return socket.emit("error", {
             message: "Invalid location",
@@ -1674,8 +1666,6 @@ io.on("connection", async (socket) => {
           turf.point(agentLocation),
           { units: "kilometers" }
         );
-
-        console.log("distance", distance);
 
         if (distance < maxRadius) {
           const pickupStartAt = taskFound?.pickupDetail?.startTime;

@@ -311,11 +311,6 @@ const processSchedule = (ifScheduled) => {
     adjustedEndDate
   );
 
-  console.log("adjustedStartDate", adjustedStartDate);
-  console.log("adjustedEndDate", adjustedEndDate);
-  console.log("adjustedTime", adjustedTime);
-  console.log("numOfDays", numOfDays);
-
   return {
     startDate: adjustedStartDate,
     endDate: adjustedEndDate,
@@ -462,8 +457,6 @@ const updateCustomerAddress = async (
   const location = [newAddress.latitude, newAddress.longitude];
   newAddress.coordinates = location;
 
-  console.log("addressType", addressType);
-
   switch (addressType) {
     case "home":
       customer.customerDetails.homeAddress = newAddress;
@@ -586,7 +579,6 @@ const handleAddressDetails = async (
 
   // Set pickup and delivery details for "Pick and Drop"
   if (deliveryMode === "Pick and Drop") {
-    console.log("In pick");
     if (newPickupAddress) {
       pickupLocation = [newPickupAddress.latitude, newPickupAddress.longitude];
       pickupAddress = newPickupAddress;
@@ -601,7 +593,6 @@ const handleAddressDetails = async (
     }
 
     if (pickUpAddressType) {
-      console.log("Have pick add type");
       const address = getAddressDetails(
         customer,
         pickUpAddressType,
@@ -614,7 +605,6 @@ const handleAddressDetails = async (
     }
 
     if (newDeliveryAddress) {
-      console.log("Have new delivery addre");
       deliveryLocation = [
         newDeliveryAddress.latitude,
         newDeliveryAddress.longitude,

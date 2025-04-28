@@ -69,7 +69,6 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
 
       if (agentPricing) {
         if (agentPricing?.type && agentPricing?.type.startsWith("Monthly")) {
-          console.log("Monthly Agent");
           if (agentPricing?.type === "Monthly-Full-Time") {
             const perHourBaseFare = Number(
               (agentPricing?.baseFare / agentPricing?.minLoginHours).toFixed(2)
@@ -455,8 +454,6 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       });
     }
 
-    console.log("customerPricing", customerPricing);
-
     const {
       baseFare,
       baseDistance,
@@ -472,29 +469,19 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       fareAfterBaseDistance
     );
 
-    console.log("deliveryCharge", deliveryCharge);
-
     const minutesWaitedAtPickup = Math.floor(
       (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
     );
-
-    console.log("minutesWaitedAtPickup", minutesWaitedAtPickup);
 
     if (minutesWaitedAtPickup > waitingTime) {
       const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
       calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
     }
 
-    console.log("Calculating");
-
     const totalTaskTime = new Date(now) - new Date(pickupStartAt);
-
-    console.log("totalTaskTime", totalTaskTime);
 
     // Convert the difference to minutes
     const diffInHours = Math.ceil(totalTaskTime / 3600000);
-
-    console.log("diffInHours", diffInHours);
 
     let calculatedPurchaseFare = 0;
 
@@ -506,8 +493,6 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
 
     const calculatedDeliveryFare =
       deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
-
-    console.log("calculatedDeliveryFare", calculatedDeliveryFare);
 
     order.billDetail.waitingCharges = calculatedDeliveryFare;
     order.billDetail.deliveryCharge = calculatedDeliveryFare;

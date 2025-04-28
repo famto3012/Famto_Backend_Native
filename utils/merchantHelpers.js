@@ -111,10 +111,6 @@ const resetStatusManualToggleForAllMerchants = async () => {
       { $set: { statusManualToggle: false } } // Update the statusManualToggle to false
     );
 
-    console.log(
-      `Successfully updated ${result.modifiedCount} merchants to set statusManualToggle to false.`
-    );
-
     return result;
   } catch (error) {
     console.error(
