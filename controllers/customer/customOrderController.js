@@ -137,8 +137,6 @@ const addItemsToCartController = async (req, res, next) => {
   try {
     const { itemName, quantity, unit, numOfUnits } = req.body;
 
-    console.log(req.body);
-
     const customerId = req.userAuth;
 
     const cart = await PickAndCustomCart.findOne({
@@ -232,14 +230,11 @@ const editItemInCartController = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    console.log("Cart found");
-
     const itemIndex = cart.items.findIndex(
       (item) => item.itemId.toString() === itemId
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
-    console.log("Item found");
 
     let itemImageURL = cart.items[itemIndex].itemImageURL;
 
@@ -496,8 +491,6 @@ const addDeliveryAddressController = async (req, res, next) => {
 const getCustomCartBill = async (req, res, next) => {
   try {
     const { cartId } = req.query;
-
-    console.log("cartId", cartId);
 
     const cart = await PickAndCustomCart.findById(cartId);
 
