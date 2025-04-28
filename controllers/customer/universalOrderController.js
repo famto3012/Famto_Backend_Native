@@ -64,8 +64,9 @@ const getAllBusinessCategoryController = async (req, res, next) => {
 
     const geofence = await geoLocation(latitude, longitude);
 
-    if (!geofence)
-      return next(appError("Customer is outside the listed geofences", 500));
+    if (!geofence) {
+      return res.status(200).json({ outside: true });
+    }
 
     const allBusinessCategories = await BusinessCategory.find({
       status: true,
@@ -84,6 +85,7 @@ const getAllBusinessCategoryController = async (req, res, next) => {
 
     res.status(200).json({
       message: "All business categories",
+      outside: false,
       data: formattedResponse,
     });
   } catch (err) {

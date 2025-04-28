@@ -152,6 +152,10 @@ const setSelectedGeofence = async (req, res, next) => {
 
     const geofence = await geoLocation(latitude, longitude, next);
 
+    if (!geofence) {
+      return next(appError("Selected location is outside our geofence", 400));
+    }
+
     const customerFound = await Customer.findById(req.userAuth);
 
     if (!customerFound) return next(appError("Customer not found", 404));
@@ -1254,13 +1258,24 @@ const getCustomerAppBannerController = async (req, res, next) => {
     }
 
     const allBanners = await AppBanner.find(matchCriteria).select(
-      "name imageUrl"
+      "name imageUrl businessCategoryId"
     );
 
-    const formattedResponse = allBanners.map((banner) => ({
-      name: banner.name,
-      imageUrl: banner.imageUrl,
-    }));
+    const formattedResponse = await Promise.all(
+      allBanners.map(async (banner) => {
+        const merchant = await Merchant.findById(banner.merchantId)
+          .select("merchantDetail.merchantName")
+          .lean();
+
+        return {
+          name: banner.name,
+          imageUrl: banner.imageUrl,
+          businessCategoryId: banner.businessCategoryId,
+          merchantId: banner.merchantId,
+          merchantName: merchant?.merchantDetail?.merchantName || "",
+        };
+      })
+    );
 
     res.status(200).json({ message: "Banner", data: formattedResponse });
   } catch (err) {

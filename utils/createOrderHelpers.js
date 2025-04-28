@@ -58,7 +58,9 @@ const findOrCreateCustomer = async ({
         );
 
         if (!geofence) {
-          return { message: "User coordinates are outside defined geofences" };
+          throw new Error(
+            "Customer's coordinates are outside defined geofences"
+          );
         }
 
         const updatedCustomer = await Customer.findByIdAndUpdate(
@@ -85,7 +87,9 @@ const findOrCreateCustomer = async ({
         );
 
         if (!geofence) {
-          return { message: "User coordinates are outside defined geofences" };
+          throw new Error(
+            "Customer's coordinates are outside defined geofences"
+          );
         }
 
         const updatedCustomer = await Customer.findByIdAndUpdate(
@@ -128,7 +132,7 @@ const findOrCreateCustomer = async ({
     );
 
     if (!geofence) {
-      return { message: "User coordinates are outside defined geofences" };
+      throw new Error("Customer's coordinates are outside defined geofences");
     }
 
     const updatedCustomer = await Customer.findByIdAndUpdate(
@@ -162,7 +166,7 @@ const findOrCreateCustomer = async ({
     );
 
     if (!geofence) {
-      return { message: "User coordinates are outside defined geofences" };
+      throw new Error("Customer's coordinates are outside defined geofences");
     }
 
     const updatedCustomer = await Customer.findByIdAndUpdate(
@@ -209,7 +213,7 @@ const findOrCreateCustomer = async ({
     );
 
     if (!geofence) {
-      return { message: "User coordinates are outside defined geofences" };
+      throw new Error("Customer's coordinates are outside defined geofences");
     }
 
     const updatedNewCustomer = {
