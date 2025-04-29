@@ -39,6 +39,7 @@ const Product = require("../../../models/Product");
 const ActivityLog = require("../../../models/ActivityLog");
 const MerchantSubscription = require("../../../models/MerchantSubscription");
 const Order = require("../../../models/Order");
+const MerchantPayout = require("../../../models/MerchantPayout");
 
 // Helper function to handle null or empty string values
 const convertNullValues = (obj) => {
@@ -1763,6 +1764,10 @@ const downloadMerchantCSVController = async (req, res, next) => {
         phoneNumber: merchant?.phoneNumber || "",
         registrationStatus: merchant?.isApproved || "",
         currentStatus: merchant?.status ? "Open" : "Closed",
+        subscriptionStatus:
+          merchant?.merchantDetail?.pricing?.length === 0
+            ? "Inactive"
+            : "Active",
         isBlocked: merchant?.isBlocked ? "True" : "False",
         reasonForBlockingOrDeleting:
           merchant?.reasonForBlockingOrDeleting || "",
@@ -1804,6 +1809,7 @@ const downloadMerchantCSVController = async (req, res, next) => {
       { id: "phoneNumber", title: "Phone Number" },
       { id: "registrationStatus", title: "Registration Status" },
       { id: "currentStatus", title: "Current Status" },
+      { id: "subscriptionStatus", title: "Subscription Status" },
       { id: "isBlocked", title: "Is Blocked" },
       {
         id: "reasonForBlockingOrDeleting",
@@ -1924,20 +1930,17 @@ const getMerchantPayoutController = async (req, res, next) => {
       timezoneOffset = 0,
     } = req.query;
 
-    console.log("startDate:", startDate);
-    console.log("endDate:", endDate);
-
     // Parse and normalize pagination inputs
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     const skip = (page - 1) * limit;
 
     // Initial filter criteria setup
-    const filterCriteria = { "payoutDetail.0": { $exists: true } };
+    const filterCriteria = {};
 
     // Apply search by merchant name if query is provided
     if (query && query !== "") {
-      filterCriteria["merchantDetail.merchantName"] = {
+      filterCriteria["merchantName"] = {
         $regex: query,
         $options: "i",
       };
@@ -1945,29 +1948,20 @@ const getMerchantPayoutController = async (req, res, next) => {
 
     // Filter by merchantId if specified
     if (merchantId && merchantId.toLowerCase() !== "all")
-      filterCriteria["_id"] = merchantId;
+      filterCriteria["merchantId"] = merchantId;
 
     // Filter by geofenceId if specified
     if (geofenceId && geofenceId.toLowerCase() !== "all") {
-      filterCriteria["merchantDetail.geofenceId"] =
+      filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    }
+
+    if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
+      filterCriteria["isSettled"] = paymentStatus;
     }
 
     // Set start and end date boundaries, adjusting for timezone offset
     const dateFilter = {};
-    // if (startDate) {
-    //   startDate = new Date(startDate);
-    //   startDate.setHours(0, 0, 0, 0);
-    //   startDate.setMinutes(startDate.getMinutes() - timezoneOffset);
-    //   dateFilter.$gte = startDate;
-    // }
-
-    // if (endDate) {
-    //   endDate = new Date(endDate);
-    //   endDate.setHours(23, 59, 59, 999);
-    //   endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
-    //   dateFilter.$lte = endDate;
-    // }
 
     if (startDate) {
       startDate = new Date(
@@ -1984,83 +1978,26 @@ const getMerchantPayoutController = async (req, res, next) => {
       dateFilter.$lte = endDate;
     }
 
-    console.log("dateFilter", dateFilter);
+    if (startDate || endDate) {
+      filterCriteria.date = dateFilter;
+    }
 
     // Aggregation query with filters applied to payoutDetail
-    const merchantPayoutQuery = Merchant.aggregate([
-      { $match: filterCriteria },
-      {
-        $addFields: {
-          payoutDetail: {
-            $filter: {
-              input: "$payoutDetail",
-              as: "payout",
-              cond: {
-                $and: [
-                  ...(paymentStatus && paymentStatus !== "all"
-                    ? [
-                        {
-                          $eq: [
-                            "$$payout.isSettled",
-                            paymentStatus.toLowerCase() === "true",
-                          ],
-                        },
-                      ]
-                    : []),
-                  ...(startDate || endDate
-                    ? [
-                        {
-                          $and: [
-                            ...(startDate
-                              ? [{ $gte: ["$$payout.date", startDate] }]
-                              : []),
-                            ...(endDate
-                              ? [{ $lte: ["$$payout.date", endDate] }]
-                              : []),
-                          ],
-                        },
-                      ]
-                    : []),
-                  {
-                    $not: {
-                      $and: [
-                        { $eq: ["$$payout.totalCostPrice", 0] },
-                        { $eq: ["$$payout.completedOrders", 0] },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
-      {
-        $unwind: "$payoutDetail",
-      },
-      {
-        $project: {
-          payoutDetail: 1,
-          phoneNumber: 1,
-          "merchantDetail.merchantName": 1,
-        },
-      },
-      { $skip: skip },
-      { $limit: limit },
-    ]);
+    const merchantPayout = await MerchantPayout.find(filterCriteria)
+      .populate("merchantId")
+      .skip(skip)
+      .limit(limit)
+      .exec();
 
-    // Execute the query and transform data as required
-    const merchants = await merchantPayoutQuery.exec();
-
-    const data = merchants.map((merchant) => ({
-      merchantId: merchant._id,
-      merchantName: merchant.merchantDetail.merchantName,
-      phoneNumber: merchant.phoneNumber,
-      date: formatDate(merchant.payoutDetail.date),
-      completedOrders: merchant.payoutDetail.completedOrders,
-      totalCostPrice: merchant.payoutDetail.totalCostPrice,
-      isSettled: merchant.payoutDetail.isSettled,
-      payoutId: merchant.payoutDetail.payoutId,
+    const data = merchantPayout.map((merchant) => ({
+      merchantId: merchant?.merchantId?._id,
+      merchantName: merchant.merchantName,
+      phoneNumber: merchant?.merchantId?.phoneNumber,
+      date: formatDate(merchant.date),
+      completedOrders: merchant.completedOrders,
+      totalCostPrice: merchant.totalCostPrice,
+      isSettled: merchant.isSettled,
+      payoutId: merchant._id,
     }));
 
     // Respond with the data and pagination info
@@ -2164,22 +2101,14 @@ const confirmMerchantPayout = async (req, res, next) => {
   try {
     const { payoutId, merchantId } = req.params;
 
-    const merchantFound = await Merchant.findById(merchantId).select(
-      "payoutDetail"
-    );
-
-    if (!merchantFound) return next(appError("Merchant not found", 404));
-
-    const paymentDetailFound = merchantFound.payoutDetail.find(
-      (merchantPayout) => merchantPayout.payoutId.toString() === payoutId
-    );
+    const paymentDetailFound = await MerchantPayout.findById(payoutId);
 
     if (!paymentDetailFound)
       return next(appError("Payment detail not found", 404));
 
     paymentDetailFound.isSettled = true;
 
-    await merchantFound.save();
+    await paymentDetailFound.save();
 
     res.status(200).json({ message: "Payment settled successfully" });
   } catch (err) {
@@ -2201,111 +2130,66 @@ const downloadPayoutCSVController = async (req, res, next) => {
     } = req.query;
 
     // Initial filter criteria setup
-    const filterCriteria = { "payoutDetail.0": { $exists: true } };
+    const filterCriteria = {};
 
     // Apply search by merchant name if query is provided
     if (query && query !== "") {
-      filterCriteria["merchantDetail.merchantName"] = {
+      filterCriteria["merchantName"] = {
         $regex: query,
         $options: "i",
       };
     }
 
     // Filter by merchantId if specified
-    if (merchantId && merchantId !== "all") filterCriteria["_id"] = merchantId;
+    if (merchantId && merchantId !== "all")
+      filterCriteria["merchantId"] = merchantId;
 
     // Filter by geofenceId if specified
     if (geofenceId && geofenceId !== "all") {
-      filterCriteria["merchantDetail.geofenceId"] =
+      filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
     }
 
     // Set start and end date boundaries, adjusting for timezone offset
+    if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
+      filterCriteria["isSettled"] = paymentStatus;
+    }
+
+    // Set start and end date boundaries, adjusting for timezone offset
     const dateFilter = {};
+
     if (startDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
-      startDate.setMinutes(startDate.getMinutes() - timezoneOffset);
+      startDate = new Date(
+        new Date(startDate).getTime() - 5.5 * 60 * 60 * 1000
+      );
+      startDate.setUTCHours(18, 30, 0, 0);
       dateFilter.$gte = startDate;
     }
+
     if (endDate) {
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
-      endDate.setMinutes(endDate.getMinutes() - timezoneOffset);
+      endDate = new Date(new Date(endDate).getTime() - 5.5 * 60 * 60 * 1000);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      endDate.setUTCMilliseconds(-1);
       dateFilter.$lte = endDate;
     }
 
-    // Aggregation query with filters applied to payoutDetail
-    const merchantPayoutQuery = Merchant.aggregate([
-      { $match: filterCriteria },
-      {
-        $addFields: {
-          payoutDetail: {
-            $filter: {
-              input: "$payoutDetail",
-              as: "payout",
-              cond: {
-                $and: [
-                  ...(paymentStatus && paymentStatus !== "all"
-                    ? [
-                        {
-                          $eq: [
-                            "$$payout.isSettled",
-                            paymentStatus.toLowerCase() === "true",
-                          ],
-                        },
-                      ]
-                    : []),
-                  ...(startDate || endDate
-                    ? [
-                        {
-                          $and: [
-                            ...(startDate
-                              ? [{ $gte: ["$$payout.date", startDate] }]
-                              : []),
-                            ...(endDate
-                              ? [{ $lte: ["$$payout.date", endDate] }]
-                              : []),
-                          ],
-                        },
-                      ]
-                    : []),
-                  {
-                    $not: {
-                      $and: [
-                        { $eq: ["$$payout.totalCostPrice", 0] },
-                        { $eq: ["$$payout.completedOrders", 0] },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
-      {
-        $unwind: "$payoutDetail",
-      },
-      {
-        $project: {
-          payoutDetail: 1,
-          phoneNumber: 1,
-          "merchantDetail.merchantName": 1,
-        },
-      },
-    ]);
+    if (startDate || endDate) {
+      filterCriteria.date = dateFilter;
+    }
 
-    const merchants = await merchantPayoutQuery.exec();
-    const data = merchants.map((merchant) => ({
-      merchantId: merchant._id,
-      merchantName: merchant.merchantDetail.merchantName,
-      phoneNumber: merchant.phoneNumber,
-      date: formatDate(merchant.payoutDetail.date),
-      totalCostPrice: merchant.payoutDetail.totalCostPrice,
-      completedOrders: merchant.payoutDetail.completedOrders,
-      isSettled: merchant.payoutDetail.isSettled,
-      payoutId: merchant.payoutDetail.payoutId,
+    // Aggregation query with filters applied to payoutDetail
+    const merchantPayout = await MerchantPayout.find(filterCriteria).populate(
+      "merchantId"
+    );
+    const data = merchantPayout.map((merchant) => ({
+      merchantId: merchant?.merchantId?._id,
+      merchantName: merchant.merchantName,
+      phoneNumber: merchant?.merchantId?.phoneNumber,
+      date: formatDate(merchant.date),
+      completedOrders: merchant.completedOrders,
+      totalCostPrice: merchant.totalCostPrice,
+      isSettled: merchant.isSettled,
+      payoutId: merchant._id,
     }));
 
     const csvFilePath = path.join(__dirname, "../../../Merchant_payout.csv");

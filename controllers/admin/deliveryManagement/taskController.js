@@ -315,6 +315,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     const agents = await Agent.find(matchCriteria).select(
       "fullName workStructure.tag status location"
     );
+    console.log("agents", agents);
 
     let filteredAgents = agents;
 
@@ -352,13 +353,13 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         if (deliveryMode === "Pick and Drop") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            getUserLocationFromSocket(agent._id),
+            getUserLocationFromSocket(agent._id) || agent?.location,
             deliveryLocation
           );
           distance = distanceInKM;
         } else if (deliveryMode !== "Custom Order") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            getUserLocationFromSocket(agent._id),
+            getUserLocationFromSocket(agent._id) || agent?.location,
             merchantLocation
           );
           distance = distanceInKM;
@@ -373,6 +374,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
         };
       })
     );
+    console.log("responseData", responseData);
 
     res.status(200).json({
       success: true,
