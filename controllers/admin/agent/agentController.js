@@ -676,6 +676,7 @@ const blockAgentController = async (req, res, next) => {
     }
 
     agentFound.isBlocked = true;
+    agentFound.status = "Inactive";
     agentFound.reasonForBlockingOrDeleting = reason;
     agentFound.blockedDate = new Date();
 

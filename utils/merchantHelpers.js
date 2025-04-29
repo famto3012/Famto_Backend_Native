@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Merchant = require("../models/Merchant");
+const MerchantPayout = require("../models/MerchantPayout");
 
 const preparePayoutForMerchant = async () => {
   try {
@@ -80,24 +81,22 @@ const preparePayoutForMerchant = async () => {
 
     const bulkOperations = allMerchants.map((merchant) => {
       const payoutData = {
-        payoutId: new mongoose.Types.ObjectId(),
+        merchantId: merchant._id,
+        merchantName: merchant?.merchantDetail?.merchantName,
+        geofenceId: merchant?.merchantDetail?.geofenceId,
         totalCostPrice:
           merchantPayouts.get(merchant._id.toString())?.totalCostPrice || 0,
         completedOrders:
           merchantPayouts.get(merchant._id.toString())?.completedOrders || 0,
         date: startTime,
       };
+      console.log("Payout Data:", payoutData);
 
-      return {
-        updateOne: {
-          filter: { _id: merchant._id },
-          update: { $push: { payoutDetail: payoutData } },
-        },
-      };
+      return payoutData;
     });
 
     if (bulkOperations.length > 0) {
-      await Merchant.bulkWrite(bulkOperations);
+      await MerchantPayout.insertMany(bulkOperations);
     }
   } catch (err) {
     console.error("Error in preparing payout:", err);
