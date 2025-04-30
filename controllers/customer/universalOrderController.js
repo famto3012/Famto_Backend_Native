@@ -1779,9 +1779,6 @@ const orderPaymentController = async (req, res, next) => {
       }
 
       // Deduct the amount from wallet
-      customer.customerDetails.walletBalance = Number(
-        (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
-      );
 
       if (cart.cartDetail.deliveryOption === "Scheduled") {
         // Create a scheduled order
@@ -1802,6 +1799,10 @@ const orderPaymentController = async (req, res, next) => {
           purchasedItems,
         });
 
+        customer.customerDetails.walletBalance = Number(
+          (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
+        );
+
         walletTransaction.orderId = newOrderCreated._id;
         customer.walletTransactionDetail.push(walletTransaction);
         customer.transactionDetail.push(customerTransaction);
@@ -1815,7 +1816,7 @@ const orderPaymentController = async (req, res, next) => {
           CustomerCart.deleteOne({ customerId }),
         ]);
 
-        newOrder = await Order.findById(newOrderCreated._id).populate(
+        newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
           "merchantId"
         );
 
@@ -2368,7 +2369,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         customer.save(),
       ]);
 
-      newOrder = await Order.findById(newOrderCreated._id).populate(
+      newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
         "merchantId"
       );
 
