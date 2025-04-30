@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 
 const Customer = require("../../models/Customer");
 const PickAndCustomCart = require("../../models/PickAndCustomCart");
-const PromoCode = require("../../models/PromoCode");
 const Order = require("../../models/Order");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
@@ -14,8 +13,6 @@ const appError = require("../../utils/appError");
 const {
   getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
-  calculateScheduledCartValue,
-  calculatePromoCodeDiscount,
 } = require("../../utils/customerAppHelpers");
 const {
   uploadToFirebase,
@@ -28,6 +25,7 @@ const {
   sendSocketData,
   findRolesToNotify,
 } = require("../../socket/socket");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -526,145 +524,6 @@ const getCustomCartBill = async (req, res, next) => {
   }
 };
 
-// const addTipAndApplyPromoCodeInCustomOrderController = async (
-//   req,
-//   res,
-//   next
-// ) => {
-//   try {
-//     const customerId = req.userAuth;
-//     const { addedTip, promoCode } = req.body;
-
-//     const [customerFound, cart] = await Promise.all([
-//       Customer.findById(customerId),
-//       PickAndCustomCart.findOne({
-//         customerId,
-//         "cartDetail.deliveryMode": "Custom Order",
-//       }),
-//     ]);
-
-//     if (!customerFound) return next(appError("Customer not found", 404));
-//     if (!cart) return next(appError("Cart not found", 404));
-
-//     // Ensure existing charges and totals
-//     let {
-//       originalGrandTotal = 0,
-//       originalDeliveryCharge = 0,
-//       addedTip: currentTip = 0,
-//       discountedAmount = 0,
-//     } = cart.billDetail;
-
-//     // Update the tip if provided
-//     const tip = addedTip !== undefined ? parseInt(addedTip) : currentTip;
-
-//     cart.billDetail.addedTip = tip;
-
-//     // Apply the promo code if provided
-//     if (promoCode) {
-//       const promoCodeFound = await PromoCode.findOne({
-//         promoCode,
-//         geofenceId: customerFound.customerDetails.geofenceId,
-//         appliedOn: "Delivery-charge",
-//         status: true,
-//         deliveryMode: "Custom Order",
-//       });
-
-//       if (!promoCodeFound) {
-//         return next(appError("Promo code not found or inactive", 404));
-//       }
-
-//       const totalDeliveryPrice =
-//         cart.cartDetail.deliveryOption === "Scheduled"
-//           ? calculateScheduledCartValue(cart, promoCodeFound)
-//           : originalDeliveryCharge;
-
-//       if (totalDeliveryPrice < promoCodeFound.minOrderAmount) {
-//         return next(
-//           appError(
-//             `Minimum order amount is ${promoCodeFound.minOrderAmount}`,
-//             400
-//           )
-//         );
-//       }
-
-//       const now = new Date();
-//       if (now < promoCodeFound.fromDate || now > promoCodeFound.toDate) {
-//         return next(appError("Promo code is not valid at this time", 400));
-//       }
-
-//       if (promoCodeFound.noOfUserUsed >= promoCodeFound.maxAllowedUsers) {
-//         return next(appError("Promo code usage limit reached", 400));
-//       }
-
-//       // Calculate discount amount
-//       discountedAmount = calculatePromoCodeDiscount(
-//         promoCodeFound,
-//         totalDeliveryPrice
-//       );
-
-//       cart.billDetail.promoCodeUsed = promoCode;
-
-//       promoCodeFound.noOfUserUsed += 1;
-//       await promoCodeFound.save();
-//     }
-
-//     const discountedDeliveryCharge = Math.max(
-//       originalDeliveryCharge - discountedAmount,
-//       0
-//     );
-
-//     const discountedGrandTotal = originalGrandTotal + tip - discountedAmount;
-
-//     cart.billDetail.discountedDeliveryCharge = Math.round(
-//       discountedDeliveryCharge
-//     );
-//     cart.billDetail.discountedGrandTotal = Math.round(discountedGrandTotal);
-//     cart.billDetail.discountedAmount = discountedAmount?.toFixed(2);
-
-//     await cart.save();
-
-//     const havePickupLocation = cart.cartDetail.pickupLocation.length === 2;
-
-//     const billDetail = {
-//       deliveryChargePerDay: cart.billDetail.deliveryChargePerDay || null,
-//       originalDeliveryCharge: havePickupLocation
-//         ? cart.billDetail.originalDeliveryCharge
-//         : null,
-//       discountedDeliveryCharge: havePickupLocation
-//         ? cart.billDetail.discountedDeliveryCharge
-//         : null,
-//       discountedAmount: havePickupLocation
-//         ? cart.billDetail.discountedAmount
-//         : null,
-//       originalGrandTotal: havePickupLocation
-//         ? cart.billDetail.originalGrandTotal
-//         : null,
-//       discountedGrandTotal: havePickupLocation
-//         ? cart.billDetail.discountedGrandTotal
-//         : null,
-//       taxAmount: havePickupLocation ? cart.billDetail.taxAmount : null,
-//       itemTotal: cart.billDetail.itemTotal || null,
-//       addedTip: cart.billDetail.addedTip || null,
-//       subTotal: havePickupLocation ? cart.billDetail.subTotal : null,
-//       vehicleType: cart.billDetail.vehicleType || null,
-//       surgePrice: cart.billDetail.surgePrice || null,
-//     };
-
-//     res.status(200).json({
-//       message: "Tip and promo code applied successfully",
-//       data: {
-//         cartId: cart._id,
-//         customerId: cart.customerId,
-//         cartDetail: cart.cartDetail,
-//         items: cart.items,
-//         billDetail,
-//       },
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
 const confirmCustomOrderController = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
@@ -702,13 +561,6 @@ const confirmCustomOrderController = async (req, res, next) => {
       subTotal: cart.billDetail.subTotal,
     };
 
-    let customerTransaction = {
-      madeOn: new Date(),
-      transactionType: "Bill",
-      transactionAmount: orderAmount,
-      type: "Debit",
-    };
-
     // Generate a unique order ID
     const orderId = new mongoose.Types.ObjectId();
 
@@ -725,9 +577,16 @@ const confirmCustomOrderController = async (req, res, next) => {
       paymentStatus: "Pending",
     });
 
-    customer.transactionDetail.push(customerTransaction);
-
-    await customer.save();
+    await Promise.all([
+      customer.save(),
+      CustomerTransaction.create({
+        customerId,
+        madeOn: new Date(),
+        transactionType: "Bill",
+        transactionAmount: orderAmount,
+        type: "Debit",
+      }),
+    ]);
 
     if (!tempOrder) return next(appError("Error in creating temporary order"));
 
@@ -876,6 +735,7 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
     if (!customerFound) return next(appError("Customer not found", 404));
 
     let updatedTransactionDetail = {
+      customerId: customerFound._id,
       transactionType: "Refund",
       madeOn: new Date(),
       type: "Credit",
@@ -888,12 +748,11 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
 
-      customerFound.transactionDetail.push(updatedTransactionDetail);
-
       // Remove the temporary order data from the database and push transaction to customer transaction
       await Promise.all([
         TemporaryOrder.deleteOne({ orderId }),
         customerFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
       ]);
 
       res.status(200).json({
@@ -922,7 +781,6 @@ module.exports = {
   editItemInCartController,
   deleteItemInCartController,
   addDeliveryAddressController,
-  // addTipAndApplyPromoCodeInCustomOrderController,
   confirmCustomOrderController,
   cancelCustomBeforeOrderCreationController,
   getSingleItemController,

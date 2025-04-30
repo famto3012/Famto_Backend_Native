@@ -244,7 +244,7 @@ const customerSchema = new mongoose.Schema(
     },
     customerDetails: customerDetailSchema,
     walletTransactionDetail: [walletTransactionDetailSchema],
-    transactionDetail: [transactionDetailSchema],
+    // transactionDetail: [transactionDetailSchema],
     referralDetail: referralDetailSchema,
     loyaltyPointDetails: [
       {

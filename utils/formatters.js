@@ -28,47 +28,6 @@ const timeAgo = (timestamp) => {
   return new Date(timestamp * 1000).toLocaleDateString(); // Show full date if older than a week
 };
 
-// const convertToUTC = (date, time) => {
-//   // Combine date and time
-//   const localDateTime = momentTimezone.tz(
-//     `${date} ${time}`,
-//     "YYYY-MM-DD hh:mm A",
-//     momentTimezone.tz.guess()
-//   );
-
-//   // Convert to UTC
-//   const timeUTC = localDateTime.clone().utc();
-
-//   console.log("Time in function: ", timeUTC.format());
-//   // Return the UTC time in desired format
-//   return timeUTC.format();
-// };
-
-// const convertToUTC = (time12hr) => {
-//   // // Parse the 12-hour time using a known format
-//   // const localTime = moment(time12hr, "hh:mm A");
-
-//   // // Convert to UTC
-//   // const utcTime = localTime.utc();
-
-//   // // Return the UTC time in desired format
-//   // return utcTime.format();
-
-//   // ===================
-
-//   // Parse the 12-hour time using a known format
-//   const localTime = moment(time12hr, "hh:mm A");
-
-//   // Subtract one hour
-//   const adjustedTime = localTime.subtract(1, "hours");
-
-//   // Convert to UTC
-//   const utcTime = adjustedTime.utc();
-
-//   // Return the UTC time in desired format
-//   return utcTime.format();
-// };
-
 const convertToUTC = (time12hr, startDate) => {
   // Parse the 12-hour time using a known format (e.g., "hh:mm A" for 12-hour format with AM/PM)
   const localTime = moment(time12hr, "hh:mm A");

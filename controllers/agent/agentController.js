@@ -1793,6 +1793,8 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     const { orderId } = req.params;
     const agentId = req.userAuth;
 
+    console.log("data", { body: req.body });
+
     const orderFound = await Order.findOne({
       _id: orderId,
       "orderDetail.deliveryMode": "Custom Order",
@@ -1825,10 +1827,14 @@ const updateCustomOrderStatusController = async (req, res, next) => {
       location
     );
 
+    console.log("distanceInKM", distanceInKM);
+
     // Update order details
     const newDistance = distanceInKM || 0;
     const oldDistanceCoveredByAgent =
       orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
+
+    console.log("distance data", { newDistance, oldDistanceCoveredByAgent });
 
     orderFound.orderDetail.distance =
       (orderFound.orderDetail?.distance || 0) + newDistance;

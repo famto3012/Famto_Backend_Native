@@ -23,6 +23,7 @@ const {
 } = require("./customerAppHelpers");
 const CustomerAppCustomization = require("../models/CustomerAppCustomization");
 const Tax = require("../models/Tax");
+const CustomerTransaction = require("../models/CustomerTransactionDetail");
 
 // Create or return the existing customer
 const findOrCreateCustomer = async ({
@@ -1465,13 +1466,14 @@ const prepareOrderDetails = async (cart, paymentMode) => {
 
 const updateCustomerTransaction = async (customer, billDetail) => {
   const transaction = {
+    customerId: customer._id,
     madeOn: new Date(),
     transactionType: "Bill",
     transactionAmount: billDetail.grandTotal,
     type: "Debit",
   };
-  customer.transactionDetail.push(transaction);
-  await customer.save();
+
+  await CustomerTransaction.create(transaction);
 };
 
 const clearCart = async (customerId, deliveryMode) => {

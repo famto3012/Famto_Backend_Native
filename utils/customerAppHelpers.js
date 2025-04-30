@@ -187,19 +187,51 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       "merchantId"
     );
 
-    const { sendSocketDataAndNotification } = require("./socketHelper");
-    const { findRolesToNotify } = require("../socket/socket");
+    const { findRolesToNotify, sendSocketData } = require("../socket/socket");
 
-    const eventName = "newOrderCreated";
+    const eventName = "scheduledOrderCreated";
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-    const notificationData = {
-      fcm: {
-        orderId: newOrder._id,
-        customerId: newOrder.customerId,
-      },
-    };
+    let manager;
+    // Send notifications to each role dynamically
+    for (const role of rolesToNotify) {
+      let roleId;
+
+      if (role === "admin") {
+        roleId = process.env.ADMIN_ID;
+      } else if (role === "merchant") {
+        roleId = newOrder?.merchantId;
+      } else if (role === "driver") {
+        roleId = newOrder?.agentId;
+      } else if (role === "customer") {
+        roleId = newOrder?.customerId;
+      } else {
+        const roleValue = await ManagerRoles.findOne({ roleName: role });
+        if (roleValue) {
+          manager = await Manager.findOne({ role: roleValue._id });
+        } // Assuming `role` is the role field to match in Manager model
+        if (manager) {
+          roleId = manager._id; // Set roleId to the Manager's ID
+        }
+      }
+
+      if (roleId) {
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
+
+        await sendNotification(
+          roleId,
+          eventName,
+          notificationData,
+          role.charAt(0).toUpperCase() + role.slice(1)
+        );
+      }
+    }
 
     const socketData = {
       ...data,
@@ -231,21 +263,12 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       amount: newOrder.billDetail.grandTotal,
     };
 
-    const userIds = {
-      admin: process.env.ADMIN_ID,
-      merchant: newOrder?.merchantId?._id,
-      driver: newOrder?.agentId,
-      customer: newOrder?.customerId,
-    };
-
-    // Send notifications to each role dynamically
-    await sendSocketDataAndNotification({
-      rolesToNotify,
-      userIds,
-      eventName,
-      notificationData,
-      socketData,
-    });
+    sendSocketData(newOrder.customerId, eventName, socketData);
+    sendSocketData(newOrder.merchantId, eventName, socketData);
+    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+    if (manager?._id) {
+      sendSocketData(manager._id, eventName, socketData);
+    }
   } catch (err) {
     console.error("Error creating order from scheduled order:", err.message);
   }
@@ -305,19 +328,51 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       });
     }
 
-    const { sendSocketDataAndNotification } = require("./socketHelper");
-    const { findRolesToNotify } = require("../socket/socket");
+    const { findRolesToNotify, sendSocketData } = require("../socket/socket");
 
-    const eventName = "newOrderCreated";
+    const eventName = "scheduleOrderCreated";
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-    const notificationData = {
-      fcm: {
-        orderId: newOrder._id,
-        customerId: newOrder.customerId,
-      },
-    };
+    let manager;
+    // Send notifications to each role dynamically
+    for (const role of rolesToNotify) {
+      let roleId;
+
+      if (role === "admin") {
+        roleId = process.env.ADMIN_ID;
+      } else if (role === "merchant") {
+        roleId = newOrder?.merchantId;
+      } else if (role === "driver") {
+        roleId = newOrder?.agentId;
+      } else if (role === "customer") {
+        roleId = newOrder?.customerId;
+      } else {
+        const roleValue = await ManagerRoles.findOne({ roleName: role });
+        if (roleValue) {
+          manager = await Manager.findOne({ role: roleValue._id });
+        } // Assuming `role` is the role field to match in Manager model
+        if (manager) {
+          roleId = manager._id; // Set roleId to the Manager's ID
+        }
+      }
+
+      if (roleId) {
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
+
+        await sendNotification(
+          roleId,
+          eventName,
+          notificationData,
+          role.charAt(0).toUpperCase() + role.slice(1)
+        );
+      }
+    }
 
     const socketData = {
       ...data,
@@ -349,21 +404,11 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       amount: newOrder.billDetail.grandTotal,
     };
 
-    const userIds = {
-      admin: process.env.ADMIN_ID,
-      merchant: newOrder?.merchantId,
-      driver: newOrder?.agentId,
-      customer: newOrder?.customerId,
-    };
-
-    // Send notifications to each role dynamically
-    await sendSocketDataAndNotification({
-      rolesToNotify,
-      userIds,
-      eventName,
-      notificationData,
-      socketData,
-    });
+    sendSocketData(newOrder.customerId, eventName, socketData);
+    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+    if (manager?._id) {
+      sendSocketData(manager._id, eventName, socketData);
+    }
   } catch (err) {
     next(appError(err.message));
   }
