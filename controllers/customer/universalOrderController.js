@@ -1838,7 +1838,6 @@ const orderPaymentController = async (req, res, next) => {
           orderDetail: newOrder.orderDetail,
           billDetail: newOrder.billDetail,
 
-          //? Data for displaying detail in all orders table
           _id: newOrder._id,
           orderStatus: newOrder.status,
           merchantName:
