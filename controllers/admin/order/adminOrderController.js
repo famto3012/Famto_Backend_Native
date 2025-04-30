@@ -55,7 +55,9 @@ const ActivityLog = require("../../../models/ActivityLog");
 const Agent = require("../../../models/Agent");
 const Manager = require("../../../models/Manager");
 const ManagerRoles = require("../../../models/ManagerRoles");
-const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
+const {
+  sendSocketDataAndNotification,
+} = require("../../../utils/socketHelper");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {
@@ -377,47 +379,13 @@ const confirmOrderByAdminController = async (req, res, next) => {
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-    let manager;
-    // Send notifications to each role dynamically
-    for (const role of rolesToNotify) {
-      let roleId;
-
-      if (role === "admin") {
-        roleId = process.env.ADMIN_ID;
-      } else if (role === "merchant") {
-        roleId = orderFound?.merchantId;
-      } else if (role === "driver") {
-        roleId = orderFound?.agentId;
-      } else if (role === "customer") {
-        roleId = orderFound?.customerId;
-      } else {
-        const roleValue = await ManagerRoles.findOne({ roleName: role });
-
-        if (roleValue) {
-          manager = await Manager.findOne({ role: roleValue._id });
-        } // Assuming `role` is the role field to match in Manager model
-        if (manager) {
-          roleId = manager._id; // Set roleId to the Manager's ID
-        }
-      }
-
-      if (roleId) {
-        const notificationData = {
-          fcm: {
-            orderId,
-            customerId: orderFound.customerId,
-            merchantId: orderFound?.merchantId,
-          },
-        };
-
-        await sendNotification(
-          roleId,
-          eventName,
-          notificationData,
-          role.charAt(0).toUpperCase() + role.slice(1)
-        );
-      }
-    }
+    const notificationData = {
+      fcm: {
+        orderId,
+        customerId: orderFound.customerId,
+        merchantId: orderFound?.merchantId?._id,
+      },
+    };
 
     const socketData = {
       ...data,
@@ -428,14 +396,20 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderDetailStepper: orderFound.orderDetailStepper.accepted,
     };
 
-    sendSocketData(orderFound.customerId, eventName, socketData);
-    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-    if (manager?._id) {
-      sendSocketData(manager._id, eventName, socketData);
-    }
-    if (orderFound?.merchantId) {
-      sendSocketData(orderFound?.merchantId, eventName, socketData);
-    }
+    const userIds = {
+      admin: process.env.ADMIN_ID,
+      merchant: orderFound?.merchantId?._id,
+      agent: orderFound?.agentId,
+      customer: orderFound?.customerId,
+    };
+
+    await sendSocketDataAndNotification({
+      rolesToNotify,
+      eventName,
+      userIds,
+      notificationData,
+      socketData,
+    });
 
     res.status(200).json({
       message: `Order with ID: ${orderFound._id} is confirmed`,
@@ -462,7 +436,6 @@ const rejectOrderByAdminController = async (req, res, next) => {
     }
 
     let updatedTransactionDetail = {
-      customerId: customerFound._id,
       transactionType: "Refund",
       madeOn: new Date(),
       type: "Credit",
@@ -492,14 +465,12 @@ const rejectOrderByAdminController = async (req, res, next) => {
       }
 
       updatedTransactionDetail.transactionAmount = orderAmount;
+      customerFound.transactionDetail.push(updatedTransactionDetail);
 
       updateOrderStatus(orderFound);
 
-      await Promise.all([
-        customerFound.save(),
-        orderFound.save(),
-        CustomerTransaction.create(updatedTransactionDetail),
-      ]);
+      await customerFound.save();
+      await orderFound.save();
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       updateOrderStatus(orderFound);
 
@@ -525,13 +496,10 @@ const rejectOrderByAdminController = async (req, res, next) => {
         }
 
         updatedTransactionDetail.transactionAmount = refundAmount;
-
+        customerFound.transactionDetail.push(updatedTransactionDetail);
         orderFound.refundId = refundResponse?.refundId;
 
-        await Promise.all([
-          customerFound.save(),
-          CustomerTransaction.create(updatedTransactionDetail),
-        ]);
+        await customerFound.save();
       }
 
       updateOrderStatus(orderFound);
@@ -549,48 +517,6 @@ const rejectOrderByAdminController = async (req, res, next) => {
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-    let manager;
-    // Send notifications to each role dynamically
-    for (const role of rolesToNotify) {
-      let roleId;
-
-      if (role === "admin") {
-        roleId = process.env.ADMIN_ID;
-      } else if (role === "merchant") {
-        roleId = orderFound?.merchantId;
-      } else if (role === "driver") {
-        roleId = orderFound?.agentId;
-      } else if (role === "customer") {
-        roleId = orderFound?.customerId;
-      } else {
-        const roleValue = await ManagerRoles.findOne({ roleName: role });
-
-        if (roleValue) {
-          manager = await Manager.findOne({ role: roleValue._id });
-        } // Assuming `role` is the role field to match in Manager model
-        if (manager) {
-          roleId = manager._id; // Set roleId to the Manager's ID
-        }
-      }
-
-      if (roleId) {
-        const notificationData = {
-          fcm: {
-            orderId,
-            customerId: orderFound.customerId,
-            merchantId: orderFound?.merchantId,
-          },
-        };
-
-        await sendNotification(
-          roleId,
-          eventName,
-          notificationData,
-          role.charAt(0).toUpperCase() + role.slice(1)
-        );
-      }
-    }
-
     const socketData = {
       ...data,
 
@@ -600,14 +526,28 @@ const rejectOrderByAdminController = async (req, res, next) => {
       orderDetailStepper: orderFound.orderDetailStepper.cancelled,
     };
 
-    sendSocketData(orderFound.customerId, eventName, socketData);
-    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-    if (manager?._id) {
-      sendSocketData(manager._id, eventName, socketData);
-    }
-    if (orderFound?.merchantId) {
-      sendSocketData(orderFound?.merchantId, eventName, socketData);
-    }
+    const notificationData = {
+      fcm: {
+        orderId,
+        customerId: orderFound.customerId,
+        merchantId: orderFound?.merchantId,
+      },
+    };
+
+    const userIds = {
+      admin: process.env.ADMIN_ID,
+      merchant: orderFound?.merchantId,
+      agent: orderFound?.agentId,
+      customer: orderFound?.customerId,
+    };
+
+    await sendSocketDataAndNotification({
+      rolesToNotify,
+      userIds,
+      eventName,
+      notificationData,
+      socketData,
+    });
 
     res.status(200).json({ message: "Order cancelled" });
   } catch (err) {
@@ -1163,14 +1103,14 @@ const downloadInvoiceBillController = async (req, res, next) => {
 
             <!-- Invoice Table -->
             <table>
-                 <thead>
+                 <thead> 
       ${
         cartFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
         cartFound?.orderDetail?.deliveryMode === "Custom Order"
           ? `<th colspan="3">Item</th><th>Price</th>`
           : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
-      }
-            </thead>
+      }  
+            </thead> 
                 <tbody>
                      ${
                        cartFound?.orderDetail?.deliveryMode ===
@@ -1197,7 +1137,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
                         <td colspan="3">Item Total</td>
                         <td>${itemTotal?.toFixed(2) || 0}</td>
                     </tr>`
-                     }
+                     }   
                  <tr>
                         <td colspan="3">Delivery charge</td>
                         <td>${deliveryCharge?.toFixed(2) || 0}</td>
@@ -1525,14 +1465,14 @@ const downloadOrderBillController = async (req, res, next) => {
 
             <!-- Invoice Table -->
             <table>
-               <thead>
+               <thead> 
       ${
         orderFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
         orderFound?.orderDetail?.deliveryMode === "Custom Order"
           ? `<th colspan="3">Item</th><th>Price</th>`
           : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
-      }
-            </thead>
+      }  
+            </thead>   
                 <tbody>
                  ${
                    orderFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
@@ -1558,7 +1498,7 @@ const downloadOrderBillController = async (req, res, next) => {
                         <td colspan="3">Item Total</td>
                         <td>${itemTotal?.toFixed(2) || 0}</td>
                     </tr>`
-                 }
+                 }   
                     <tr>
                         <td colspan="3">Delivery charge</td>
                         <td>${deliveryCharge?.toFixed(2) || 0}</td>
@@ -2245,57 +2185,28 @@ const createOrderByAdminController = async (req, res, next) => {
       amount: newOrder?.billDetail?.grandTotal,
     };
 
-    sendSocketData(newOrder?.customerId, eventName, socketData);
-    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-    if (newOrder?.merchantId?._id) {
-      sendSocketData(newOrder?.merchantId?._id, eventName, socketData);
-    }
+    const notificationData = {
+      fcm: {
+        ...data,
+        orderId: newOrder?._id,
+        customerId: newOrder?.customerId,
+      },
+    };
 
-    let manager;
-    // Send notifications to each role dynamically
-    for (const role of rolesToNotify) {
-      let roleId;
+    const userIds = {
+      admin: process.env.ADMIN_ID,
+      customer: newOrder?.customerId,
+      merchant: newOrder?.merchantId?._id,
+      driver: newOrder?.agentId,
+    };
 
-      if (role === "admin") {
-        roleId = process.env.ADMIN_ID;
-      } else if (role === "merchant") {
-        roleId = newOrder?.merchantId?._id;
-      } else if (role === "driver") {
-        roleId = newOrder?.agentId;
-      } else if (role === "customer") {
-        roleId = newOrder?.customerId;
-      } else {
-        const roleValue = await ManagerRoles.findOne({ roleName: role });
-
-        if (roleValue) {
-          manager = await Manager.findOne({ role: roleValue._id });
-        } // Assuming `role` is the role field to match in Manager model
-        if (manager) {
-          roleId = manager._id; // Set roleId to the Manager's ID
-        }
-      }
-
-      if (roleId) {
-        const notificationData = {
-          fcm: {
-            ...data,
-            orderId: newOrder?._id,
-            customerId: newOrder?.customerId,
-          },
-        };
-
-        await sendNotification(
-          roleId,
-          eventName,
-          notificationData,
-          role.charAt(0).toUpperCase() + role.slice(1)
-        );
-      }
-    }
-
-    if (manager?._id) {
-      sendSocketData(manager._id, eventName, socketData);
-    }
+    await sendSocketDataAndNotification({
+      rolesToNotify,
+      userIds,
+      eventName,
+      socketData,
+      notificationData,
+    });
 
     res.status(201).json({ cartFound });
   } catch (err) {
