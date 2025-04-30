@@ -49,6 +49,7 @@ const {
 } = require("../../utils/createOrderHelpers");
 const Task = require("../../models/Task");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -1625,6 +1626,7 @@ const orderPaymentController = async (req, res, next) => {
     };
 
     let walletTransaction = {
+      customerId,
       closingBalance: customer?.customerDetails?.walletBalance,
       transactionAmount: orderAmount,
       date: new Date(),
@@ -1670,7 +1672,6 @@ const orderPaymentController = async (req, res, next) => {
         });
 
         walletTransaction.orderId = newOrder._id;
-        customer.walletTransactionDetail.push(walletTransaction);
 
         await Promise.all([
           PromoCode.findOneAndUpdate(
@@ -1680,6 +1681,7 @@ const orderPaymentController = async (req, res, next) => {
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
           CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         res.status(200).json({
@@ -1716,12 +1718,12 @@ const orderPaymentController = async (req, res, next) => {
         }
 
         walletTransaction.orderId = orderId;
-        customer.walletTransactionDetail.push(walletTransaction);
 
         await Promise.all([
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
           CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         // Return countdown timer to client
@@ -1772,17 +1774,16 @@ const orderPaymentController = async (req, res, next) => {
               );
             }
 
-            const walletTransaction = customer.walletTransactionDetail.find(
-              (transaction) =>
-                transaction.orderId &&
-                transaction.orderId.toString() === orderId.toString()
-            );
-
-            walletTransaction.orderId = newOrderCreated._id;
+            const oldOrderId = orderId;
 
             await Promise.all([
               TemporaryOrder.deleteOne({ orderId }),
               customer.save(),
+              CustomerWalletTransaction.findOneAndUpdate(
+                { orderId: oldOrderId },
+                { $set: { orderId: newOrderCreated._id } },
+                { new: true }
+              ),
             ]);
 
             const eventName = "newOrderCreated";

@@ -51,6 +51,7 @@ const Merchant = require("../../models/Merchant");
 const Product = require("../../models/Product");
 const Category = require("../../models/Category");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -438,6 +439,7 @@ const verifyWalletRechargeController = async (req, res, next) => {
     if (!isPaymentValid) return next(appError("Invalid payment", 400));
 
     let walletTransaction = {
+      customerId,
       closingBalance: customer?.customerDetails?.walletBalance || 0,
       transactionAmount: parsedAmount,
       transactionId: paymentDetails.razorpay_payment_id,
@@ -450,8 +452,6 @@ const verifyWalletRechargeController = async (req, res, next) => {
       parseFloat(customer?.customerDetails?.walletBalance) || 0;
     customer.customerDetails.walletBalance += parsedAmount;
 
-    customer.walletTransactionDetail.push(walletTransaction);
-
     await Promise.all([
       customer.save(),
       CustomerTransaction.create({
@@ -461,6 +461,7 @@ const verifyWalletRechargeController = async (req, res, next) => {
         transactionAmount: parsedAmount,
         type: "Credit",
       }),
+      CustomerWalletTransaction.create(walletTransaction),
     ]);
 
     res.status(200).json({ message: "Wallet recharged successfully" });

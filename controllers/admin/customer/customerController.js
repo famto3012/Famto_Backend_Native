@@ -17,6 +17,7 @@ const {
   deleteFromFirebase,
 } = require("../../../utils/imageOperation");
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../../models/CustomerWalletTransaction");
 
 // TODO: Remove after panel V2
 const getAllCustomersController = async (req, res, next) => {
@@ -336,14 +337,20 @@ const getSingleCustomerController = async (req, res, next) => {
       return next(appError("Customer not found", 404));
     }
 
-    const ordersOfCustomer = await Order.find({ customerId })
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail",
-      })
-      .sort({ createdAt: -1 });
+    const [orders, transactions] = await Promise.all([
+      Order.find({ customerId })
+        .populate({
+          path: "merchantId",
+          select: "merchantDetail",
+        })
+        .sort({ createdAt: -1 })
+        .limit(50),
+      CustomerWalletTransaction.find({ customerId })
+        .sort({ date: -1 })
+        .limit(50),
+    ]);
 
-    const formattedCustomerOrders = ordersOfCustomer?.map((order) => {
+    const formattedCustomerOrders = orders?.map((order) => {
       const merchantDetail = order?.merchantId?.merchantDetail;
       const deliveryTimeMinutes = merchantDetail
         ? parseInt(merchantDetail?.deliveryTime, 10)
@@ -370,28 +377,19 @@ const getSingleCustomerController = async (req, res, next) => {
       };
     });
 
-    // Sort wallet transactions by newest date first
-    const sortedCustomerTransactions =
-      customerFound?.walletTransactionDetail?.sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
-
-    const formattedCustomerTransactions = sortedCustomerTransactions?.map(
-      (transaction) => {
-        return {
-          closingBalance: transaction.closingBalance || 0,
-          transactionAmount: `${transaction.transactionAmount} ${
-            transaction.type === "Debit" ? "Dr" : "Cr"
-          }`,
-          transactionId: transaction.transactionId || "-",
-          orderId: transaction.orderId || "-",
-          date:
-            `${formatDate(transaction.date)} | ${formatTime(
-              transaction.date
-            )}` || "-",
-        };
-      }
-    );
+    const formattedCustomerTransactions = transactions?.map((transaction) => {
+      return {
+        closingBalance: transaction.closingBalance || 0,
+        transactionAmount: `${transaction.transactionAmount} ${
+          transaction.type === "Debit" ? "Dr" : "Cr"
+        }`,
+        transactionId: transaction.transactionId || "-",
+        orderId: transaction.orderId || "-",
+        date:
+          `${formatDate(transaction.date)} | ${formatTime(transaction.date)}` ||
+          "-",
+      };
+    });
 
     const formattedCustomer = {
       _id: customerFound._id,
@@ -548,7 +546,9 @@ const addMoneyToWalletController = async (req, res, next) => {
     const { amount } = req.body;
     const { customerId } = req.params;
 
-    if (isNaN(amount)) return next(appError("Invalid amount provided", 400));
+    if (isNaN(parseFloat(amount))) {
+      return next(appError("Invalid amount provided", 400));
+    }
 
     const customerFound = await Customer.findById(customerId);
 
@@ -560,6 +560,7 @@ const addMoneyToWalletController = async (req, res, next) => {
     const amountToAdd = parseFloat(amount);
 
     let walletTransaction = {
+      customerId,
       closingBalance: customerFound?.customerDetails?.walletBalance || 0,
       transactionAmount: amountToAdd,
       date: new Date(),
@@ -567,7 +568,6 @@ const addMoneyToWalletController = async (req, res, next) => {
     };
 
     customerFound.customerDetails.walletBalance = currentBalance + amountToAdd;
-    customerFound.walletTransactionDetail.push(walletTransaction);
 
     await Promise.all([
       customerFound.save(),
@@ -578,25 +578,12 @@ const addMoneyToWalletController = async (req, res, next) => {
         transactionAmount: amountToAdd,
         type: "Credit",
       }),
+      CustomerWalletTransaction.create(walletTransaction),
     ]);
 
-    walletTransaction =
-      customerFound?.walletTransactionDetail[
-        customerFound?.walletTransactionDetail.length - 1
-      ];
-
-    const formattedResponse = {
-      closingBalance: walletTransaction.closingBalance,
-      transactionAmount: walletTransaction.transactionAmount,
-      date:
-        `${formatDate(walletTransaction.date)} | ${formatTime(
-          walletTransaction.date
-        )}` || "-",
-    };
-
     res.status(200).json({
+      success: true,
       message: `${amount} Rs is added to customer's wallet`,
-      data: formattedResponse,
     });
   } catch (err) {
     next(appError(err.message));
@@ -608,11 +595,16 @@ const deductMoneyFromWalletCOntroller = async (req, res, next) => {
     const { amount } = req.body;
     const { customerId } = req.params;
 
+    if (isNaN(parseFloat(amount))) {
+      return next(appError("Invalid amount provided", 400));
+    }
+
     const customerFound = await Customer.findById(customerId);
 
     if (!customerFound) return next(appError("Customer not found", 404));
 
     let walletTransaction = {
+      customerId,
       closingBalance: customerFound?.customerDetails?.walletBalance || 0,
       transactionAmount: parseFloat(amount),
       date: new Date(),
@@ -628,30 +620,16 @@ const deductMoneyFromWalletCOntroller = async (req, res, next) => {
     };
 
     customerFound.customerDetails.walletBalance -= parseFloat(amount);
-    customerFound.walletTransactionDetail.push(walletTransaction);
 
     await Promise.all([
       customerFound.save(),
       CustomerTransaction.create(customerTransaction),
+      CustomerWalletTransaction.create(walletTransaction),
     ]);
 
-    walletTransaction =
-      customerFound?.walletTransactionDetail[
-        customerFound?.walletTransactionDetail.length - 1
-      ];
-
-    const formattedResponse = {
-      closingBalance: walletTransaction.closingBalance,
-      transactionAmount: walletTransaction.transactionAmount,
-      date:
-        `${formatDate(walletTransaction.date)} | ${formatTime(
-          walletTransaction.date
-        )}` || "-",
-    };
-
     res.status(200).json({
+      success: true,
       message: `${amount} Rs is deducted from customer's wallet`,
-      data: formattedResponse,
     });
   } catch (err) {
     next(appError(err.message));
