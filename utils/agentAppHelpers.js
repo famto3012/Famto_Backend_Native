@@ -2,6 +2,7 @@ const AgentNotificationLogs = require("../models/AgentNotificationLog");
 const AgentPricing = require("../models/AgentPricing");
 const Customer = require("../models/Customer");
 const CustomerPricing = require("../models/CustomerPricing");
+const CustomerTransaction = require("../models/CustomerTransactionDetail");
 const Referral = require("../models/Referral");
 const SubscriptionLog = require("../models/SubscriptionLog");
 const Task = require("../models/Task");
@@ -69,6 +70,7 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
 
       if (agentPricing) {
         if (agentPricing?.type && agentPricing?.type.startsWith("Monthly")) {
+          console.log("Monthly Agent");
           if (agentPricing?.type === "Monthly-Full-Time") {
             const perHourBaseFare = Number(
               (agentPricing?.baseFare / agentPricing?.minLoginHours).toFixed(2)
@@ -244,15 +246,18 @@ const processReferralRewards = async (customer, orderAmount) => {
     refereeMaxDiscountValue,
   } = referralFound;
 
+  let referrerTransaction;
+  let customerTransaction;
+
   if (referralType === "Flat-discount") {
-    let referrerTransation = {
+    referrerTransaction = {
       madeOn: new Date(),
       transactionType: "Referal",
       transactionAmount: parseFloat(referrerDiscount),
       type: "Credit",
     };
 
-    let customerTransation = {
+    customerTransaction = {
       madeOn: new Date(),
       transactionType: "Referal",
       transactionAmount: parseFloat(refereeDiscount),
@@ -260,10 +265,8 @@ const processReferralRewards = async (customer, orderAmount) => {
     };
 
     referrerFound.customerDetails.walletBalance += parseFloat(referrerDiscount);
-    referrerFound.transactionDetail.push(referrerTransation);
 
     customer.customerDetails.walletBalance += parseFloat(refereeDiscount);
-    customer.transactionDetail.push(customerTransation);
   } else if (referralType === "Percentage-discount") {
     const referrerAmount = Math.min(
       (orderAmount * referrerDiscount) / 100,
@@ -274,14 +277,14 @@ const processReferralRewards = async (customer, orderAmount) => {
       refereeMaxDiscountValue
     );
 
-    let referrerTransation = {
+    referrerTransaction = {
       madeOn: new Date(),
       transactionType: "Referal",
       transactionAmount: parseFloat(referrerAmount),
       type: "Credit",
     };
 
-    let customerTransation = {
+    customerTransaction = {
       madeOn: new Date(),
       transactionType: "Referal",
       transactionAmount: parseFloat(refereeAmount),
@@ -289,15 +292,32 @@ const processReferralRewards = async (customer, orderAmount) => {
     };
 
     referrerFound.customerDetails.walletBalance += parseFloat(referrerAmount);
-    referrerFound.transactionDetail.push(referrerTransation);
 
     customer.customerDetails.walletBalance += parseFloat(refereeAmount);
-    customer.transactionDetail.push(customerTransation);
   }
 
   customer.referralDetail.processed = true;
 
-  await Promise.all([referrerFound.save(), customer.save()]);
+  const transactions = [];
+
+  if (referrerTransaction) {
+    transactions.push({
+      ...referrerTransaction,
+      customerId: referrerFound._id,
+    });
+  }
+
+  if (customerTransaction) {
+    transactions.push({ ...customerTransaction, customerId: customer._id });
+  }
+
+  if (transactions.length > 0) {
+    await Promise.all([
+      referrerFound.save(),
+      customer.save(),
+      CustomerTransaction.insertMany(transactions),
+    ]);
+  }
 };
 
 const calculateAgentEarnings = async (agent, order) => {
@@ -454,6 +474,8 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       });
     }
 
+    console.log("customerPricing", customerPricing);
+
     const {
       baseFare,
       baseDistance,
@@ -469,19 +491,29 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       fareAfterBaseDistance
     );
 
+    console.log("deliveryCharge", deliveryCharge);
+
     const minutesWaitedAtPickup = Math.floor(
       (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
     );
+
+    console.log("minutesWaitedAtPickup", minutesWaitedAtPickup);
 
     if (minutesWaitedAtPickup > waitingTime) {
       const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
       calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
     }
 
+    console.log("Calculating");
+
     const totalTaskTime = new Date(now) - new Date(pickupStartAt);
+
+    console.log("totalTaskTime", totalTaskTime);
 
     // Convert the difference to minutes
     const diffInHours = Math.ceil(totalTaskTime / 3600000);
+
+    console.log("diffInHours", diffInHours);
 
     let calculatedPurchaseFare = 0;
 
@@ -493,6 +525,8 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
 
     const calculatedDeliveryFare =
       deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
+
+    console.log("calculatedDeliveryFare", calculatedDeliveryFare);
 
     order.billDetail.waitingCharges = calculatedDeliveryFare;
     order.billDetail.deliveryCharge = calculatedDeliveryFare;

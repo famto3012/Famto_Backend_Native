@@ -50,6 +50,7 @@ const autoAllocationRoute = require("./routes/adminRoute/deliveryManagementRoute
 require("dotenv").config();
 require("./config/dbConnect");
 require("./DBSeeder/adminSeeder");
+require("./automation");
 
 const {
   createOrdersFromScheduled,

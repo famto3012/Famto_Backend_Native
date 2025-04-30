@@ -13,6 +13,7 @@ const {
   createRazorpayOrderId,
   verifyPayment,
 } = require("../../../utils/razorpayPayment");
+const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 
 const createSubscriptionLog = async (req, res, next) => {
   const errors = validationResult(req);
@@ -176,13 +177,17 @@ const verifyRazorpayPayment = async (req, res, next) => {
         await merchant.save();
       } else {
         user.customerDetails.pricing.push(subscriptionLog._id);
-        user.transactionDetail.push({
-          transactionAmount: amount,
-          transactionType: "Subscription",
-          madeOn: new Date(),
-          type: "Debit",
-        });
-        await user.save();
+
+        await Promise.all([
+          user.save(),
+          CustomerTransaction.create({
+            customerId: customer._id,
+            transactionAmount: amount,
+            transactionType: "Subscription",
+            madeOn: new Date(),
+            type: "Debit",
+          }),
+        ]);
       }
     };
 

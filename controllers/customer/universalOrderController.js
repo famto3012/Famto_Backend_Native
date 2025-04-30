@@ -38,11 +38,7 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
 const { geoLocation } = require("../../utils/getGeoLocation");
 
-const {
-  sendNotification,
-  sendSocketData,
-  findRolesToNotify,
-} = require("../../socket/socket");
+const { sendNotification, sendSocketData } = require("../../socket/socket");
 const {
   validateDeliveryOption,
   processHomeDeliveryDetailInApp,
@@ -52,7 +48,8 @@ const {
   processScheduledDelivery,
 } = require("../../utils/createOrderHelpers");
 const Task = require("../../models/Task");
-const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -603,7 +600,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       const merchantIdsFromProducts = matchingCategories.map((category) =>
         category.merchantId.toString()
       );
-      console.log("merchantIdsFromProducts:", merchantIdsFromProducts.length);
+      // console.log("merchantIdsFromProducts:", merchantIdsFromProducts.length);
 
       merchantsWithProducts = merchants.filter((merchant) =>
         merchantIdsFromProducts.includes(merchant._id.toString())
@@ -1041,7 +1038,6 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
 
     await currentCustomer.save();
   } catch (err) {
-    console.error("❌ Error:", err.message);
     next(appError(err.message));
   }
 };
@@ -1525,135 +1521,6 @@ const getCartBillController = async (req, res, next) => {
   }
 };
 
-// Apply Tip
-// const applyTipController = async (req, res, next) => {
-//   try {
-//     const { tip = 0 } = req.body;
-//     const customerId = req.userAuth;
-
-//     const cartFound = await CustomerCart.findOne({ customerId });
-//     if (!cartFound) return next(appError("Cart not found", 404));
-
-//     const { billDetail: cartBill } = cartFound;
-//     if (!cartBill) return next(appError("Billing details not found", 404));
-
-//     const oldTip = cartBill.addedTip || 0;
-
-//     const newTip = parseFloat(tip) || 0;
-//     cartBill.addedTip = newTip;
-
-//     // Recalculate totals with the new tip adjustment
-//     cartBill.subTotal += newTip - oldTip;
-//     cartBill.discountedGrandTotal += newTip - oldTip;
-//     cartBill.originalGrandTotal += newTip - oldTip;
-
-//     // Save the changes to the cart
-//     await cartFound.save();
-
-//     res.status(200).json(cartFound.billDetail);
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// Apply Promo code
-// const applyPromoCodeController = async (req, res, next) => {
-//   try {
-//     const { promoCode } = req.body;
-//     const customerId = req.userAuth;
-
-//     const [customer, cart] = await Promise.all([
-//       Customer.findById(customerId),
-//       CustomerCart.findOne({ customerId }),
-//     ]);
-
-//     if (!customer) return next(appError("Customer not found", 404));
-//     if (!cart) return next(appError("Cart not found", 404));
-
-//     const { geofenceId } = customer.customerDetails;
-//     const { deliveryMode, deliveryOption } = cart.cartDetail;
-//     const { itemTotal, discountedAmount = 0 } = cart.billDetail;
-
-//     console.log("Checking promo code with:", {
-//       promoCode,
-//       geofenceId,
-//       deliveryMode,
-//     });
-
-//     // Find the promo code
-//     const promoCodeFound = await PromoCode.findOne({
-//       promoCode,
-//       geofenceId,
-//       status: true,
-//       deliveryMode,
-//     });
-
-//     if (!promoCodeFound) {
-//       return next(appError("Promo code not found or inactive", 404));
-//     }
-
-//     const {
-//       merchantId: promoMerchants,
-//       minOrderAmount,
-//       fromDate,
-//       toDate,
-//       noOfUserUsed,
-//       maxAllowedUsers,
-//     } = promoCodeFound;
-
-//     // Check if promo code's merchant matches cart's merchant
-//     const merchantId = cart.merchantId.toString();
-//     if (!promoMerchants.includes(merchantId)) {
-//       return next(
-//         appError("Promo code is not applicable for this merchant", 400)
-//       );
-//     }
-
-//     const totalCartPrice =
-//       deliveryOption === "Scheduled"
-//         ? calculateScheduledCartValue(cart, promoCodeFound)
-//         : itemTotal;
-
-//     if (totalCartPrice < minOrderAmount) {
-//       return next(
-//         appError(`Minimum order amount should be ${minOrderAmount}`, 400)
-//       );
-//     }
-
-//     const now = new Date();
-//     if (now < fromDate || now > toDate) {
-//       return next(appError("Promo code is not valid at this time", 400));
-//     }
-
-//     if (noOfUserUsed >= maxAllowedUsers) {
-//       return next(appError("Promo code usage limit reached", 400));
-//     }
-
-//     const promoDiscount = calculatePromoCodeDiscount(
-//       promoCodeFound,
-//       totalCartPrice
-//     );
-
-//     const totalDiscount = Number((promoDiscount + discountedAmount).toFixed(2));
-
-//     // Apply discount
-//     const updatedCart = applyPromoCodeDiscount(
-//       cart,
-//       promoCodeFound,
-//       totalDiscount
-//     );
-
-//     await updatedCart.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message: `Promo code ${promoCode} applied`,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
 // Order Product
 const orderPaymentController = async (req, res, next) => {
   try {
@@ -1759,6 +1626,7 @@ const orderPaymentController = async (req, res, next) => {
     };
 
     let walletTransaction = {
+      customerId,
       closingBalance: customer?.customerDetails?.walletBalance,
       transactionAmount: orderAmount,
       date: new Date(),
@@ -1766,6 +1634,7 @@ const orderPaymentController = async (req, res, next) => {
     };
 
     let customerTransaction = {
+      customerId,
       madeOn: new Date(),
       transactionType: "Bill",
       transactionAmount: orderAmount,
@@ -1799,13 +1668,8 @@ const orderPaymentController = async (req, res, next) => {
           purchasedItems,
         });
 
-        customer.customerDetails.walletBalance = Number(
-          (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
-        );
 
-        walletTransaction.orderId = newOrderCreated._id;
-        customer.walletTransactionDetail.push(walletTransaction);
-        customer.transactionDetail.push(customerTransaction);
+        walletTransaction.orderId = newOrderCreated._id
 
         await Promise.all([
           PromoCode.findOneAndUpdate(
@@ -1814,6 +1678,8 @@ const orderPaymentController = async (req, res, next) => {
           ),
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
+          CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -1912,12 +1778,12 @@ const orderPaymentController = async (req, res, next) => {
         }
 
         walletTransaction.orderId = orderId;
-        customer.walletTransactionDetail.push(walletTransaction);
-        customer.transactionDetail.push(customerTransaction);
 
         await Promise.all([
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
+          CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         // Return countdown timer to client
@@ -1968,33 +1834,66 @@ const orderPaymentController = async (req, res, next) => {
               );
             }
 
-            const walletTransaction = customer.walletTransactionDetail.find(
-              (transaction) => {
-                return transaction?.orderId?.toString() === orderId?.toString();
-              }
-            );
-
-            walletTransaction.orderId = newOrderCreated?._id;
+            const oldOrderId = orderId;
 
             await Promise.all([
               TemporaryOrder.deleteOne({ orderId }),
               customer.save(),
+              CustomerWalletTransaction.findOneAndUpdate(
+                { orderId: oldOrderId },
+                { $set: { orderId: newOrderCreated._id } },
+                { new: true }
+              ),
             ]);
 
             const eventName = "newOrderCreated";
 
             // Fetch notification settings to determine roles
-            const { rolesToNotify, data } = await findRolesToNotify(eventName);
+            const notificationSettings = await NotificationSetting.findOne({
+              event: eventName,
+            });
 
-            const notificationData = {
-              fcm: {
-                orderId: newOrder._id,
-                customerId: newOrder.customerId,
-              },
-            };
+            const rolesToNotify = [
+              "admin",
+              "merchant",
+              "driver",
+              "customer",
+            ].filter((role) => notificationSettings[role]);
 
-            const socketData = {
-              ...data,
+            // Send notifications to each role dynamically
+            for (const role of rolesToNotify) {
+              let roleId;
+
+              if (role === "admin") {
+                roleId = process.env.ADMIN_ID;
+              } else if (role === "merchant") {
+                roleId = newOrder?.merchantId._id;
+              } else if (role === "driver") {
+                roleId = newOrder?.agentId;
+              } else if (role === "customer") {
+                roleId = newOrder?.customerId;
+              }
+
+              if (roleId) {
+                const notificationData = {
+                  fcm: {
+                    orderId: newOrder._id,
+                    customerId: newOrder.customerId,
+                  },
+                };
+
+                await sendNotification(
+                  roleId,
+                  eventName,
+                  notificationData,
+                  role.charAt(0).toUpperCase() + role.slice(1)
+                );
+              }
+            }
+
+            const data = {
+              title: notificationSettings.title,
+              description: notificationSettings.description,
 
               orderId: newOrder._id,
               orderDetail: newOrder.orderDetail,
@@ -2024,21 +1923,9 @@ const orderPaymentController = async (req, res, next) => {
               amount: newOrder.billDetail.grandTotal,
             };
 
-            const userIds = {
-              admin: process.env.ADMIN_ID,
-              merchant: newOrder?.merchantId._id,
-              agent: newOrder?.agentId,
-              customer: newOrder?.customerId,
-            };
-
-            // Send notifications to each role dynamically
-            await sendSocketDataAndNotification({
-              rolesToNotify,
-              userIds,
-              eventName,
-              notificationData,
-              socketData,
-            });
+            sendSocketData(newOrder.customerId, eventName, data);
+            sendSocketData(newOrder.merchantId._id, eventName, data);
+            sendSocketData(process.env.ADMIN_ID, eventName, data);
           }
         }, 60000);
       }
@@ -2070,8 +1957,6 @@ const orderPaymentController = async (req, res, next) => {
         purchasedItems,
       });
 
-      customer.transactionDetail.push(customerTransaction);
-
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
@@ -2079,6 +1964,7 @@ const orderPaymentController = async (req, res, next) => {
       await Promise.all([
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       // Return countdown timer to client
@@ -2136,17 +2022,52 @@ const orderPaymentController = async (req, res, next) => {
 
           const eventName = "newOrderCreated";
 
-          const { rolesToNotify, data } = await findRolesToNotify(eventName);
+          // Fetch notification settings to determine roles
+          const notificationSettings = await NotificationSetting.findOne({
+            event: eventName,
+          });
 
-          const notificationData = {
-            fcm: {
-              orderId: newOrder._id,
-              customerId: newOrder.customerId,
-            },
-          };
+          const rolesToNotify = [
+            "admin",
+            "merchant",
+            "driver",
+            "customer",
+          ].filter((role) => notificationSettings[role]);
 
-          const socketData = {
-            ...data,
+          // Send notifications to each role dynamically
+          for (const role of rolesToNotify) {
+            let roleId;
+
+            if (role === "admin") {
+              roleId = process.env.ADMIN_ID;
+            } else if (role === "merchant") {
+              roleId = newOrder?.merchantId._id;
+            } else if (role === "driver") {
+              roleId = newOrder?.agentId;
+            } else if (role === "customer") {
+              roleId = newOrder?.customerId;
+            }
+
+            if (roleId) {
+              const notificationData = {
+                fcm: {
+                  orderId: newOrder._id,
+                  customerId: newOrder.customerId,
+                },
+              };
+
+              await sendNotification(
+                roleId,
+                eventName,
+                notificationData,
+                role.charAt(0).toUpperCase() + role.slice(1)
+              );
+            }
+          }
+
+          const data = {
+            title: notificationSettings.title,
+            description: notificationSettings.description,
 
             orderId: newOrder._id,
             orderDetail: newOrder.orderDetail,
@@ -2176,21 +2097,9 @@ const orderPaymentController = async (req, res, next) => {
             amount: newOrder.billDetail.grandTotal,
           };
 
-          const userIds = {
-            admin: process.env.ADMIN_ID,
-            merchant: newOrder?.merchantId?._id,
-            driver: newOrder?.agentId,
-            customer: newOrder?.customerId,
-          };
-
-          // Send notifications to each role dynamically
-          await sendSocketDataAndNotification({
-            rolesToNotify,
-            userIds,
-            eventName,
-            notificationData,
-            socketData,
-          });
+          sendSocketData(newOrder.customerId, eventName, data);
+          sendSocketData(newOrder.merchantId._id, eventName, data);
+          sendSocketData(process.env.ADMIN_ID, eventName, data);
         }
       }, 60000);
     } else if (paymentMode === "Online-payment") {
@@ -2325,6 +2234,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     };
 
     let customerTransaction = {
+      customerId,
       madeOn: new Date(),
       transactionType: "Bill",
       transactionAmount: orderAmount,
@@ -2343,7 +2253,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     // Check if the order is scheduled
     if (cart.cartDetail.deliveryOption === "Scheduled") {
       // Create a scheduled order
-      const newOrderCreated = await ScheduledOrder.create({
+     const newOrderCreated = await ScheduledOrder.create({
         customerId,
         merchantId: cart.merchantId,
         items: formattedItems,
@@ -2362,11 +2272,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
       // Clear the cart
 
-      customer.transactionDetail.push(customerTransaction);
-
       await Promise.all([
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -2459,8 +2368,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         purchasedItems,
       });
 
-      customer.transactionDetail.push(customerTransaction);
-
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
@@ -2468,6 +2375,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       await Promise.all([
         customer.save(),
         CustomerCart.deleteOne({ customerId }),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       // Return countdown timer to client
@@ -2530,18 +2438,52 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
           const eventName = "newOrderCreated";
 
-          const { rolesToNotify, data } = await findRolesToNotify(eventName);
+          // Fetch notification settings to determine roles
+          const notificationSettings = await NotificationSetting.findOne({
+            event: eventName,
+          });
+
+          const rolesToNotify = [
+            "admin",
+            "merchant",
+            "driver",
+            "customer",
+          ].filter((role) => notificationSettings[role]);
 
           // Send notifications to each role dynamically
-          const notificationData = {
-            fcm: {
-              orderId: newOrder._id,
-              customerId: newOrder.customerId,
-            },
-          };
+          for (const role of rolesToNotify) {
+            let roleId;
 
-          const socketData = {
-            ...data,
+            if (role === "admin") {
+              roleId = process.env.ADMIN_ID;
+            } else if (role === "merchant") {
+              roleId = newOrder?.merchantId._id;
+            } else if (role === "driver") {
+              roleId = newOrder?.agentId;
+            } else if (role === "customer") {
+              roleId = newOrder?.customerId;
+            }
+
+            if (roleId) {
+              const notificationData = {
+                fcm: {
+                  orderId: newOrder._id,
+                  customerId: newOrder.customerId,
+                },
+              };
+
+              await sendNotification(
+                roleId,
+                eventName,
+                notificationData,
+                role.charAt(0).toUpperCase() + role.slice(1)
+              );
+            }
+          }
+
+          const data = {
+            title: notificationSettings.title,
+            description: notificationSettings.description,
 
             orderId: newOrder._id,
             orderDetail: newOrder.orderDetail,
@@ -2571,21 +2513,9 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             amount: newOrder.billDetail.grandTotal,
           };
 
-          const userIds = {
-            admin: process.env.ADMIN_ID,
-            merchant: newOrder?.merchantId._id,
-            agent: newOrder?.agentId,
-            customer: newOrder?.customerId,
-          };
-
-          // Send notifications to each role dynamically
-          await sendSocketDataAndNotification({
-            rolesToNotify,
-            userIds,
-            eventName,
-            notificationData,
-            socketData,
-          });
+          sendSocketData(newOrder.customerId, eventName, data);
+          sendSocketData(newOrder.merchantId._id, eventName, data);
+          sendSocketData(process.env.ADMIN_ID, eventName, data);
         }
       }, 60000);
     }
@@ -2598,8 +2528,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 const cancelOrderBeforeCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
-
-    console.log(req.body);
 
     const orderFound = await TemporaryOrder.findOne({
       orderId: mongoose.Types.ObjectId.createFromHexString(orderId),
@@ -2617,6 +2545,7 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
     const customerFound = await Customer.findById(orderFound.customerId);
 
     let updatedTransactionDetail = {
+      customerId: customerFound._id,
       transactionType: "Refund",
       madeOn: new Date(),
       type: "Credit",
@@ -2629,12 +2558,11 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
 
-      // Remove the temporary order data from the database
-      await TemporaryOrder.deleteOne({ orderId });
-
-      customerFound.transactionDetail.push(updatedTransactionDetail);
-
-      await customerFound.save();
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        customerFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
+      ]);
 
       res.status(200).json({
         success: true,
@@ -2666,9 +2594,11 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
         return next(appError("Refund failed: " + refundResponse.error, 500));
       }
 
-      customerFound.transactionDetail.push(updatedTransactionDetail);
-
-      await customerFound.save();
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        customerFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
+      ]);
 
       res.status(200).json({
         success: true,

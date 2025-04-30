@@ -35,8 +35,8 @@ const orderCommissionLogHelper = async (order) => {
       payableAmountToMerchant = totalAmount - payableAmountToFamto;
     }
 
-    const commissionLog = await CommissionLogs.create({
-      orderId: order._id,
+    const commissionLog = new CommissionLogs({
+      orderId,
       merchantId: order.merchantId,
       merchantName,
       totalAmount,

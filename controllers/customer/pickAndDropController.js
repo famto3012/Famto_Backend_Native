@@ -36,6 +36,8 @@ const {
 } = require("../../utils/createOrderHelpers");
 const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
 const Tax = require("../../models/Tax");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Initialize cart
 const initializePickAndDrop = async (req, res, next) => {
@@ -398,118 +400,6 @@ const getPickAndDropBill = async (req, res, next) => {
   }
 };
 
-// Add tip and promo code
-// const addTipAndApplyPromoCodeInPickAndDropController = async (
-//   req,
-//   res,
-//   next
-// ) => {
-//   try {
-//     const customerId = req.userAuth;
-//     const { addedTip, promoCode } = req.body;
-
-//     const [customerFound, cart] = await Promise.all([
-//       Customer.findById(customerId),
-//       PickAndCustomCart.findOne({
-//         customerId,
-//         "cartDetail.deliveryMode": "Pick and Drop",
-//       }),
-//     ]);
-
-//     if (!customerFound) return next(appError("Customer not found", 404));
-//     if (!cart) return next(appError("Cart not found", 404));
-
-//     // Ensure the original delivery charge exists
-//     const {
-//       originalGrandTotal,
-//       originalDeliveryCharge,
-//       addedTip: oldTip = 0,
-//     } = cart.billDetail;
-
-//     // Add the tip
-//     const tip = addedTip !== undefined ? parseInt(addedTip) : oldTip;
-//     const originalGrandTotalWithTip = originalGrandTotal + tip - oldTip;
-
-//     cart.billDetail.addedTip = tip;
-//     cart.billDetail.originalGrandTotal = originalGrandTotalWithTip;
-
-//     let discountAmount = 0;
-//     let promoCodeUsed = null;
-
-//     // Apply the promo code if provided
-//     if (promoCode) {
-//       const promoCodeFound = await PromoCode.findOne({
-//         promoCode,
-//         geofenceId: customerFound.customerDetails.geofenceId,
-//         appliedOn: "Delivery-charge",
-//         status: true,
-//         deliveryMode: "Pick and Drop",
-//       });
-
-//       if (!promoCodeFound) {
-//         return next(appError("Promo code not found or inactive", 404));
-//       }
-
-//       promoCodeUsed = promoCodeFound.promoCode;
-
-//       const totalDeliveryPrice =
-//         cart.cartDetail.deliveryOption === "Scheduled"
-//           ? calculateScheduledCartValue(cart, promoCodeFound)
-//           : originalDeliveryCharge;
-
-//       // Check if total cart price meets minimum order amount
-//       if (totalDeliveryPrice < promoCodeFound.minOrderAmount) {
-//         return next(
-//           appError(
-//             `Minimum order amount is ${promoCodeFound.minOrderAmount}`,
-//             400
-//           )
-//         );
-//       }
-
-//       // Check promo code validity dates
-//       const now = new Date();
-//       if (now < promoCodeFound.fromDate || now > promoCodeFound.toDate) {
-//         return next(appError("Promo code is not valid at this time", 400));
-//       }
-
-//       // Check user limit for promo code
-//       if (promoCodeFound.noOfUserUsed >= promoCodeFound.maxAllowedUsers) {
-//         return next(appError("Promo code usage limit reached", 400));
-//       }
-
-//       // Calculate discount amount
-//       discountAmount = calculatePromoCodeDiscount(
-//         promoCodeFound,
-//         totalDeliveryPrice
-//       );
-
-//       await promoCodeFound.save();
-//     }
-
-//     // Ensure proper type conversion for discountAmount
-//     discountAmount = parseFloat(discountAmount) || 0;
-
-//     const discountedDeliveryCharge = originalDeliveryCharge - discountAmount;
-//     const discountedGrandTotal =
-//       originalGrandTotal - discountAmount + tip - oldTip;
-
-//     cart.billDetail.discountedDeliveryCharge =
-//       discountedDeliveryCharge < 0 ? 0 : Math.round(discountedDeliveryCharge);
-//     cart.billDetail.discountedGrandTotal = Math.round(discountedGrandTotal);
-//     cart.billDetail.discountedAmount = discountAmount.toFixed(2);
-//     cart.billDetail.promoCodeUsed = promoCodeUsed;
-
-//     await cart.save();
-
-//     res.status(200).json({
-//       success: true,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
 // Confirm pick and drop
 const confirmPickAndDropController = async (req, res, next) => {
   try {
@@ -553,6 +443,7 @@ const confirmPickAndDropController = async (req, res, next) => {
       };
 
       let walletTransaction = {
+        customerId,
         closingBalance: customer?.customerDetails?.walletBalance,
         transactionAmount: orderAmount,
         date: new Date(),
@@ -564,13 +455,12 @@ const confirmPickAndDropController = async (req, res, next) => {
         transactionType: "Bill",
         transactionAmount: orderAmount,
         type: "Debit",
+        customerId,
       };
 
       const deliveryTime = new Date();
       deliveryTime.setMinutes(deliveryTime.getMinutes() + 60);
 
-      customer.transactionDetail.push(customerTransaction);
-      customer.walletTransactionDetail.push(walletTransaction);
       customer.customerDetails.walletBalance -= orderAmount;
 
       let newOrder;
@@ -592,6 +482,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         await Promise.all([
           customer.save(),
           PickAndCustomCart.deleteOne({ customerId }),
+          CustomerTransaction.create(customerTransaction),
         ]);
 
         res.status(200).json({
@@ -624,6 +515,8 @@ const confirmPickAndDropController = async (req, res, next) => {
       await Promise.all([
         customer.save(),
         PickAndCustomCart.deleteOne({ customerId }),
+        CustomerTransaction.create(customerTransaction),
+        CustomerWalletTransaction.create({ ...walletTransaction, orderId }),
       ]);
 
       if (!tempOrder)
@@ -660,17 +553,17 @@ const confirmPickAndDropController = async (req, res, next) => {
             return next(appError("Error in creating order"));
           }
 
-          const walletTransaction = customer.walletTransactionDetail.find(
-            (transaction) =>
-              transaction.orderId.toString() === orderId.toString()
-          );
-
-          walletTransaction.orderId = newOrderCreated._id;
+          const oldOrderId = orderId;
 
           // Remove the temporary order data from the database
           await Promise.all([
             TemporaryOrder.deleteOne({ orderId }),
             customer.save(),
+            CustomerWalletTransaction.findOneAndUpdate(
+              { orderId: oldOrderId },
+              { $set: { orderId: newOrderCreated._id } },
+              { new: true }
+            ),
           ]);
 
           //? Notify the USER and ADMIN about successful order creation
@@ -801,6 +694,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     };
 
     let customerTransaction = {
+      customerId,
       madeOn: new Date(),
       transactionType: "Bill",
       transactionAmount: orderAmount,
@@ -824,10 +718,11 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         time: cart.cartDetail.time,
       });
 
-      // Clear the cart
-      await PickAndCustomCart.deleteOne({ customerId });
-      customer.transactionDetail.push(customerTransaction);
-      await customer.save();
+      await Promise.all([
+        PickAndCustomCart.deleteOne({ customerId }),
+        customer.save(),
+        customerTransaction.create(customerTransaction),
+      ]);
 
       res.status(200).json({
         message: "Scheduled order created successfully",
@@ -853,11 +748,11 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       paymentId: paymentDetails.razorpay_payment_id,
     });
 
-    customer.transactionDetail.push(customerTransaction);
-    await customer.save();
-
-    // Clear the cart
-    await PickAndCustomCart.deleteOne({ customerId });
+    await Promise.all([
+      PickAndCustomCart.deleteOne({ customerId }),
+      customer.save(),
+      customerTransaction.create(customerTransaction),
+    ]);
 
     if (!tempOrder) {
       return next(appError("Error in creating temporary order"));
@@ -1006,6 +901,7 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
     }
 
     let updatedTransactionDetail = {
+      customerId: customerFound._id,
       transactionType: "Refund",
       madeOn: new Date(),
       type: "Credit",
@@ -1019,12 +915,11 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
 
-      // Remove the temporary order data from the database
-      await TemporaryOrder.deleteOne({ orderId });
-
-      customerFound.transactionDetail.push(updatedTransactionDetail);
-
-      await customerFound.save();
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        customerFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
+      ]);
 
       res.status(200).json({
         success: true,
@@ -1059,9 +954,11 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
         return next(appError("Refund failed: " + refundResponse.error, 500));
       }
 
-      customerFound.transactionDetail.push(updatedTransactionDetail);
-
-      await customerFound.save();
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        customerFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
+      ]);
 
       res.status(200).json({
         success: true,
@@ -1079,7 +976,6 @@ module.exports = {
   addPickUpAddressController,
   getVehiclePricingDetailsController,
   addPickAndDropItemsController,
-  // addTipAndApplyPromoCodeInPickAndDropController,
   confirmPickAndDropController,
   verifyPickAndDropPaymentController,
   cancelPickBeforeOrderCreationController,

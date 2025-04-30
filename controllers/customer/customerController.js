@@ -17,6 +17,7 @@ const NotificationSetting = require("../../models/NotificationSetting");
 const CustomerNotificationLogs = require("../../models/CustomerNotificationLog");
 const AppBanner = require("../../models/AppBanner");
 const CustomerCart = require("../../models/CustomerCart");
+const Geofence = require("../../models/Geofence");
 const Referral = require("../../models/Referral");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const scheduledPickAndCustom = require("../../models/ScheduledPickAndCustom");
@@ -46,8 +47,11 @@ const LoyaltyPoint = require("../../models/LoyaltyPoint");
 const Banner = require("../../models/Banner");
 const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const verifyToken = require("../../utils/verifyToken");
+const Merchant = require("../../models/Merchant");
 const Product = require("../../models/Product");
 const Category = require("../../models/Category");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -435,17 +439,11 @@ const verifyWalletRechargeController = async (req, res, next) => {
     if (!isPaymentValid) return next(appError("Invalid payment", 400));
 
     let walletTransaction = {
+      customerId,
       closingBalance: customer?.customerDetails?.walletBalance || 0,
       transactionAmount: parsedAmount,
       transactionId: paymentDetails.razorpay_payment_id,
       date: new Date(),
-      type: "Credit",
-    };
-
-    let customerTransaction = {
-      madeOn: new Date(),
-      transactionType: "Top-up",
-      transactionAmount: parsedAmount,
       type: "Credit",
     };
 
@@ -454,11 +452,17 @@ const verifyWalletRechargeController = async (req, res, next) => {
       parseFloat(customer?.customerDetails?.walletBalance) || 0;
     customer.customerDetails.walletBalance += parsedAmount;
 
-    customer.walletTransactionDetail.push(walletTransaction);
-
-    customer.transactionDetail.push(customerTransaction);
-
-    await customer.save();
+    await Promise.all([
+      customer.save(),
+      CustomerTransaction.create({
+        customerId,
+        madeOn: new Date(),
+        transactionType: "Top-up",
+        transactionAmount: parsedAmount,
+        type: "Credit",
+      }),
+      CustomerWalletTransaction.create(walletTransaction),
+    ]);
 
     res.status(200).json({ message: "Wallet recharged successfully" });
   } catch (err) {
@@ -508,6 +512,57 @@ const rateDeliveryAgentController = async (req, res, next) => {
     next(appError(err.message));
   }
 };
+
+// Get favorite merchants
+// const getFavoriteMerchantsController = async (req, res, next) => {
+//   try {
+//     const currentCustomer = req.userAuth;
+//     // Retrieving only necessary fields for customer and their favorite merchants
+//     const customer = await Customer.findById(currentCustomer)
+//       .select("customerDetails.favoriteMerchants")
+//       .populate({
+//         path: "customerDetails.favoriteMerchants.merchantId",
+//       })
+//       .populate({
+//         path: "customerDetails.favoriteMerchants.businessCategoryId",
+//         select: "title",
+//       });
+
+//     if (!customer || !customer.customerDetails) {
+//       return next(appError("Customer details not found", 404));
+//     }
+
+//     // Map the favorite merchants into the desired format
+//     const formattedMerchants = customer.customerDetails.favoriteMerchants.map(
+//       (merchant) => ({
+//         id: merchant?.merchantId?._id,
+//         merchantName:
+//           merchant?.merchantId?.merchantDetail?.merchantName || null,
+//         description: merchant?.merchantId?.merchantDetail?.description || null,
+//         averageRating: merchant?.merchantId?.merchantDetail?.averageRating,
+//         status: merchant?.merchantId?.status,
+//         restaurantType:
+//           merchant?.merchantId?.merchantDetail?.merchantFoodType || null,
+//         merchantImageURL:
+//           merchant?.merchantId?.merchantDetail?.merchantImageURL ||
+//           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FMerchantDefaultImage.png?alt=media&token=a7a11e18-047c-43d9-89e3-8e35d0a4e231",
+//         displayAddress:
+//           merchant?.merchantId?.merchantDetail?.displayAddress || null,
+//         preOrderStatus: merchant?.merchantId?.merchantDetail?.preOrderStatus,
+//         isFavorite: true,
+//         businessCategoryId: merchant?.businessCategoryId?.id,
+//         businessCategoryName: merchant?.businessCategoryId?.title,
+//       })
+//     );
+
+//     res.status(200).json({
+//       success: true,
+//       data: formattedMerchants,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 const getFavoriteMerchantsController = async (req, res, next) => {
   try {
@@ -572,6 +627,45 @@ const getFavoriteMerchantsController = async (req, res, next) => {
     next(appError(err.message));
   }
 };
+
+// Get favorite products
+// const getFavoriteProductsController = async (req, res, next) => {
+//   try {
+//     const customer = await Customer.findById(req.userAuth)
+//       .populate({
+//         path: "customerDetails.favoriteProducts",
+//         select:
+//           "productName price productImageURL description categoryId inventory",
+//         populate: {
+//           path: "categoryId",
+//           select: "businessCategoryId merchantId",
+//         },
+//       })
+//       .select("customerDetails.favoriteProducts");
+
+//     if (!customer) return next(appError("Customer not found", 404));
+
+//     const formattedResponse = customer.customerDetails.favoriteProducts?.map(
+//       (product) => ({
+//         productId: product._id,
+//         productName: product.productName || null,
+//         price: product.price || null,
+//         productImageURL:
+//           product.productImageURL ||
+//           "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/DefaultImages%2FProductDefaultImage.png?alt=media&token=044503ee-84c8-487b-9df7-793ad0f70e1c",
+//         businessCategoryId: product.categoryId.businessCategoryId || null,
+//         merchantId: product.categoryId.merchantId || null,
+//         inventory: product.inventory || null,
+//         description: product.description || null,
+//         isFavorite: true,
+//       })
+//     );
+
+//     res.status(200).json(formattedResponse);
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 const getFavoriteProductsController = async (req, res, next) => {
   try {
@@ -897,25 +991,18 @@ const getTransactionOfCustomerController = async (req, res, next) => {
 
     page = parseInt(page);
     limit = parseInt(limit);
+    const skip = (page - 1) * limit;
 
-    const currentCustomer = req.userAuth;
+    const customerId = req.userAuth;
 
-    const customerFound = await Customer.findById(currentCustomer)
-      .select("fullName customerDetails.customerImageURL transactionDetail")
-      .populate({
-        path: "transactionDetail",
-        options: {
-          sort: { madeOn: -1 },
-          skip: (page - 1) * limit,
-          limit: limit,
-        },
-      });
+    const transactions = await CustomerTransaction.find({ customerId })
+      .sort({
+        madeOn: -1,
+      })
+      .skip(skip)
+      .limit(limit);
 
-    if (!customerFound) {
-      return next(appError("Customer not found", 404));
-    }
-
-    const transactions = customerFound.transactionDetail.map((transaction) => ({
+    const formattedResponse = transactions?.map((transaction) => ({
       transactionAmount: transaction.transactionAmount,
       transactionType: transaction.transactionType,
       type: transaction.type,
@@ -923,7 +1010,7 @@ const getTransactionOfCustomerController = async (req, res, next) => {
       transactionTime: `${formatTime(transaction.madeOn)}`,
     }));
 
-    res.status(200).json(transactions);
+    res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1857,7 +1944,6 @@ const searchProductAndMerchantController = async (req, res) => {
       hasNextPage,
     });
   } catch (error) {
-    console.error("Search Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
