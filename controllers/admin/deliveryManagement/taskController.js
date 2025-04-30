@@ -209,14 +209,14 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         if (deliveryMode === "Pick and Drop") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agent.location,
+            getUserLocationFromSocket(agent._id) || agent?.location,
             deliveryLocation
           );
 
           distance = distanceInKM;
         } else if (deliveryMode !== "Custom Order") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agent.location,
+            getUserLocationFromSocket(agent._id) || agent?.location,
             merchantLocation
           );
 

@@ -1750,8 +1750,8 @@ const orderPaymentController = async (req, res, next) => {
               purchasedItems: storedOrderData.purchasedItems,
               "orderDetailStepper.created": {
                 by:
-                  storedOrderData.orderDetail.deliveryAddress.fullName ||
-                  customer.fullName ||
+                  storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
+                  customer?.fullName ||
                   "-",
                 userId: storedOrderData.customerId,
                 date: new Date(),

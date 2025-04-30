@@ -67,12 +67,12 @@ const getAllMerchantSubscriptionPlansController = async (req, res, next) => {
     );
 
     const formattedResponse = plans?.map((plan) => ({
-      planId: plan._id,
-      name: plan.name || null,
-      amount: plan.amount || null,
-      duration: plan.duration || null,
-      taxName: plan.taxId.taxName || null,
-      renewalReminder: plan.renewalReminder || null,
+      planId: plan?._id,
+      name: plan?.name || null,
+      amount: plan?.amount || null,
+      duration: plan?.duration || null,
+      taxName: plan?.taxId?.taxName || null,
+      renewalReminder: plan?.renewalReminder || null,
     }));
 
     res.status(200).json(formattedResponse);
