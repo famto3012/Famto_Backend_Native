@@ -1,5 +1,6 @@
 const Customer = require("./models/Customer");
 const CustomerTransaction = require("./models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("./models/CustomerWalletTransaction");
 const Order = require("./models/Order");
 const Task = require("./models/Task");
 
@@ -33,6 +34,10 @@ const migrateCustomerTransactions = async () => {
 
 // migrateCustomerTransactions();
 
+// *========================================
+// *========================================
+// *========================================
+
 const deleteOrderAndTask = async () => {
   try {
     const customerId = "C241213";
@@ -65,3 +70,46 @@ const deleteOrderAndTask = async () => {
 };
 
 // deleteOrderAndTask();
+
+// *========================================
+// *========================================
+// *========================================
+
+const migrateCustomerWalletTransactions = async () => {
+  try {
+    const customers = await Customer.find({
+      walletTransactionDetail: { $ne: [] },
+    });
+
+    for (const customer of customers) {
+      let transactions = [];
+
+      customer.walletTransactionDetail.forEach((transaction) =>
+        transactions.push({
+          customerId: customer._id,
+          closingBalance: transaction.closingBalance,
+          transactionAmount: transaction.transactionAmount,
+          transactionId: transaction.transactionId,
+          orderId: transaction.orderId,
+          date: transaction.date,
+          type: transaction.type,
+        })
+      );
+
+      if (transactions.length > 0) {
+        CustomerWalletTransaction.insertMany(transactions);
+      }
+
+      console.log(`Transactions of ${customer._id} migrated`);
+    }
+
+    await Customer.updateMany(
+      {},
+      { $unset: { walletTransactionDetail: "", transactionDetail: "" } }
+    );
+  } catch (err) {
+    console.log(`Error in moving customer transactions: ${err}`);
+  }
+};
+
+// migrateCustomerWalletTransactions();

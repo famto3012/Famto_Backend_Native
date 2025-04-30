@@ -149,62 +149,6 @@ const customerDetailSchema = new mongoose.Schema(
   }
 );
 
-const walletTransactionDetailSchema = mongoose.Schema(
-  {
-    closingBalance: {
-      type: Number,
-      required: true,
-    },
-    transactionAmount: {
-      type: Number,
-      required: true,
-    },
-    transactionId: {
-      type: String,
-    },
-    orderId: {
-      type: String,
-    },
-    date: {
-      type: Date,
-      required: true,
-    },
-    type: {
-      type: String,
-      enum: ["Credit", "Debit"],
-      required: true,
-    },
-  },
-  {
-    _id: false,
-  }
-);
-
-const transactionDetailSchema = mongoose.Schema(
-  {
-    transactionAmount: {
-      type: Number,
-      required: true,
-    },
-    transactionType: {
-      type: String,
-      required: true,
-    },
-    type: {
-      type: String,
-      enum: ["Credit", "Debit"],
-      required: true,
-    },
-    madeOn: {
-      type: Date,
-      required: true,
-    },
-  },
-  {
-    _id: false,
-  }
-);
-
 const referralDetailSchema = mongoose.Schema({
   referralType: {
     type: String,
@@ -225,6 +169,7 @@ const customerSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
+      required: true,
     },
     fullName: {
       type: String,
@@ -234,6 +179,7 @@ const customerSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
+      required: true,
     },
     lastPlatformUsed: {
       type: String,
@@ -243,8 +189,6 @@ const customerSchema = new mongoose.Schema(
       default: "Customer",
     },
     customerDetails: customerDetailSchema,
-    walletTransactionDetail: [walletTransactionDetailSchema],
-    // transactionDetail: [transactionDetailSchema],
     referralDetail: referralDetailSchema,
     loyaltyPointDetails: [
       {

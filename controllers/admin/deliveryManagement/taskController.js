@@ -165,7 +165,6 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     // Match Criteria
     const matchCriteria = {
       isApproved: "Approved",
-      location: { $exists: true, $ne: [] },
       isBlocked: false,
     };
 
@@ -174,7 +173,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     }
 
     const agents = await Agent.find(matchCriteria).select(
-      "fullName workStructure.tag status location"
+      "fullName workStructure.tag status"
     );
 
     let filteredAgents = agents;
@@ -204,22 +203,26 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     }
 
     const responseData = await Promise.all(
-      agents.map(async (agent) => {
+      filteredAgents.map(async (agent) => {
+        let agentLocation = getUserLocationFromSocket(agent._id);
+
+        if (!Array.isArray(agentLocation) || agentLocation.length !== 2) {
+          return null;
+        }
+
         let distance = 0;
 
         if (deliveryMode === "Pick and Drop") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            getUserLocationFromSocket(agent._id) || agent?.location,
+            agentLocation,
             deliveryLocation
           );
-
           distance = distanceInKM;
         } else if (deliveryMode !== "Custom Order") {
           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            getUserLocationFromSocket(agent._id) || agent?.location,
+            agentLocation,
             merchantLocation
           );
-
           distance = distanceInKM;
         }
 
@@ -233,119 +236,16 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       })
     );
 
+    const validAgents = responseData.filter(Boolean);
+
     res.status(200).json({
       success: true,
-      data: responseData,
+      data: validAgents,
     });
   } catch (err) {
     next(appError(err.message));
   }
 };
-
-// const getAgentsAccordingToGeofenceController = async (req, res, next) => {
-//   try {
-//     const { taskId, geofenceStatus, name } = req.query;
-//     const isGeofenceEnabled = geofenceStatus === "true";
-
-//     const task = await Task.findById(taskId).populate({
-//       path: "orderId",
-//       populate: {
-//         path: "merchantId",
-//         populate: {
-//           path: "merchantDetail.geofenceId",
-//         },
-//       },
-//     });
-
-//     const deliveryMode = task?.orderId?.orderDetail?.deliveryMode;
-//     const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
-//     const merchant = task?.orderId?.merchantId;
-//     const merchantLocation = merchant?.merchantDetail?.location;
-//     const geofence = merchant?.merchantDetail?.geofenceId;
-
-//     // Match Criteria
-//     const matchCriteria = {
-//       isApproved: "Approved",
-//       location: { $exists: true, $ne: [] },
-//       isBlocked: false,
-//     };
-
-//     if (name?.trim()) {
-//       matchCriteria.fullName = { $regex: name.trim(), $options: "i" };
-//     }
-
-//     const agents = await Agent.find(matchCriteria).select(
-//       "fullName workStructure.tag status location"
-//     );
-
-//     let filteredAgents = agents;
-
-//     // Filter by geofence if required
-//     if (
-//       deliveryMode !== "Custom Order" &&
-//       isGeofenceEnabled &&
-//       geofence?.coordinates?.length
-//     ) {
-//       const coordinates = [...geofence.coordinates];
-
-//       // Ensure polygon is closed
-//       if (
-//         coordinates.length &&
-//         (coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
-//           coordinates[0][1] !== coordinates[coordinates.length - 1][1])
-//       ) {
-//         coordinates.push(coordinates[0]);
-//       }
-
-//       const geofencePolygon = turf.polygon([coordinates]);
-
-//       filteredAgents = agents.filter((agent) =>
-//         turf.booleanPointInPolygon(
-//           turf.point(getUserLocationFromSocket(agent._id)),
-//           geofencePolygon
-//         )
-//       );
-//     }
-
-//     // Response Mapper
-//     const responseData = await Promise.all(
-//       filteredAgents.map(async (agent) => {
-//         let distance = 0;
-
-//         const agentLocation = getUserLocationFromSocket(agent._id);
-
-//         if (deliveryMode === "Pick and Drop") {
-//           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-//             agentLocation,
-//             deliveryLocation
-//           );
-//           distance = distanceInKM;
-//         } else if (deliveryMode !== "Custom Order") {
-//           const { distanceInKM } = await getDistanceFromPickupToDelivery(
-//             agentLocation,
-//             merchantLocation
-//           );
-//           distance = distanceInKM;
-//         }
-
-//         return {
-//           _id: agent._id,
-//           name: agent.fullName,
-//           workStructure: agent?.workStructure?.tag,
-//           status: agent.status,
-//           distance,
-//         };
-//       })
-//     );
-
-//     res.status(200).json({
-//       success: true,
-//       data: responseData,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
 
 const getTasksController = async (req, res, next) => {
   try {

@@ -37,6 +37,7 @@ const {
 const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
 const Tax = require("../../models/Tax");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Initialize cart
 const initializePickAndDrop = async (req, res, next) => {
@@ -442,6 +443,7 @@ const confirmPickAndDropController = async (req, res, next) => {
       };
 
       let walletTransaction = {
+        customerId,
         closingBalance: customer?.customerDetails?.walletBalance,
         transactionAmount: orderAmount,
         date: new Date(),
@@ -453,7 +455,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         transactionType: "Bill",
         transactionAmount: orderAmount,
         type: "Debit",
-        customerId: customer._id,
+        customerId,
       };
 
       const deliveryTime = new Date();
@@ -510,12 +512,11 @@ const confirmPickAndDropController = async (req, res, next) => {
         paymentStatus: "Completed",
       });
 
-      customer.walletTransactionDetail.push({ ...walletTransaction, orderId });
-
       await Promise.all([
         customer.save(),
         PickAndCustomCart.deleteOne({ customerId }),
         CustomerTransaction.create(customerTransaction),
+        CustomerWalletTransaction.create({ ...walletTransaction, orderId }),
       ]);
 
       if (!tempOrder)
@@ -552,18 +553,17 @@ const confirmPickAndDropController = async (req, res, next) => {
             return next(appError("Error in creating order"));
           }
 
-          const walletTransaction = customer.walletTransactionDetail.find(
-            (transaction) =>
-              transaction.orderId &&
-              transaction.orderId.toString() === orderId.toString()
-          );
-
-          walletTransaction.orderId = newOrder._id;
+          const oldOrderId = orderId;
 
           // Remove the temporary order data from the database
           await Promise.all([
             TemporaryOrder.deleteOne({ orderId }),
             customer.save(),
+            CustomerWalletTransaction.findOneAndUpdate(
+              { orderId: oldOrderId },
+              { $set: { orderId: newOrderCreated._id } },
+              { new: true }
+            ),
           ]);
 
           //? Notify the USER and ADMIN about successful order creation
