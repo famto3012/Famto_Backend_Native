@@ -1386,11 +1386,7 @@ const updateMerchantDetailsController = async (req, res, next) => {
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `Details of ${
-          merchantFound?.merchantDetail?.merchantName ?? merchantFound.fullName
-        } (${merchantFound._id}) is updated by ${req.userRole} (${
-          req.userName
-        } - ${req.userAuth})`,
+        description: `Details of ${merchantFound.merchantDetail.merchantName} is updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
     ]);
 
