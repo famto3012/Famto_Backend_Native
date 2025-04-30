@@ -1648,14 +1648,11 @@ const orderPaymentController = async (req, res, next) => {
       }
 
       // Deduct the amount from wallet
-      customer.customerDetails.walletBalance = Number(
-        (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
-      );
 
       if (cart.cartDetail.deliveryOption === "Scheduled") {
         // Create a scheduled order
 
-        newOrder = await ScheduledOrder.create({
+        const newOrderCreated = await ScheduledOrder.create({
           customerId,
           merchantId: cart.merchantId,
           items: formattedItems,
@@ -1671,11 +1668,12 @@ const orderPaymentController = async (req, res, next) => {
           purchasedItems,
         });
 
-        walletTransaction.orderId = newOrder._id;
+
+        walletTransaction.orderId = newOrderCreated._id
 
         await Promise.all([
           PromoCode.findOneAndUpdate(
-            { promoCode: newOrder.billDetail.promoCodeUsed },
+            { promoCode: newOrderCreated.billDetail.promoCodeUsed },
             { $inc: { noOfUserUsed: 1 } }
           ),
           customer.save(),
@@ -1683,6 +1681,68 @@ const orderPaymentController = async (req, res, next) => {
           CustomerTransaction.create(customerTransaction),
           CustomerWalletTransaction.create(walletTransaction),
         ]);
+
+        newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
+          "merchantId"
+        );
+
+        const eventName = "newOrderCreated";
+
+        // Fetch notification settings to determine roles
+        const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
+
+        const socketData = {
+          ...data,
+
+          orderId: newOrder._id,
+          orderDetail: newOrder.orderDetail,
+          billDetail: newOrder.billDetail,
+
+          //? Data for displaying detail in all orders table
+          _id: newOrder._id,
+          orderStatus: newOrder.status,
+          merchantName:
+            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+          customerName:
+            newOrder?.orderDetail?.deliveryAddress?.fullName ||
+            newOrder?.customerId?.fullName ||
+            "-",
+          deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          orderDate: formatDate(newOrder.createdAt),
+          orderTime: formatTime(newOrder.createdAt),
+          deliveryDate: newOrder?.orderDetail?.deliveryTime
+            ? formatDate(newOrder.orderDetail.deliveryTime)
+            : "-",
+          deliveryTime: newOrder?.orderDetail?.deliveryTime
+            ? formatTime(newOrder.orderDetail.deliveryTime)
+            : "-",
+          paymentMethod: newOrder.paymentMode,
+          deliveryOption: newOrder.orderDetail.deliveryOption,
+          amount: newOrder.billDetail.grandTotal,
+        };
+
+        const userIds = {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder?.merchantId._id,
+          agent: newOrder?.agentId,
+          customer: newOrder?.customerId,
+        };
+
+        // Send notifications to each role dynamically
+        await sendSocketDataAndNotification({
+          rolesToNotify,
+          userIds,
+          eventName,
+          notificationData,
+          socketData,
+        });
 
         res.status(200).json({
           success: true,
@@ -2193,7 +2253,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     // Check if the order is scheduled
     if (cart.cartDetail.deliveryOption === "Scheduled") {
       // Create a scheduled order
-      newOrder = await ScheduledOrder.create({
+     const newOrderCreated = await ScheduledOrder.create({
         customerId,
         merchantId: cart.merchantId,
         items: formattedItems,
@@ -2217,6 +2277,67 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         customer.save(),
         CustomerTransaction.create(customerTransaction),
       ]);
+
+      newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
+        "merchantId"
+      );
+
+      const eventName = "newOrderCreated";
+
+      // Fetch notification settings to determine roles
+      const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+      const notificationData = {
+        fcm: {
+          orderId: newOrder._id,
+          customerId: newOrder.customerId,
+        },
+      };
+
+      const socketData = {
+        ...data,
+
+        orderId: newOrder._id,
+        orderDetail: newOrder.orderDetail,
+        billDetail: newOrder.billDetail,
+
+        //? Data for displaying detail in all orders table
+        _id: newOrder._id,
+        orderStatus: newOrder.status,
+        merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+        customerName:
+          newOrder?.orderDetail?.deliveryAddress?.fullName ||
+          newOrder?.customerId?.fullName ||
+          "-",
+        deliveryMode: newOrder?.orderDetail?.deliveryMode,
+        orderDate: formatDate(newOrder.createdAt),
+        orderTime: formatTime(newOrder.createdAt),
+        deliveryDate: newOrder?.orderDetail?.deliveryTime
+          ? formatDate(newOrder.orderDetail.deliveryTime)
+          : "-",
+        deliveryTime: newOrder?.orderDetail?.deliveryTime
+          ? formatTime(newOrder.orderDetail.deliveryTime)
+          : "-",
+        paymentMethod: newOrder.paymentMode,
+        deliveryOption: newOrder.orderDetail.deliveryOption,
+        amount: newOrder.billDetail.grandTotal,
+      };
+
+      const userIds = {
+        admin: process.env.ADMIN_ID,
+        merchant: newOrder?.merchantId._id,
+        agent: newOrder?.agentId,
+        customer: newOrder?.customerId,
+      };
+
+      // Send notifications to each role dynamically
+      await sendSocketDataAndNotification({
+        rolesToNotify,
+        userIds,
+        eventName,
+        notificationData,
+        socketData,
+      });
 
       res.status(200).json({
         message: "Scheduled order created successfully",
