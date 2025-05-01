@@ -58,6 +58,8 @@ const ManagerRoles = require("../../../models/ManagerRoles");
 const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
+const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
+const Task = require("../../../models/Task");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {
@@ -436,6 +438,7 @@ const rejectOrderByAdminController = async (req, res, next) => {
     }
 
     let updatedTransactionDetail = {
+      customerId: customerFound._id,
       transactionType: "Refund",
       madeOn: new Date(),
       type: "Credit",
@@ -465,12 +468,14 @@ const rejectOrderByAdminController = async (req, res, next) => {
       }
 
       updatedTransactionDetail.transactionAmount = orderAmount;
-      customerFound.transactionDetail.push(updatedTransactionDetail);
 
       updateOrderStatus(orderFound);
 
-      await customerFound.save();
-      await orderFound.save();
+      await Promise.all([
+        customerFound.save(),
+        orderFound.save(),
+        CustomerTransaction.create(updatedTransactionDetail),
+      ]);
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       updateOrderStatus(orderFound);
 
@@ -496,10 +501,13 @@ const rejectOrderByAdminController = async (req, res, next) => {
         }
 
         updatedTransactionDetail.transactionAmount = refundAmount;
-        customerFound.transactionDetail.push(updatedTransactionDetail);
+
         orderFound.refundId = refundResponse?.refundId;
 
-        await customerFound.save();
+        await Promise.all([
+          customerFound.save(),
+          CustomerTransaction.create(updatedTransactionDetail),
+        ]);
       }
 
       updateOrderStatus(orderFound);
@@ -2258,6 +2266,16 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       grandTotal: orderFound.billDetail.grandTotal || 0,
     };
 
+    const agentTasks = await Task.find({
+      taskStatus: "Assigned",
+      agentId: agentFound._id,
+    }).sort({
+      createdAt: 1,
+    });
+
+    agentTasks.length > 0
+      ? (agentFound.status = "Busy")
+      : (agentFound.status = "Free");
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalDistance +=
       orderFound?.detailAddedByAgent?.distanceCoveredByAgent ||
