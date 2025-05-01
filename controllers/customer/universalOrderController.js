@@ -53,6 +53,8 @@ const {
 } = require("../../utils/createOrderHelpers");
 const Task = require("../../models/Task");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -169,7 +171,7 @@ const listRestaurantsController = async (req, res, next) => {
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.pricing.0": { $exists: true },
-      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelType": { $exists: true },
       "merchantDetail.pricing.modelId": { $exists: true },
       "merchantDetail.location": { $ne: [] },
       isBlocked: false,
@@ -627,8 +629,12 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       });
     }
 
+    const openedMerchantsFirst = sortedMerchants.sort((a, b) => {
+      return b.status - a.status;
+    });
+
     // Apply pagination AFTER sorting
-    const paginatedMerchants = sortedMerchants.slice(
+    const paginatedMerchants = openedMerchantsFirst.slice(
       (page - 1) * limit,
       page * limit
     );
@@ -644,10 +650,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
       displayAddress: merchant.merchantDetail.displayAddress || null,
       preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
-      isFavorite:
-        customer?.customerDetails?.favoriteMerchants?.some(
-          (fav) => fav.merchantId === merchant._id
-        ) || false,
+      isFavorite: customer?.customerDetails?.favoriteMerchants?.some(
+        (fav) => fav.merchantId === merchant._id
+      ),
     }));
 
     res.status(200).json(responseMerchants);
@@ -1292,7 +1297,7 @@ const getProductsWithVariantsInCart = async (req, res, next) => {
     // Fetch cart and product details in one optimized query
     const cart = await CustomerCart.findOne({ customerId }).populate({
       path: "items.productId",
-      select: "productName variants", // Fetch only necessary fields
+      select: "productName variants",
     });
 
     if (!cart) {
@@ -1403,8 +1408,7 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const cartItems = cart.items;
 
-    const booleanSuperMarketOrder =
-      isSuperMarketOrder === "true" ? true : false;
+    const booleanSuperMarketOrder = isSuperMarketOrder === "true";
 
     const {
       oneTimeDeliveryCharge,
@@ -1504,6 +1508,7 @@ const confirmOrderDetailController = async (req, res, next) => {
     res.status(200).json({
       cartId: customerCart._id,
       merchantId: customerCart.merchantId,
+      deliveryOption: customerCart.cartDetail.deliveryOption,
     });
   } catch (err) {
     next(appError(err.message));
@@ -1522,135 +1527,6 @@ const getCartBillController = async (req, res, next) => {
     next(appError(err.message));
   }
 };
-
-// Apply Tip
-// const applyTipController = async (req, res, next) => {
-//   try {
-//     const { tip = 0 } = req.body;
-//     const customerId = req.userAuth;
-
-//     const cartFound = await CustomerCart.findOne({ customerId });
-//     if (!cartFound) return next(appError("Cart not found", 404));
-
-//     const { billDetail: cartBill } = cartFound;
-//     if (!cartBill) return next(appError("Billing details not found", 404));
-
-//     const oldTip = cartBill.addedTip || 0;
-
-//     const newTip = parseFloat(tip) || 0;
-//     cartBill.addedTip = newTip;
-
-//     // Recalculate totals with the new tip adjustment
-//     cartBill.subTotal += newTip - oldTip;
-//     cartBill.discountedGrandTotal += newTip - oldTip;
-//     cartBill.originalGrandTotal += newTip - oldTip;
-
-//     // Save the changes to the cart
-//     await cartFound.save();
-
-//     res.status(200).json(cartFound.billDetail);
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// Apply Promo code
-// const applyPromoCodeController = async (req, res, next) => {
-//   try {
-//     const { promoCode } = req.body;
-//     const customerId = req.userAuth;
-
-//     const [customer, cart] = await Promise.all([
-//       Customer.findById(customerId),
-//       CustomerCart.findOne({ customerId }),
-//     ]);
-
-//     if (!customer) return next(appError("Customer not found", 404));
-//     if (!cart) return next(appError("Cart not found", 404));
-
-//     const { geofenceId } = customer.customerDetails;
-//     const { deliveryMode, deliveryOption } = cart.cartDetail;
-//     const { itemTotal, discountedAmount = 0 } = cart.billDetail;
-
-//     console.log("Checking promo code with:", {
-//       promoCode,
-//       geofenceId,
-//       deliveryMode,
-//     });
-
-//     // Find the promo code
-//     const promoCodeFound = await PromoCode.findOne({
-//       promoCode,
-//       geofenceId,
-//       status: true,
-//       deliveryMode,
-//     });
-
-//     if (!promoCodeFound) {
-//       return next(appError("Promo code not found or inactive", 404));
-//     }
-
-//     const {
-//       merchantId: promoMerchants,
-//       minOrderAmount,
-//       fromDate,
-//       toDate,
-//       noOfUserUsed,
-//       maxAllowedUsers,
-//     } = promoCodeFound;
-
-//     // Check if promo code's merchant matches cart's merchant
-//     const merchantId = cart.merchantId.toString();
-//     if (!promoMerchants.includes(merchantId)) {
-//       return next(
-//         appError("Promo code is not applicable for this merchant", 400)
-//       );
-//     }
-
-//     const totalCartPrice =
-//       deliveryOption === "Scheduled"
-//         ? calculateScheduledCartValue(cart, promoCodeFound)
-//         : itemTotal;
-
-//     if (totalCartPrice < minOrderAmount) {
-//       return next(
-//         appError(`Minimum order amount should be ${minOrderAmount}`, 400)
-//       );
-//     }
-
-//     const now = new Date();
-//     if (now < fromDate || now > toDate) {
-//       return next(appError("Promo code is not valid at this time", 400));
-//     }
-
-//     if (noOfUserUsed >= maxAllowedUsers) {
-//       return next(appError("Promo code usage limit reached", 400));
-//     }
-
-//     const promoDiscount = calculatePromoCodeDiscount(
-//       promoCodeFound,
-//       totalCartPrice
-//     );
-
-//     const totalDiscount = Number((promoDiscount + discountedAmount).toFixed(2));
-
-//     // Apply discount
-//     const updatedCart = applyPromoCodeDiscount(
-//       cart,
-//       promoCodeFound,
-//       totalDiscount
-//     );
-
-//     await updatedCart.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message: `Promo code ${promoCode} applied`,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
 
 // Order Product
 const orderPaymentController = async (req, res, next) => {
@@ -1757,6 +1633,7 @@ const orderPaymentController = async (req, res, next) => {
     };
 
     let walletTransaction = {
+      customerId,
       closingBalance: customer?.customerDetails?.walletBalance,
       transactionAmount: orderAmount,
       date: new Date(),
@@ -1764,6 +1641,7 @@ const orderPaymentController = async (req, res, next) => {
     };
 
     let customerTransaction = {
+      customerId,
       madeOn: new Date(),
       transactionType: "Bill",
       transactionAmount: orderAmount,
@@ -1801,8 +1679,6 @@ const orderPaymentController = async (req, res, next) => {
         });
 
         walletTransaction.orderId = newOrderCreated._id;
-        customer.walletTransactionDetail.push(walletTransaction);
-        customer.transactionDetail.push(customerTransaction);
 
         await Promise.all([
           PromoCode.findOneAndUpdate(
@@ -1811,6 +1687,8 @@ const orderPaymentController = async (req, res, next) => {
           ),
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
+          CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -1909,12 +1787,12 @@ const orderPaymentController = async (req, res, next) => {
         }
 
         walletTransaction.orderId = orderId;
-        customer.walletTransactionDetail.push(walletTransaction);
-        customer.transactionDetail.push(customerTransaction);
 
         await Promise.all([
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
+          CustomerTransaction.create(customerTransaction),
+          CustomerWalletTransaction.create(walletTransaction),
         ]);
 
         // Return countdown timer to client
@@ -1965,17 +1843,16 @@ const orderPaymentController = async (req, res, next) => {
               );
             }
 
-            const walletTransaction = customer.walletTransactionDetail.find(
-              (transaction) => {
-                return transaction?.orderId?.toString() === orderId?.toString();
-              }
-            );
-
-            walletTransaction.orderId = newOrderCreated?._id;
+            const oldOrderId = orderId;
 
             await Promise.all([
               TemporaryOrder.deleteOne({ orderId }),
               customer.save(),
+              CustomerWalletTransaction.findOneAndUpdate(
+                { orderId: oldOrderId },
+                { $set: { orderId: newOrderCreated._id } },
+                { new: true }
+              ),
             ]);
 
             const eventName = "newOrderCreated";
@@ -2067,8 +1944,6 @@ const orderPaymentController = async (req, res, next) => {
         purchasedItems,
       });
 
-      customer.transactionDetail.push(customerTransaction);
-
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
@@ -2076,6 +1951,7 @@ const orderPaymentController = async (req, res, next) => {
       await Promise.all([
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       // Return countdown timer to client
@@ -2322,6 +2198,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     };
 
     let customerTransaction = {
+      customerId,
       madeOn: new Date(),
       transactionType: "Bill",
       transactionAmount: orderAmount,
@@ -2357,13 +2234,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         purchasedItems,
       });
 
-      // Clear the cart
-
-      customer.transactionDetail.push(customerTransaction);
-
       await Promise.all([
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -2456,8 +2330,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         purchasedItems,
       });
 
-      customer.transactionDetail.push(customerTransaction);
-
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
@@ -2465,6 +2337,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       await Promise.all([
         customer.save(),
         CustomerCart.deleteOne({ customerId }),
+        CustomerTransaction.create(customerTransaction),
       ]);
 
       // Return countdown timer to client
