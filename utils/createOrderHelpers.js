@@ -1125,7 +1125,7 @@ const pickAndDropCharges = async (
   const selectedVehicle = vehicleType;
 
   // Fetch all available vehicle types from the Agent model
-  const agents = await Agent.find({});
+  const agents = await Agent.find({ isBlocked: false, isApproved: "Approved" });
   const uniqueVehicleTypes = [
     ...new Set(
       agents.flatMap((agent) =>
@@ -1133,6 +1133,12 @@ const pickAndDropCharges = async (
       )
     ),
   ];
+
+  if (!uniqueVehicleTypes.includes(selectedVehicle)) {
+    throw new Error(
+      `Agents with ${selectedVehicle} is not currently available`
+    );
+  }
 
   const [latitude, longitude] = pickupLocation;
   const geofenceFound = await geoLocation(latitude, longitude);

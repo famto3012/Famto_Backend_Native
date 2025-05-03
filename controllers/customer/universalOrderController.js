@@ -2708,6 +2708,26 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
   }
 };
 
+const getFiltersFromBusinessCategory = async (req, res, next) => {
+  try {
+    const { businessCategoryId, filterType } = req.query;
+
+    const businessCategory = await BusinessCategory.findById(
+      businessCategoryId
+    ).select(filterType);
+
+    if (!businessCategory) {
+      return res.status(200).json([]);
+    }
+
+    const data = businessCategory[filterType]?.map((filter) => filter);
+
+    res.status(200).json(data);
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   getAllBusinessCategoryController,
   homeSearchController,
@@ -2739,4 +2759,5 @@ module.exports = {
   fetchTemporaryOrderOfCustomer,
   getProductsWithVariantsInCart,
   addItemsToCart,
+  getFiltersFromBusinessCategory,
 };

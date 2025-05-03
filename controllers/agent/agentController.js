@@ -51,6 +51,8 @@ const ManagerRoles = require("../../models/ManagerRoles");
 const Manager = require("../../models/Manager");
 const verifyToken = require("../../utils/verifyToken");
 const { geoLocation } = require("../../utils/getGeoLocation");
+const AgentActivityLog = require("../../models/AgentActivityLog");
+const AgentTransaction = require("../../models/AgentTransaction");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -707,12 +709,12 @@ const toggleOnlineController = async (req, res, next) => {
 
     const eventName = "updatedAgentStatusToggle";
 
+    let description = "";
+
     if (currentAgent.status === "Free") {
       currentAgent.status = "Inactive";
       const data = { status: "Offline" };
       const eventName = "updatedAgentStatusToggle";
-
-      sendSocketData(currentAgent._id, eventName, data);
 
       // Set the end time when the agent goes offline
       currentAgent.loginEndTime = new Date();
@@ -723,18 +725,17 @@ const toggleOnlineController = async (req, res, next) => {
         currentAgent.appDetail.loginDuration += loginDuration;
       }
 
-      currentAgent.activityLog.push({
-        date: new Date(),
-        description: "Agent gone OFFLINE",
-      });
+      description = "Agent gone OFFLINE";
+
       currentAgent.loginStartTime = null;
+
+      sendSocketData(currentAgent._id, eventName, data);
     } else {
       const agentWorkTimings = currentAgent.workStructure.workTimings || [];
       const nowUTC = new Date();
       const nowIST = new Date(
         nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
       );
-      console.log("Converted IST Time:", nowIST.toISOString());
 
       const objectIds = agentWorkTimings.map((id) =>
         mongoose.Types.ObjectId.createFromHexString(id)
@@ -786,17 +787,22 @@ const toggleOnlineController = async (req, res, next) => {
         status: "Online",
       };
 
-      sendSocketData(currentAgent._id, eventName, data);
-
       // Set the start time when the agent goes online
       currentAgent.loginStartTime = new Date();
-      currentAgent.activityLog.push({
-        date: new Date(),
-        description: "Agent gone ONLINE",
-      });
+
+      description = "Agent gone ONLINE";
+
+      sendSocketData(currentAgent._id, eventName, data);
     }
 
-    await currentAgent.save();
+    await Promise.all([
+      currentAgent.save(),
+      AgentActivityLog.create({
+        agentId: currentAgent,
+        date: new Date(),
+        description,
+      }),
+    ]);
 
     res.status(200).json({
       message: `Agent status changed to ${currentAgent.status}`,
@@ -1703,7 +1709,8 @@ const verifyDepositController = async (req, res, next) => {
       return next(appError("Invalid payment", 400));
     }
 
-    let updatedAgentTransaction = {
+    let transaction = {
+      agentId,
       type: "Debit",
       amount,
       madeOn: new Date(),
@@ -1711,9 +1718,11 @@ const verifyDepositController = async (req, res, next) => {
     };
 
     agentFound.workStructure.cashInHand -= amount;
-    agentFound.agentTransaction.push(updatedAgentTransaction);
 
-    await agentFound.save();
+    await Promise.all([
+      agentFound.save(),
+      AgentTransaction.create(transaction),
+    ]);
 
     res.status(200).json({ message: "Deposit verified successfully" });
   } catch (err) {
@@ -1726,22 +1735,18 @@ const getAgentTransactionsController = async (req, res, next) => {
   try {
     const agentId = req.userAuth;
 
-    const agentFound = await Agent.findById(agentId)
-      .select("agentTransaction agentImageURL fullName")
-      .lean();
-
-    if (!agentFound) return next(appError("Agent not found", 404));
+    const transactions = await AgentTransaction.find({ agentId }).sort({
+      madeOn: -1,
+    });
 
     // Sort and format transactions
-    const formattedTransactions = agentFound.agentTransaction
-      .sort((a, b) => new Date(b.madeOn) - new Date(a.madeOn))
-      .map((transaction) => ({
-        date: formatDate(transaction.madeOn),
-        time: formatTime(transaction.madeOn),
-        amount: transaction?.amount || null,
-        type: transaction?.type || null,
-        title: transaction?.title || null,
-      }));
+    const formattedTransactions = transactions?.map((transaction) => ({
+      date: formatDate(transaction.madeOn),
+      time: formatTime(transaction.madeOn),
+      amount: transaction?.amount || null,
+      type: transaction?.type || null,
+      title: transaction?.title || null,
+    }));
 
     res.status(200).json({
       message: "Agent transaction history",

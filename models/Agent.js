@@ -171,40 +171,6 @@ const agentAppDetailSchema = mongoose.Schema(
   }
 );
 
-const agentTransactionSchema = mongoose.Schema({
-  type: {
-    type: String,
-    enum: ["Credit", "Debit"],
-    required: true,
-  },
-  title: {
-    type: String,
-    required: true,
-  },
-  amount: {
-    type: Number,
-    required: true,
-  },
-  madeOn: {
-    type: Date,
-    required: true,
-  },
-});
-
-const agentActivityLogSchema = mongoose.Schema(
-  {
-    date: {
-      type: Date,
-      required: true,
-    },
-    description: {
-      type: String,
-      required: true,
-    },
-  },
-  { _id: false }
-);
-
 const agentSchema = mongoose.Schema(
   {
     _id: {
@@ -293,8 +259,6 @@ const agentSchema = mongoose.Schema(
         details: agentAppDetailSchema,
       },
     ],
-    agentTransaction: [agentTransactionSchema],
-    activityLog: [agentActivityLogSchema],
     refreshToken: {
       type: String,
       default: null,

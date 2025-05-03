@@ -66,6 +66,7 @@ const {
 const taskRoute = require("./routes/adminRoute/deliveryManagementRoute/taskRoute.js");
 const {
   moveAppDetailToHistoryAndResetForAllAgents,
+  moveAppDetailToWorkHistoryAndResetForAllAgents,
 } = require("./utils/agentAppHelpers.js");
 const tokenRoute = require("./routes/tokenRoute/tokenRoute.js");
 const {
@@ -193,7 +194,8 @@ cron.schedule("30 18 * * *", async () => {
   const now = new Date();
 
   await Promise.all([
-    moveAppDetailToHistoryAndResetForAllAgents(),
+    // moveAppDetailToHistoryAndResetForAllAgents(),
+    moveAppDetailToWorkHistoryAndResetForAllAgents(),
     preparePayoutForMerchant(),
     updateOneDayLoyaltyPointEarning(),
     fetchPerDayRevenue(now),

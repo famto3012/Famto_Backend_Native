@@ -9,7 +9,13 @@ const {
 } = require("../../../utils/imageOperation");
 
 const addBusinessCategoryController = async (req, res, next) => {
-  const { title, geofenceId, increasedPercentage } = req.body;
+  const {
+    title,
+    geofenceId,
+    increasedPercentage,
+    merchantFilters,
+    productFilters,
+  } = req.body;
 
   const errors = validationResult(req);
 
@@ -43,6 +49,8 @@ const addBusinessCategoryController = async (req, res, next) => {
       bannerImageURL,
       order: newOrder,
       increasedPercentage,
+      merchantFilters,
+      productFilters,
     });
 
     if (!newBusinessCategory) {
@@ -60,9 +68,9 @@ const addBusinessCategoryController = async (req, res, next) => {
 
 const getAllBusinessCategoryController = async (req, res, next) => {
   try {
-    const allBusinessCategories = await BusinessCategory.find({})
-      .select("title status order bannerImageURL")
-      .sort({ order: 1 });
+    const allBusinessCategories = await BusinessCategory.find({}).sort({
+      order: 1,
+    });
 
     const formattedResponse = allBusinessCategories?.map((category) => {
       return {
@@ -71,6 +79,8 @@ const getAllBusinessCategoryController = async (req, res, next) => {
         bannerImageURL: category.bannerImageURL,
         increasedPercentage: category.increasedPercentage,
         status: category.status,
+        merchantFilters: category.merchantFilters,
+        productFilters: category.productFilters,
       };
     });
 
@@ -99,6 +109,8 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
       geofenceId: businessCategory?.geofenceId,
       increasedPercentage: businessCategory.increasedPercentage,
       bannerImageURL: businessCategory.bannerImageURL,
+      merchantFilters: businessCategory.merchantFilters,
+      productFilters: businessCategory.productFilters,
     };
 
     res.status(200).json({
@@ -111,7 +123,13 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
 };
 
 const editBusinessCategoryController = async (req, res, next) => {
-  const { title, geofenceId, increasedPercentage } = req.body;
+  const {
+    title,
+    geofenceId,
+    increasedPercentage,
+    merchantFilters,
+    productFilters,
+  } = req.body;
 
   const errors = validationResult(req);
 
@@ -154,6 +172,8 @@ const editBusinessCategoryController = async (req, res, next) => {
         order,
         increasedPercentage,
         status: businessCategoryFound.status,
+        merchantFilters,
+        productFilters,
       },
       { new: true }
     );

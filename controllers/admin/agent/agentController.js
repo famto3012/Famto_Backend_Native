@@ -18,6 +18,10 @@ const { formatToHours } = require("../../../utils/agentAppHelpers");
 const ejs = require("ejs");
 const AgentAppCustomization = require("../../../models/AgentAppCustomization");
 const { sendSocketData } = require("../../../socket/socket");
+const AgentActivityLog = require("../../../models/AgentActivityLog");
+const AgentWorkHistory = require("../../../models/AgentWorkHistory");
+const AgentTransaction = require("../../../models/AgentTransaction");
+const AgentPricing = require("../../../models/AgentPricing");
 
 const addAgentByAdminController = async (req, res, next) => {
   const {
@@ -291,14 +295,17 @@ const fetchSingleAgentController = async (req, res, next) => {
   try {
     const { agentId } = req.params;
 
-    const agent = await Agent.findById(agentId)
-      .populate("geofenceId", "name")
-      .populate("workStructure.managerId", "name")
-      .populate("workStructure.salaryStructureId", "ruleName")
-      .select(
-        "-ratingsByCustomers -appDetail -appDetailHistory -agentTransaction -location -role -taskCompleted -reasonForBlockingOrDeleting -blockedDate -loginStartTime -loginEndTime"
-      )
-      .lean();
+    const [agent, activityLog] = await Promise.all([
+      Agent.findById(agentId)
+        .populate("geofenceId", "name")
+        .populate("workStructure.managerId", "name")
+        .populate("workStructure.salaryStructureId", "ruleName")
+        .select(
+          "-ratingsByCustomers -appDetail -appDetailHistory -agentTransaction -location -role -taskCompleted -reasonForBlockingOrDeleting -blockedDate -loginStartTime -loginEndTime"
+        )
+        .lean(),
+      AgentActivityLog.find({ agentId }).sort({ madeOn: -1 }).limit(20),
+    ]);
 
     if (!agent) return next(appError("Agent not found", 404));
 
@@ -347,18 +354,11 @@ const fetchSingleAgentController = async (req, res, next) => {
         workTimings: agent?.workStructure?.workTimings,
         tag: agent?.workStructure?.tag || null,
       },
-      activityLog: agent?.activityLog
-        ?.sort((a, b) => {
-          // Sort by date first, then time
-          const dateComparison = new Date(b.date) - new Date(a.date);
-          if (dateComparison !== 0) return dateComparison;
-          return b.time.localeCompare(a.time); // Compare times if dates are the same
-        })
-        ?.map((log) => ({
-          date: formatDate(log.date),
-          time: formatTime(log.date),
-          description: log.description,
-        })),
+      activityLog: activityLog?.map((log) => ({
+        date: formatDate(log.date),
+        time: formatTime(log.date),
+        description: log.description,
+      })),
     };
 
     res.status(200).json(formattedResponse);
@@ -391,12 +391,13 @@ const changeAgentStatusController = async (req, res, next) => {
       return;
     }
 
+    let description = "";
+
     const eventName = "updatedAgentStatusToggle";
+
     if (agentFound.status === "Free") {
       agentFound.status = "Inactive";
       const data = { status: "Offline" };
-
-      sendSocketData(agentFound._id, eventName, data);
 
       // Set the end time when the agent goes offline
       agentFound.loginEndTime = new Date();
@@ -406,18 +407,17 @@ const changeAgentStatusController = async (req, res, next) => {
         agentFound.appDetail.loginDuration += loginDuration;
       }
 
-      agentFound.activityLog.push({
-        date: new Date(),
-        description: "Agent status changed to OFFLINE from panel",
-      });
+      description = "Agent status changed to OFFLINE from panel";
+
       agentFound.loginStartTime = null;
+
+      sendSocketData(agentFound._id, eventName, data);
     } else {
       const agentWorkTimings = agentFound.workStructure.workTimings || [];
       const nowUTC = new Date();
       const nowIST = new Date(
         nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
       );
-      console.log("Converted IST Time:", nowIST.toISOString());
 
       const objectIds = agentWorkTimings.map((id) =>
         mongoose.Types.ObjectId.createFromHexString(id)
@@ -465,21 +465,24 @@ const changeAgentStatusController = async (req, res, next) => {
 
       agentFound.status = "Free";
 
-      const data = {
-        status: "Online",
-      };
+      const data = { status: "Online" };
 
-      sendSocketData(agentFound._id, eventName, data);
+      description = "Agent status changed to ONLINE from panel";
 
       // Set the start time when the agent goes online
       agentFound.loginStartTime = new Date();
-      agentFound.activityLog.push({
-        date: new Date(),
-        description: "Agent status changed to ONLINE from panel",
-      });
+
+      sendSocketData(agentFound._id, eventName, data);
     }
 
-    await agentFound.save();
+    await Promise.all([
+      agentFound.save(),
+      AgentActivityLog.create({
+        agentId,
+        date: new Date(),
+        description,
+      }),
+    ]);
 
     let status;
     if (agentFound.status === "Free") {
@@ -669,27 +672,102 @@ const blockAgentController = async (req, res, next) => {
     const { reason } = req.body;
     const { agentId } = req.params;
 
-    const agentFound = await Agent.findById(agentId);
+    const agent = await Agent.findById(agentId);
 
-    if (!agentFound) {
-      return next(appError("Agent not found", 404));
+    if (!agent) return next(appError("Agent not found", 404));
+
+    const currentTime = new Date();
+    const loginStart = new Date(agent?.loginStartTime || currentTime);
+
+    const oldLoginDuration = agent.appDetail.toObject().loginDuration ?? 0;
+
+    const appDetail = {
+      ...agent.appDetail.toObject(),
+      loginDuration: oldLoginDuration + (currentTime - loginStart),
+    };
+
+    // Apply earnings logic only if agent has orders and salary structure
+    if (appDetail.orders > 0 && agent?.workStructure?.salaryStructureId) {
+      const agentPricing = await AgentPricing.findById(
+        agent.workStructure.salaryStructureId
+      ).lean();
+
+      if (agentPricing) {
+        const loginDurationHours = appDetail.loginDuration / 3600000;
+        appDetail.totalEarning = 0;
+
+        if (agentPricing.type?.startsWith("Monthly")) {
+          const minHours = agentPricing.minLoginHours || 0;
+          const baseFare = agentPricing.baseFare || 0;
+          const perHour = baseFare / minHours;
+
+          const billableHours = Math.min(minHours, loginDurationHours);
+          appDetail.totalEarning = Math.round(perHour * billableHours);
+        } else {
+          const minLoginMillis =
+            (agentPricing.minLoginHours || 0) * 60 * 60 * 1000;
+          const minOrders = agentPricing.minOrderNumber || 0;
+
+          const qualifies =
+            appDetail.loginDuration >= minLoginMillis &&
+            appDetail.orders >= minOrders;
+
+          if (qualifies) {
+            const baseFare = agentPricing.baseFare || 0;
+            const extraOrders = appDetail.orders - minOrders;
+            const extraOrderEarnings =
+              (extraOrders > 0 ? extraOrders : 0) *
+              (agentPricing.fareAfterMinOrderNumber || 0);
+
+            const extraMillis = appDetail.loginDuration - minLoginMillis;
+            const extraHours =
+              extraMillis > 0 ? Math.floor(extraMillis / 3600000) : 0;
+            const extraHourEarnings =
+              extraHours * (agentPricing.fareAfterMinLoginHours || 0);
+
+            appDetail.totalEarning =
+              baseFare + extraOrderEarnings + extraHourEarnings;
+          }
+        }
+      }
     }
 
-    agentFound.isBlocked = true;
-    agentFound.status = "Inactive";
-    agentFound.reasonForBlockingOrDeleting = reason;
-    agentFound.blockedDate = new Date();
+    // Update agent status
+    agent.isBlocked = true;
+    agent.status = "Inactive";
+    agent.reasonForBlockingOrDeleting = reason;
+    agent.blockedDate = currentTime;
+    agent.loginStartTime = null;
+    agent.loginEndTime = null;
 
-    await agentFound.save();
+    const workHistoryData = { ...appDetail };
 
-    await AccountLogs.create({
-      userId: agentId,
-      fullName: agentFound.fullName,
-      role: agentFound.role,
-      description: reason,
-    });
+    console.log({ workHistoryData });
 
-    // await accountLogs.save();
+    agent.appDetail = {
+      totalEarning: 0,
+      orders: 0,
+      pendingOrders: 0,
+      totalDistance: 0,
+      cancelledOrders: 0,
+      loginDuration: 0,
+      orderDetail: [],
+    };
+
+    await Promise.all([
+      agent.save(),
+      AccountLogs.create({
+        userId: agentId,
+        fullName: agent.fullName,
+        role: agent.role,
+        description: reason,
+      }),
+      AgentWorkHistory.create({
+        ...workHistoryData,
+        agentId,
+        workDate: currentTime,
+      }),
+    ]);
 
     res.status(200).json({ message: "Agent blocked successfully" });
   } catch (err) {
@@ -699,114 +777,95 @@ const blockAgentController = async (req, res, next) => {
 
 const filterAgentPayoutController = async (req, res, next) => {
   try {
-    const { status, agent, geofence, date, name } = req.query;
+    let {
+      status,
+      agent,
+      geofence,
+      date,
+      name,
+      page = 1,
+      limit = 50,
+    } = req.query;
 
-    // Build filter criteria
+    const skip = (page - 1) * limit;
+
     const filterCriteria = { isApproved: "Approved" };
+
     if (agent && agent.toLowerCase() !== "all") filterCriteria._id = agent;
+
     if (geofence && geofence.toLowerCase() !== "all") {
       filterCriteria.geofenceId =
         mongoose.Types.ObjectId.createFromHexString(geofence);
     }
+
     if (name) {
       filterCriteria.fullName = { $regex: name.trim(), $options: "i" };
     }
 
-    // Convert date to range in IST timezone
+    const matchedAgents = await Agent.find(filterCriteria).select(
+      "_id fullName phoneNumber workStructure.cashInHand"
+    );
+
+    const agentIds = matchedAgents.map((a) => a._id);
+
+    // Step 3: Create date filter (if date provided)
     const dateFilter = {};
     if (date) {
-      // Get IST start of day in UTC
       const startDate = new Date(
         new Date(date).getTime() - 5.5 * 60 * 60 * 1000
       );
       startDate.setUTCHours(0, 0, 0, 0);
-
       const endDate = new Date(startDate);
       endDate.setUTCDate(endDate.getUTCDate() + 1);
       endDate.setUTCMilliseconds(-1);
 
-      dateFilter.date = { $gte: startDate, $lte: endDate };
+      dateFilter.workDate = { $gte: startDate, $lte: endDate };
     }
 
-    // Aggregation pipeline
-    const aggregationPipeline = [
-      { $match: filterCriteria },
-      { $unwind: "$appDetailHistory" },
-      {
-        $match: {
-          ...(date && { "appDetailHistory.date": dateFilter.date }),
-          ...(status &&
-            status.toLowerCase() !== "all" && {
-              "appDetailHistory.details.paymentSettled":
-                status.toLowerCase() === "true",
-            }),
-        },
-      },
-      {
-        $addFields: {
-          calculatedEarnings: {
-            $max: [
-              {
-                $subtract: [
-                  "$appDetailHistory.details.totalEarning",
-                  "$workStructure.cashInHand",
-                ],
-              },
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          fullName: 1,
-          phoneNumber: 1,
-          workedDate: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: { $add: ["$appDetailHistory.date", 19800000] },
-            },
-          },
-          orders: "$appDetailHistory.details.orders",
-          cancelledOrders: "$appDetailHistory.details.cancelledOrders",
-          totalDistance: "$appDetailHistory.details.totalDistance",
-          loginHours: "$appDetailHistory.details.loginDuration",
-          cashInHand: "$workStructure.cashInHand",
-          totalEarnings: "$appDetailHistory.details.totalEarning",
-          calculatedEarnings: 1,
-          paymentSettled: "$appDetailHistory.details.paymentSettled",
-          detailId: "$appDetailHistory.detailId",
-          geofence: "$geofenceId",
-        },
-      },
-      { $sort: { workedDate: -1 } },
-    ];
+    const historyFilter = {
+      agentId: { $in: agentIds },
+      ...dateFilter,
+    };
 
-    // Count and paginate results
-    const totalDocuments =
-      (await Agent.aggregate([...aggregationPipeline, { $count: "total" }]))[0]
-        ?.total || 0;
+    if (status !== undefined) {
+      historyFilter.paymentSettled = status === "true";
+    }
 
-    const page = parseInt(req.query.page || 1);
-    const limit = parseInt(req.query.limit || 50);
-    const agents = await Agent.aggregate([
-      ...aggregationPipeline,
-      { $skip: (page - 1) * limit },
-      { $limit: limit },
+    const [histories, totalCount] = await Promise.all([
+      AgentWorkHistory.find(historyFilter)
+        .populate("agentId", "fullName email phoneNumber")
+        .sort({ workDate: -1 })
+        .skip(skip)
+        .limit(limit),
+      AgentWorkHistory.countDocuments(historyFilter),
     ]);
 
-    const formattedResponse = agents.map(
-      ({ _id, workedDate, loginHours, ...rest }) => ({
-        agentId: _id,
-        workedDate: workedDate || "-",
-        loginHours: formatToHours(loginHours),
-        ...rest,
-      })
-    );
+    const formattedResponse = histories?.map((history) => {
+      const calculatedEarning = (
+        history.totalEarning - history?.agentId?.workStructure?.cashInHand || 0
+      ).toFixed(2);
+
+      return {
+        detailId: history._id,
+        agentId: history.agentId._id,
+        agentName: history.agentId.fullName,
+        phoneNumber: history.agentId.phoneNumber,
+        cashInHand:
+          history?.agentId?.workStructure?.cashInHand?.toFixed(2) || 0,
+        calculatedEarning,
+        workDate: formatDate(history.workDate),
+        totalEarning: history.totalEarning?.toFixed(2),
+        orders: history.orders,
+        pendingOrders: history.pendingOrders,
+        totalDistance: history.totalDistance?.toFixed(2),
+        cancelledOrders: history.cancelledOrders,
+        loginHours: formatToHours(history.loginDuration),
+        paymentSettled: history.paymentSettled,
+      };
+    });
 
     res.status(200).json({
-      total: totalDocuments,
+      totalDocuments: totalCount,
       data: formattedResponse,
     });
   } catch (err) {
@@ -818,50 +877,49 @@ const approvePaymentController = async (req, res, next) => {
   try {
     const { agentId, detailId } = req.params;
 
-    // Find agent with required fields and the specific detail in appDetailHistory
-    const agent = await Agent.findOne(
-      { _id: agentId, "appDetailHistory.detailId": detailId },
-      {
-        "appDetailHistory.$": 1,
-        "workStructure.cashInHand": 1,
-        agentTransaction: 1,
-      }
-    ).lean();
+    const [paymentDetail, agent] = await Promise.all([
+      AgentWorkHistory.findOne({ _id: detailId, agentId }),
+      Agent.findById(agentId).select("workStructure.cashInHand"),
+    ]);
 
-    if (!agent) return next(appError("Agent not found", 404));
+    if (!paymentDetail) {
+      return next(appError("Payment document not found", 404));
+    }
 
-    const detail = agent.appDetailHistory[0];
-    if (detail.details.paymentSettled)
+    if (!agent) {
+      return next(appError("Agent not found", 404));
+    }
+
+    if (!agent.workStructure) {
+      return next(appError("Agent's work structure not found", 404));
+    }
+
+    if (paymentDetail.paymentSettled) {
       return next(appError("Payment already settled", 400));
+    }
 
-    // Get the totalEarning from the specific detail in appDetailHistory
-    const detailTotalEarning = detail.details.totalEarning;
+    const { totalEarning } = paymentDetail;
+    const cashInHand = agent.workStructure.cashInHand || 0;
 
-    // Prepare updates for payment settlement and cashInHand adjustment if needed
-    const updates = {
-      "appDetailHistory.$.details.paymentSettled": true,
-    };
-
+    let debitAmount = 0;
+    let calculatedBalance = 0;
     const transactionUpdates = [];
 
-    // Calculate the maximum possible debit amount from cashInHand and totalEarning
-    if (agent.workStructure.cashInHand > 0) {
-      const debitAmount = Math.min(
-        agent.workStructure.cashInHand,
-        detailTotalEarning
-      );
-      const calculatedBalance = agent.workStructure.cashInHand - debitAmount;
-
-      updates["workStructure.cashInHand"] = calculatedBalance;
+    // Calculate deductions from cash in hand
+    if (cashInHand > 0) {
+      debitAmount = Math.min(cashInHand, totalEarning);
+      calculatedBalance = cashInHand - debitAmount;
 
       transactionUpdates.push(
         {
+          agentId,
           type: "Credit",
           title: "Salary credited",
           madeOn: new Date(),
-          amount: detailTotalEarning,
+          amount: totalEarning,
         },
         {
+          agentId,
           type: "Debit",
           title: "Cash in hand deducted",
           madeOn: new Date(),
@@ -869,29 +927,26 @@ const approvePaymentController = async (req, res, next) => {
         }
       );
     } else {
-      // Only add a Credit transaction
       transactionUpdates.push({
+        agentId,
         type: "Credit",
         title: "Salary credited",
         madeOn: new Date(),
-        amount: detailTotalEarning,
+        amount: totalEarning,
       });
     }
 
-    // Apply updates in a single atomic operation
-    const updatedAgent = await Agent.updateOne(
-      { _id: agentId, "appDetailHistory.detailId": detailId },
-      {
-        $set: {
-          "appDetailHistory.$.details.paymentSettled": true,
-          "workStructure.cashInHand": updates["workStructure.cashInHand"],
-        },
-        $push: { agentTransaction: { $each: transactionUpdates } },
-      }
-    );
+    // Update fields
+    paymentDetail.paymentSettled = true;
+    agent.workStructure.cashInHand = calculatedBalance;
+    agent.markModified("workStructure");
 
-    if (updatedAgent.nModified === 0)
-      return next(appError("Failed to approve payment", 500));
+    // Commit all changes
+    await Promise.all([
+      paymentDetail.save(),
+      agent.save(),
+      AgentTransaction.insertMany(transactionUpdates),
+    ]);
 
     res.status(200).json({
       message: "Payment approved",
