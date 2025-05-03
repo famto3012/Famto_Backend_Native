@@ -3,6 +3,8 @@ const CustomerTransaction = require("./models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("./models/CustomerWalletTransaction");
 const Order = require("./models/Order");
 const Task = require("./models/Task");
+const Agent = require("./models/Agent");
+const AgentWorkHistory = require("./models/AgentWorkHistory");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -113,3 +115,57 @@ const migrateCustomerWalletTransactions = async () => {
 };
 
 // migrateCustomerWalletTransactions();
+
+// *========================================
+// *========================================
+// *========================================
+
+const migrateAgentAppDetailHistory = async () => {
+  try {
+    const agents = await Agent.find({
+      isApproved: "Approved",
+      isBlocked: false,
+    });
+
+    let detailArray = [];
+    for (const agent of agents) {
+      if (agent?.appDetailHistory?.length > 0) {
+        agent.appDetailHistory.forEach((history) => {
+          const {
+            totalEarning,
+            orders,
+            pendingOrders,
+            totalDistance,
+            cancelledOrders,
+            loginDuration,
+            orderDetail,
+            paymentSettled,
+          } = history.details;
+
+          return detailArray.push({
+            agentId: agent._id,
+            workDate: history.date,
+            totalEarning,
+            orders,
+            pendingOrders,
+            totalDistance,
+            cancelledOrders,
+            loginDuration,
+            orderDetail,
+            paymentSettled,
+          });
+        });
+
+        console.log(`Prepared ${agent._id}`);
+      }
+    }
+
+    await AgentWorkHistory.insertMany(detailArray);
+
+    console.log(`Migrated agent work history completed`);
+  } catch (err) {
+    console.log(`Error in migrating detail of agents: ${err}`);
+  }
+};
+
+// migrateAgentAppDetailHistory();

@@ -78,6 +78,7 @@ const {
   fetchTemporaryOrderOfCustomer,
   getProductsWithVariantsInCart,
   addItemsToCart,
+  getFiltersFromBusinessCategory,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -159,6 +160,9 @@ customerRoute.post(
 
 // Search in home
 customerRoute.get("/search-home", homeSearchController);
+
+// Business category filters
+customerRoute.get("/business-filters", getFiltersFromBusinessCategory);
 
 // List all restaurants in customers geofence
 customerRoute.get(

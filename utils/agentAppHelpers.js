@@ -23,9 +23,9 @@ const formatToHours = (milliseconds) => {
 
 const moveAppDetailToHistoryAndResetForAllAgents = async () => {
   try {
+    const mongoose = require("mongoose");
     const Agent = require("../models/Agent");
     const AgentPricing = require("../models/AgentPricing");
-    const mongoose = require("mongoose");
 
     const agents = await Agent.find({
       isApproved: "Approved",
@@ -176,6 +176,172 @@ const moveAppDetailToHistoryAndResetForAllAgents = async () => {
     // Perform bulk write operation
     if (bulkOperations.length > 0) {
       await Agent.bulkWrite(bulkOperations);
+    }
+  } catch (err) {
+    console.log(
+      `Error moving appDetail to history for all agents: ${err.message}`
+    );
+  }
+};
+
+const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
+  try {
+    const Agent = require("../models/Agent");
+    const AgentPricing = require("../models/AgentPricing");
+    const AgentWorkHistory = require("../models/AgentWorkHistory");
+
+    const agents = await Agent.find({
+      isApproved: "Approved",
+      isBlocked: false,
+    })
+      .lean()
+      .select([
+        "_id",
+        "appDetail",
+        "loginStartTime",
+        "workStructure.salaryStructureId",
+        "status",
+      ]);
+
+    const currentTime = new Date();
+    const lastDay = new Date();
+    lastDay.setDate(lastDay.getDate() - 1);
+
+    const historyDocuments = [];
+
+    for (const agent of agents) {
+      const appDetail = agent.appDetail || {
+        totalEarning: 0,
+        orders: 0,
+        pendingOrders: 0,
+        totalDistance: 0,
+        cancelledOrders: 0,
+        loginDuration: 0,
+        orderDetail: [],
+      };
+
+      // Reset login duration before recalculating
+      const loginStart = new Date(agent?.loginStartTime || currentTime);
+      const loginDuration = currentTime - loginStart;
+      appDetail.loginDuration = loginDuration;
+
+      // Fetch agent pricing only once per agent
+      const agentPricing = await AgentPricing.findById(
+        agent.workStructure.salaryStructureId
+      ).lean();
+
+      if (agentPricing) {
+        if (agentPricing?.type && agentPricing?.type.startsWith("Monthly")) {
+          if (agentPricing?.type === "Monthly-Full-Time") {
+            const perHourBaseFare = Number(
+              (agentPricing?.baseFare / agentPricing?.minLoginHours).toFixed(2)
+            );
+
+            const loginDurationInHours = Number(
+              Math.min(
+                agentPricing?.minLoginHours,
+                Math.floor(appDetail.loginDuration / 3600000)
+              ).toFixed(2)
+            );
+
+            const earningForLoginHours = Math.round(
+              perHourBaseFare * loginDurationInHours
+            );
+
+            appDetail.totalEarning = earningForLoginHours;
+          } else {
+            const perHourBaseFare =
+              agentPricing?.baseFare / agentPricing?.minLoginHours;
+            const loginDurationInHours = Math.min(
+              agentPricing?.minLoginHours,
+              appDetail.loginDuration / 3600000
+            );
+            const earningForLoginHours = Math.round(
+              perHourBaseFare * loginDurationInHours
+            );
+            appDetail.totalEarning = earningForLoginHours;
+          }
+        } else {
+          const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
+
+          if (
+            appDetail.loginDuration >= minLoginMillis &&
+            appDetail.orders >= agentPricing.minOrderNumber &&
+            appDetail.orders > agentPricing.minOrderNumber
+          ) {
+            // Calculate extra order earnings
+            const earningForExtraOrders =
+              (appDetail.orders - agentPricing.minOrderNumber) *
+              agentPricing.fareAfterMinOrderNumber;
+
+            appDetail.totalEarning += earningForExtraOrders;
+          }
+
+          // Calculate extra login hours earnings
+          const extraMillis = appDetail.loginDuration - minLoginMillis;
+
+          if (
+            appDetail.loginDuration >= minLoginMillis &&
+            appDetail.orders >= agentPricing.minOrderNumber &&
+            extraMillis > 0
+          ) {
+            const extraHours = Math.floor(extraMillis / (60 * 60 * 1000));
+            if (extraHours >= 1) {
+              const earningForExtraHours =
+                extraHours * agentPricing.fareAfterMinLoginHours;
+
+              appDetail.totalEarning += earningForExtraHours;
+            }
+          }
+
+          if (
+            appDetail.loginDuration >= minLoginMillis &&
+            appDetail.orders >= agentPricing.minOrderNumber &&
+            appDetail.totalEarning < agentPricing.baseFare
+          ) {
+            appDetail.totalEarning = agentPricing.baseFare;
+          }
+        }
+      }
+
+      historyDocuments.push({
+        agentId: agent._id,
+        workedDate: lastDay,
+        totalEarning: appDetail.totalEarning,
+        orders: appDetail.orders,
+        pendingOrders: appDetail.pendingOrders,
+        totalDistance: appDetail.totalDistance,
+        cancelledOrders: appDetail.cancelledOrders,
+        loginDuration: appDetail.loginDuration,
+        paymentSettled: false,
+        orderDetail: appDetail.orderDetail,
+      });
+
+      // Prepare the history and reset update
+      const update = {
+        $set: {
+          "appDetail.totalEarning": 0,
+          "appDetail.orders": 0,
+          "appDetail.pendingOrders": 0,
+          "appDetail.totalDistance": 0,
+          "appDetail.cancelledOrders": 0,
+          "appDetail.loginDuration": 0,
+          "appDetail.orderDetail": [],
+          loginStartTime:
+            agent.status !== "Inactive" ? currentTime : agent.loginStartTime,
+        },
+      };
+
+      bulkOperations.push({
+        updateOne: {
+          filter: { _id: agent._id },
+          update,
+        },
+      });
+    }
+
+    if (historyDocuments.length > 0) {
+      await AgentWorkHistory.insertMany(historyDocuments);
     }
   } catch (err) {
     console.log(
@@ -545,6 +711,7 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
 module.exports = {
   formatToHours,
   moveAppDetailToHistoryAndResetForAllAgents,
+  moveAppDetailToWorkHistoryAndResetForAllAgents,
   updateLoyaltyPoints,
   processReferralRewards,
   calculateAgentEarnings,

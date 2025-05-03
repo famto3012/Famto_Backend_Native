@@ -30,6 +30,12 @@ const BusinessCategorySchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    merchantFilters: {
+      type: [String],
+    },
+    productFilters: {
+      type: [String],
+    },
   },
   {
     timestamps: true,
