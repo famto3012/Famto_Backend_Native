@@ -573,9 +573,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
         $options: "i",
       };
     }
-    if (filterType === "Veg") {
+    if (filterType.toLowerCase() === "veg") {
       filterCriteria["merchantDetail.merchantFoodType"] = "Veg";
-    } else if (filterType === "Rating") {
+    } else if (filterType.toLowerCase() === "rating 4.0+") {
       filterCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
     }
 
