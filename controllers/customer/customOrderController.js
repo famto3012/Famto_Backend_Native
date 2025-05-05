@@ -26,6 +26,7 @@ const {
   findRolesToNotify,
 } = require("../../socket/socket");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -633,47 +634,15 @@ const confirmCustomOrderController = async (req, res, next) => {
 
         const eventName = "newOrderCreated";
 
+        // Fetch notification settings to determine roles
         const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-        let manager;
-        // Send notifications to each role dynamically
-        for (const role of rolesToNotify) {
-          let roleId;
-
-          if (role === "admin") {
-            roleId = process.env.ADMIN_ID;
-          } else if (role === "merchant") {
-            roleId = newOrder?.merchantId;
-          } else if (role === "driver") {
-            roleId = newOrder?.agentId;
-          } else if (role === "customer") {
-            roleId = newOrder?.customerId;
-          } else {
-            const roleValue = await ManagerRoles.findOne({ roleName: role });
-            if (roleValue) {
-              manager = await Manager.findOne({ role: roleValue._id });
-            } // Assuming `role` is the role field to match in Manager model
-            if (manager) {
-              roleId = manager._id; // Set roleId to the Manager's ID
-            }
-          }
-
-          if (roleId) {
-            const notificationData = {
-              fcm: {
-                orderId: newOrder._id,
-                customerId: newOrder.customerId,
-              },
-            };
-
-            await sendNotification(
-              roleId,
-              eventName,
-              notificationData,
-              role.charAt(0).toUpperCase() + role.slice(1)
-            );
-          }
-        }
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
 
         const socketData = {
           ...data,
@@ -681,12 +650,12 @@ const confirmCustomOrderController = async (req, res, next) => {
           orderId: newOrder._id,
           orderDetail: newOrder.orderDetail,
           billDetail: newOrder.billDetail,
-          orderDetailStepper: newOrder.orderDetailStepper.created,
 
           //? Data for displaying detail in all orders table
           _id: newOrder._id,
           orderStatus: newOrder.status,
-          merchantName: "-",
+          merchantName:
+            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
           customerName:
             newOrder?.orderDetail?.deliveryAddress?.fullName ||
             newOrder?.customerId?.fullName ||
@@ -705,11 +674,20 @@ const confirmCustomOrderController = async (req, res, next) => {
           amount: newOrder.billDetail.grandTotal,
         };
 
-        sendSocketData(newOrder.customerId, eventName, socketData);
-        sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-        if (manager?._id) {
-          sendSocketData(manager._id, eventName, socketData);
-        }
+        const userIds = {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder?.merchantId?._id,
+          agent: newOrder?.agentId,
+          customer: newOrder?.customerId,
+        };
+
+        await sendSocketDataAndNotification({
+          rolesToNotify,
+          userIds,
+          eventName,
+          notificationData,
+          socketData,
+        });
       }
     }, 60000);
   } catch (err) {

@@ -285,15 +285,15 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
     // Formatting the results
     const formattedOrders = results.map((order) => {
       return {
-        orderId: order._id,
-        orderStatus: order.status,
+        orderId: order?._id,
+        orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order.customerId.fullName ||
-          order.orderDetail.deliveryAddress.fullName,
-        deliveryMode: order.orderDetail.deliveryMode,
-        orderDate: formatDate(order.createdAt),
-        orderTime: formatTime(order.createdAt),
+          order?.customerId?.fullName ||
+          order?.orderDetail?.deliveryAddress?.fullName,
+        deliveryMode: order?.orderDetail?.deliveryMode,
+        orderDate: formatDate(order?.createdAt),
+        orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
         deliveryTime: order?.time ? formatTime(order?.time) : "-",
         paymentMethod:
@@ -2131,7 +2131,7 @@ const createOrderByAdminController = async (req, res, next) => {
     );
 
     let newOrderCreated;
-
+    let OrderModelToUse;
     if (isScheduledOrder && !isPickOrCustomOrder) {
       newOrderCreated = await ScheduledOrder.create({
         ...orderOptions,
@@ -2139,6 +2139,7 @@ const createOrderByAdminController = async (req, res, next) => {
         endDate: cartFound.cartDetail.endDate,
         time: cartFound.cartDetail.time,
       });
+      OrderModelToUse = ScheduledOrder;
     } else if (isScheduledOrder && isPickOrCustomOrder) {
       newOrderCreated = await scheduledPickAndCustom.create({
         ...orderOptions,
@@ -2146,8 +2147,10 @@ const createOrderByAdminController = async (req, res, next) => {
         endDate: cartFound.cartDetail.endDate,
         time: cartFound.cartDetail.time,
       });
+      OrderModelToUse = scheduledPickAndCustom;
     } else {
       newOrderCreated = await Order.create(orderOptions);
+      OrderModelToUse = Order;
     }
 
     const [, , , newOrder] = await Promise.all([
@@ -2160,7 +2163,7 @@ const createOrderByAdminController = async (req, res, next) => {
       }),
       clearCart(customer._id, deliveryMode),
       updateCustomerTransaction(customer, orderDetails.billDetail),
-      Order.findById(newOrderCreated._id).populate("merchantId"),
+      OrderModelToUse.findById(newOrderCreated._id).populate("merchantId"),
     ]);
 
     const eventName = "newOrderCreated";
