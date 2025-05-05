@@ -29,7 +29,11 @@ const {
   uploadToFirebase,
 } = require("../../utils/imageOperation");
 
-const { sendNotification, sendSocketData } = require("../../socket/socket");
+const {
+  sendNotification,
+  sendSocketData,
+  findRolesToNotify,
+} = require("../../socket/socket");
 const {
   processSchedule,
   processDeliveryDetailInApp,
@@ -38,6 +42,7 @@ const CustomerAppCustomization = require("../../models/CustomerAppCustomization"
 const Tax = require("../../models/Tax");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
+const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 // Initialize cart
 const initializePickAndDrop = async (req, res, next) => {
@@ -485,6 +490,62 @@ const confirmPickAndDropController = async (req, res, next) => {
           CustomerTransaction.create(customerTransaction),
         ]);
 
+        const eventName = "newOrderCreated";
+
+        // Fetch notification settings to determine roles
+        const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
+
+        const socketData = {
+          ...data,
+
+          orderId: newOrder._id,
+          orderDetail: newOrder.orderDetail,
+          billDetail: newOrder.billDetail,
+
+          //? Data for displaying detail in all orders table
+          _id: newOrder._id,
+          orderStatus: newOrder.status,
+          merchantName:
+            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+          customerName:
+            newOrder?.orderDetail?.deliveryAddress?.fullName ||
+            newOrder?.customerId?.fullName ||
+            "-",
+          deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          orderDate: formatDate(newOrder.createdAt),
+          orderTime: formatTime(newOrder.createdAt),
+          deliveryDate: newOrder?.orderDetail?.deliveryTime
+            ? formatDate(newOrder.orderDetail.deliveryTime)
+            : "-",
+          deliveryTime: newOrder?.orderDetail?.deliveryTime
+            ? formatTime(newOrder.orderDetail.deliveryTime)
+            : "-",
+          paymentMethod: newOrder.paymentMode,
+          deliveryOption: newOrder.orderDetail.deliveryOption,
+          amount: newOrder.billDetail.grandTotal,
+        };
+
+        const userIds = {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder?.merchantId?._id,
+          agent: newOrder?.agentId,
+          customer: newOrder?.customerId,
+        };
+
+        await sendSocketDataAndNotification({
+          rolesToNotify,
+          userIds,
+          eventName,
+          notificationData,
+          socketData,
+        });
         res.status(200).json({
           success: true,
           data: newOrder,
@@ -561,78 +622,115 @@ const confirmPickAndDropController = async (req, res, next) => {
             customer.save(),
             CustomerWalletTransaction.findOneAndUpdate(
               { orderId: oldOrderId },
-              { $set: { orderId: newOrderCreated._id } },
+              { $set: { orderId: newOrder._id } },
               { new: true }
             ),
           ]);
 
           //? Notify the USER and ADMIN about successful order creation
-          const customerData = {
-            socket: {
-              orderId: newOrder._id,
-              orderDetail: newOrder.orderDetail,
-              billDetail: newOrder.billDetail,
-              orderDetailStepper: newOrder.orderDetailStepper.created,
-            },
+
+          const eventName = "newOrderCreated";
+
+          // Fetch notification settings to determine roles
+          const { rolesToNotify, data } = await findRolesToNotify(eventName);
+          // const customerData = {
+          //   socket: {
+          //     orderId: newOrder._id,
+          //     orderDetail: newOrder.orderDetail,
+          //     billDetail: newOrder.billDetail,
+          //     orderDetailStepper: newOrder.orderDetailStepper.created,
+          //   },
+          //   fcm: {
+          //     title: "Order created",
+          //     body: "Your order was created successfully",
+          //     image: "",
+          //     orderId: newOrder._id,
+          //     customerId: newOrder.customerId,
+          //   },
+          // };
+
+          // const adminData = {
+          //   socket: {
+          //     _id: newOrder._id,
+          //     orderStatus: newOrder.status,
+          //     merchantName: "-",
+          //     customerName:
+          //       newOrder?.orderDetail?.deliveryAddress?.fullName ||
+          //       newOrder?.customerId?.fullName ||
+          //       "-",
+          //     deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          //     orderDate: formatDate(newOrder.createdAt),
+          //     orderTime: formatTime(newOrder.createdAt),
+          //     deliveryDate: newOrder?.orderDetail?.deliveryTime
+          //       ? formatDate(newOrder.orderDetail.deliveryTime)
+          //       : "-",
+          //     deliveryTime: newOrder?.orderDetail?.deliveryTime
+          //       ? formatTime(newOrder.orderDetail.deliveryTime)
+          //       : "-",
+          //     paymentMethod: newOrder.paymentMode,
+          //     deliveryOption: newOrder?.orderDetail?.deliveryOption,
+          //     amount: newOrder.billDetail.grandTotal,
+          //     orderDetailStepper: newOrder.orderDetailStepper.created,
+          //   },
+          //   fcm: {
+          //     title: "New Order Admin",
+          //     body: "Your have a new pending order",
+          //     image: "",
+          //     orderId: newOrder._id,
+          //   },
+          // };
+
+          const notificationData = {
             fcm: {
-              title: "Order created",
-              body: "Your order was created successfully",
-              image: "",
               orderId: newOrder._id,
               customerId: newOrder.customerId,
             },
           };
 
-          const adminData = {
-            socket: {
-              _id: newOrder._id,
-              orderStatus: newOrder.status,
-              merchantName: "-",
-              customerName:
-                newOrder?.orderDetail?.deliveryAddress?.fullName ||
-                newOrder?.customerId?.fullName ||
-                "-",
-              deliveryMode: newOrder?.orderDetail?.deliveryMode,
-              orderDate: formatDate(newOrder.createdAt),
-              orderTime: formatTime(newOrder.createdAt),
-              deliveryDate: newOrder?.orderDetail?.deliveryTime
-                ? formatDate(newOrder.orderDetail.deliveryTime)
-                : "-",
-              deliveryTime: newOrder?.orderDetail?.deliveryTime
-                ? formatTime(newOrder.orderDetail.deliveryTime)
-                : "-",
-              paymentMethod: newOrder.paymentMode,
-              deliveryOption: newOrder?.orderDetail?.deliveryOption,
-              amount: newOrder.billDetail.grandTotal,
-              orderDetailStepper: newOrder.orderDetailStepper.created,
-            },
-            fcm: {
-              title: "New Order Admin",
-              body: "Your have a new pending order",
-              image: "",
-              orderId: newOrder._id,
-            },
+          const socketData = {
+            ...data,
+
+            orderId: newOrder._id,
+            orderDetail: newOrder.orderDetail,
+            billDetail: newOrder.billDetail,
+
+            //? Data for displaying detail in all orders table
+            _id: newOrder._id,
+            orderStatus: newOrder.status,
+            merchantName:
+              newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+            customerName:
+              newOrder?.orderDetail?.deliveryAddress?.fullName ||
+              newOrder?.customerId?.fullName ||
+              "-",
+            deliveryMode: newOrder?.orderDetail?.deliveryMode,
+            orderDate: formatDate(newOrder.createdAt),
+            orderTime: formatTime(newOrder.createdAt),
+            deliveryDate: newOrder?.orderDetail?.deliveryTime
+              ? formatDate(newOrder.orderDetail.deliveryTime)
+              : "-",
+            deliveryTime: newOrder?.orderDetail?.deliveryTime
+              ? formatTime(newOrder.orderDetail.deliveryTime)
+              : "-",
+            paymentMethod: newOrder.paymentMode,
+            deliveryOption: newOrder.orderDetail.deliveryOption,
+            amount: newOrder.billDetail.grandTotal,
           };
 
-          const parameter = {
-            eventName: "newOrderCreated",
-            user: "Customer",
-            role: "Admin",
+          const userIds = {
+            admin: process.env.ADMIN_ID,
+            merchant: newOrder?.merchantId?._id,
+            agent: newOrder?.agentId,
+            customer: newOrder?.customerId,
           };
 
-          sendNotification(
-            newOrder.customerId,
-            parameter.eventName,
-            customerData,
-            parameter.user
-          );
-
-          sendNotification(
-            process.env.ADMIN_ID,
-            parameter.eventName,
-            adminData,
-            parameter.role
-          );
+          await sendSocketDataAndNotification({
+            rolesToNotify,
+            userIds,
+            eventName,
+            notificationData,
+            socketData,
+          });
         }
       }, 60000);
     } else if (paymentMode === "Online-payment") {
@@ -721,8 +819,64 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       await Promise.all([
         PickAndCustomCart.deleteOne({ customerId }),
         customer.save(),
-        customerTransaction.create(customerTransaction),
+        CustomerTransaction.create(customerTransaction),
       ]);
+
+      const eventName = "newOrderCreated";
+
+      // Fetch notification settings to determine roles
+      const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+      const notificationData = {
+        fcm: {
+          orderId: newOrder._id,
+          customerId: newOrder.customerId,
+        },
+      };
+
+      const socketData = {
+        ...data,
+
+        orderId: newOrder._id,
+        orderDetail: newOrder.orderDetail,
+        billDetail: newOrder.billDetail,
+
+        //? Data for displaying detail in all orders table
+        _id: newOrder._id,
+        orderStatus: newOrder.status,
+        merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+        customerName:
+          newOrder?.orderDetail?.deliveryAddress?.fullName ||
+          newOrder?.customerId?.fullName ||
+          "-",
+        deliveryMode: newOrder?.orderDetail?.deliveryMode,
+        orderDate: formatDate(newOrder.createdAt),
+        orderTime: formatTime(newOrder.createdAt),
+        deliveryDate: newOrder?.orderDetail?.deliveryTime
+          ? formatDate(newOrder.orderDetail.deliveryTime)
+          : "-",
+        deliveryTime: newOrder?.orderDetail?.deliveryTime
+          ? formatTime(newOrder.orderDetail.deliveryTime)
+          : "-",
+        paymentMethod: newOrder.paymentMode,
+        deliveryOption: newOrder.orderDetail.deliveryOption,
+        amount: newOrder.billDetail.grandTotal,
+      };
+
+      const userIds = {
+        admin: process.env.ADMIN_ID,
+        merchant: newOrder?.merchantId?._id,
+        agent: newOrder?.agentId,
+        customer: newOrder?.customerId,
+      };
+
+      await sendSocketDataAndNotification({
+        rolesToNotify,
+        userIds,
+        eventName,
+        notificationData,
+        socketData,
+      });
 
       res.status(200).json({
         message: "Scheduled order created successfully",
@@ -751,7 +905,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     await Promise.all([
       PickAndCustomCart.deleteOne({ customerId }),
       customer.save(),
-      customerTransaction.create(customerTransaction),
+      CustomerTransaction.create(customerTransaction),
     ]);
 
     if (!tempOrder) {
@@ -796,61 +950,27 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         const eventName = "newOrderCreated";
 
         // Fetch notification settings to determine roles
-        const notificationSettings = await NotificationSetting.findOne({
-          event: eventName,
-        });
+        const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-        const rolesToNotify = [
-          "admin",
-          "merchant",
-          "driver",
-          "customer",
-        ].filter((role) => notificationSettings[role]);
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
 
-        // Send notifications to each role dynamically
-        for (const role of rolesToNotify) {
-          let roleId;
-
-          if (role === "admin") {
-            roleId = process.env.ADMIN_ID;
-          } else if (role === "merchant") {
-            roleId = newOrder?.merchantId;
-          } else if (role === "driver") {
-            roleId = newOrder?.agentId;
-          } else if (role === "customer") {
-            roleId = newOrder?.customerId;
-          }
-
-          if (roleId) {
-            const notificationData = {
-              fcm: {
-                orderId: newOrder._id,
-                customerId: newOrder.customerId,
-              },
-            };
-
-            await sendNotification(
-              roleId,
-              eventName,
-              notificationData,
-              role.charAt(0).toUpperCase() + role.slice(1)
-            );
-          }
-        }
-
-        const data = {
-          title: notificationSettings.title,
-          description: notificationSettings.description,
+        const socketData = {
+          ...data,
 
           orderId: newOrder._id,
           orderDetail: newOrder.orderDetail,
           billDetail: newOrder.billDetail,
-          orderDetailStepper: newOrder.orderDetailStepper.created,
 
           //? Data for displaying detail in all orders table
           _id: newOrder._id,
           orderStatus: newOrder.status,
-          merchantName: "-",
+          merchantName:
+            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
           customerName:
             newOrder?.orderDetail?.deliveryAddress?.fullName ||
             newOrder?.customerId?.fullName ||
@@ -869,8 +989,20 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
           amount: newOrder.billDetail.grandTotal,
         };
 
-        sendSocketData(newOrder.customerId, eventName, data);
-        sendSocketData(process.env.ADMIN_ID, eventName, data);
+        const userIds = {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder?.merchantId?._id,
+          agent: newOrder?.agentId,
+          customer: newOrder?.customerId,
+        };
+
+        await sendSocketDataAndNotification({
+          rolesToNotify,
+          userIds,
+          eventName,
+          notificationData,
+          socketData,
+        });
       }
     }, 60000);
   } catch (err) {

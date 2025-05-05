@@ -150,6 +150,11 @@ const scheduledPickAndCustomSchema = mongoose.Schema(
       ref: "Customer",
       required: true,
     },
+    merchantId: {
+      type: String,
+      ref: "Merchant",
+      required: false,
+    },
     items: [scheduledPickAndCustomItemSchema],
     orderDetail: scheduledPickAndCustomDetailSchema,
     billDetail: billSchema,
