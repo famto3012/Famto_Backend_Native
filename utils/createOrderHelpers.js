@@ -754,15 +754,16 @@ const calculateDeliveryChargesHelper = async ({
   scheduledDetails,
   selectedBusinessCategory,
   isSuperMarketOrder,
-  vehicleType,
-  pickupLocation,
 }) => {
   let oneTimeDeliveryCharge = null;
   let surgeCharges = null;
   let deliveryChargeForScheduledOrder = null;
   let taxAmount = null;
 
-  const itemTotal = calculateItemTotal(items, scheduledDetails?.numOfDays);
+  const itemTotal =
+    deliveryMode === "Home Delivery"
+      ? calculateItemTotal(items, scheduledDetails?.numOfDays)
+      : 0;
 
   if (deliveryMode === "Home Delivery") {
     const businessCategoryId = selectedBusinessCategory;
@@ -825,13 +826,61 @@ const calculateDeliveryChargesHelper = async ({
   }
 
   if (deliveryMode === "Pick and Drop") {
-    return await pickAndDropCharges(
+    const customerPricing = await CustomerPricing.findOne({
+      deliveryMode: "Home Delivery",
+      geofenceId: customer.customerDetails.geofenceId,
+      status: true,
+      merchants: { $in: [merchant._id] },
+    });
+
+    if (!customerPricing) throw new Error("Customer pricing not found");
+
+    oneTimeDeliveryCharge = calculateDeliveryCharges(
       distanceInKM,
-      scheduledDetails,
-      vehicleType,
-      items,
-      pickupLocation
+      customerPricing.baseFare,
+      customerPricing.baseDistance,
+      customerPricing.fareAfterBaseDistance
     );
+
+    const customerSurge = await CustomerSurge.findOne({
+      geofenceId: customer.customerDetails.geofenceId,
+      status: true,
+    });
+
+    if (customerSurge) {
+      surgeCharges = calculateDeliveryCharges(
+        distanceInKM,
+        customerSurge.baseFare,
+        customerSurge.baseDistance,
+        customerSurge.fareAfterBaseDistance
+      );
+    }
+
+    if (
+      scheduledDetails?.startDate &&
+      scheduledDetails?.endDate &&
+      scheduledDetails?.time
+    ) {
+      deliveryChargeForScheduledOrder = (
+        oneTimeDeliveryCharge * scheduledDetails.numOfDays
+      ).toFixed(2);
+    }
+
+    const tax = await CustomerAppCustomization.findOne({}).select(
+      "pickAndDropOrderCustomization"
+    );
+
+    const taxFound = await Tax.findOne({
+      _id: tax.pickAndDropOrderCustomization.taxId,
+      status: true,
+    });
+
+    const charge = deliveryChargeForScheduledOrder ?? oneTimeDeliveryCharge;
+
+    if (taxFound) {
+      const calculatedTax = (charge * taxFound.tax) / 100;
+      taxAmount = parseFloat(calculatedTax.toFixed(2));
+    }
   }
 
   return {
@@ -1223,7 +1272,7 @@ const pickAndDropCharges = async (
     status: true,
   });
 
-  const charge = deliveryChargeForScheduledOrder || oneTimeDeliveryCharge;
+  const charge = deliveryChargeForScheduledOrder ?? oneTimeDeliveryCharge;
 
   let taxAmount = 0;
   if (taxFound) {
