@@ -13,6 +13,7 @@ async function fetchPerDayRevenue(date) {
     // Start and end of the previous day in IST
     const startOfDay = previousDay.startOf("day").toDate();
     const endOfDay = previousDay.endOf("day").toDate();
+    console.log("startDate", startOfDay, "endDate", endOfDay);
 
     // Fetch total sales from Orders
     let totalSales = [];

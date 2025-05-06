@@ -99,12 +99,15 @@ const io = socketio(server, {
 
 const userSocketMap = {};
 
+// 定义一个异步函数，用于向用户发送推送通知
 const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
+  // 根据事件名称和状态，查找通知设置
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
     status: true,
   });
 
+  // 定义推送通知的内容
   const mes = {
     notification: {
       title: notificationSettings?.title || message?.title,
@@ -319,7 +322,7 @@ const populateUserSocketMap = async () => {
       }
     });
 
-    // console.log("User socket map", userSocketMap);
+    // console.log("User socket map", userSocketMap.M24083);
   } catch (error) {
     console.error("Error populating User Socket Map:", error);
   }
@@ -371,9 +374,10 @@ const findRolesToNotify = async (eventName) => {
 const getRealTimeDataCountMerchant = async (data) => {
   try {
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCDate(startOfDay.getUTCDate() - 1);
+    startOfDay.setUTCHours(18, 30, 0, 0);
     const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(18, 29, 59, 999);
     let pending, ongoing, completed, cancelled;
 
     if (data.id && data.role === "Merchant") {
@@ -502,9 +506,10 @@ const getRealTimeDataCountMerchant = async (data) => {
 const getRealTimeDataCount = async () => {
   try {
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCDate(startOfDay.getUTCDate() - 1);
+    startOfDay.setUTCHours(18, 30, 0, 0);
     const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(18, 29, 59, 999);
 
     const [pending, ongoing, completed, cancelled] = await Promise.all([
       Order.countDocuments({

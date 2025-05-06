@@ -811,20 +811,56 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
     }
 
     const [result, totalCOunt] = await Promise.all([
-      ScheduledOrder.find(filterCriteria)
-        .populate({
-          path: "merchantId",
-          select: "merchantDetail.merchantName merchantDetail.deliveryTime",
-        })
-        .populate({
-          path: "customerId",
-          select: "fullName",
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ScheduledOrder.countDocuments(filterCriteria),
+      ScheduledOrder.aggregate([
+        {
+          $match: filterCriteria,
+        },
+        {
+          $unionWith: {
+            coll: "scheduledpickandcustoms", // Name of the second collection
+            pipeline: [{ $match: filterCriteria }],
+          },
+        },
+        // Populate merchantId if available
+        {
+          $lookup: {
+            from: "merchants", // Collection name for merchants
+            localField: "merchantId",
+            foreignField: "_id",
+            as: "merchantData",
+          },
+        },
+        {
+          $unwind: {
+            path: "$merchantData",
+            preserveNullAndEmptyArrays: true, // Keep documents without a merchantId
+          },
+        },
+        // Populate customerId
+        {
+          $lookup: {
+            from: "customers", // Collection name for customers
+            localField: "customerId",
+            foreignField: "_id",
+            as: "customerData",
+          },
+        },
+        {
+          $unwind: {
+            path: "$customerData",
+            preserveNullAndEmptyArrays: true, // Keep documents without a customerId
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+        {
+          $skip: skip,
+        },
+        {
+          $limit: limit,
+        },
+      ]),
     ]);
 
     const unSeenOrdersCount = result?.filter((order) => !order.isViewed).length;
@@ -833,7 +869,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
       return {
         orderId: order?._id,
         orderStatus: order?.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName,
+        merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
           order?.customerId?.fullName ||
           order?.orderDetail?.deliveryAddress?.fullName,
@@ -1241,20 +1277,44 @@ const getScheduledOrderDetailController = async (req, res, next) => {
     }
 
     const { orderId } = req.params;
+    const { deliveryMode } = req.query;
 
-    const orderFound = await ScheduledOrder.findOne({
-      _id: orderId,
-      merchantId: currentMerchant,
-    })
-      .populate({
-        path: "customerId",
-        select: "fullName phoneNumber email",
+    let orderFound;
+
+    if (["Home Delivery", "Take Away"].includes(deliveryMode)) {
+      orderFound = await ScheduledOrder.findOne({
+        _id: orderId,
+        merchantId: currentMerchant,
       })
-      .populate({
-        path: "merchantId",
-        select: "merchantDetail",
-      })
-      .exec();
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .populate({
+          path: "merchantId",
+          select: "merchantDetail",
+        })
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .populate({
+          path: "merchantId",
+          select: "merchantDetail",
+        })
+        .exec();
+    } else {
+      orderFound = await scheduledPickAndCustom
+        .findOne({
+          _id: orderId,
+          merchantId: currentMerchant,
+        })
+        .populate({
+          path: "customerId",
+          select: "fullName phoneNumber email",
+        })
+        .exec();
+    }
 
     if (!orderFound) {
       return next(appError("Order not found", 404));

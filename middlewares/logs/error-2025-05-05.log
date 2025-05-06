@@ -1,0 +1,590 @@
+
+[2025-05-05T11:28:04+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:985:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/merchants/admin/666987bd66e252f1c3c4774e
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:28:33+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of null (reading 'id')
+Stack: Error: Cannot read properties of null (reading 'id')
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at createInvoiceByAdminController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\adminOrderController.js:1943:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/admin/create-order-invoice
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:40:45+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:40:45+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2106:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/SO250521/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:40:46+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:40:48+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:40:52+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:05+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:06+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:13+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2106:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/SO250521/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:13+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:14+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:16+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:41:20+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250521?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:42:45+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:985:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/merchants/admin/666987bd66e252f1c3c4774e
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:43:32+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:43:32+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2106:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/SO250522/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:43:33+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:43:35+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:43:39+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:47:14+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T11:47:16+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1291:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250522?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:41+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:43+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:44+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:47+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:51+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:15:52+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Arguments must be aggregate pipeline operators
+Stack: Error: Arguments must be aggregate pipeline operators
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getRevenueDataByDateRange (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\home\homeController.js:69:10)
+    at Layer.handle [as handle_request] (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\akhil\Downloads\Famto_Backend_Native\node_modules\express\lib\router\route.js:149:13)
+    at isAdmin (C:\Users\akhil\Downloads\Famto_Backend_Native\middlewares\isAdmin.js:24:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/admin/home/home-screen-sale-data?startDate=2025-04-28&endDate=2025-05-05
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:33:08+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:33:08+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:36:12+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1292:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250527?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:36:12+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/SO250527/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:36:13+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1292:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250527?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:40:00+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/O250538/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:41:25+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/O250538/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:41:44+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/O250522/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T13:42:58+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/O250529/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T16:19:48+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Merchant not found
+Stack: Error: Merchant not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getSingleMerchantController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\merchant\merchantController.js:985:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/merchants/admin/666987bd66e252f1c3c4774e
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:29+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:29+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:43+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1292:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250527?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:43+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Scheduled order not found
+Stack: Error: Scheduled order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at markScheduledOrderViewedController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:2107:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order-view/SO250527/M24083
+Method: PUT
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:44+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1292:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250527?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-05T20:42:46+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Order not found
+Stack: Error: Order not found
+    at appError (C:\Users\akhil\Downloads\Famto_Backend_Native\utils\appError.js:2:13)
+    at getScheduledOrderDetailController (C:\Users\akhil\Downloads\Famto_Backend_Native\controllers\admin\order\merchantOrderController.js:1292:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+URL: /api/v1/orders/scheduled-order/SO250527?deliveryMode=Pick+and+Drop
+Method: GET
+IP: ::1
+--------------------------------------------------------

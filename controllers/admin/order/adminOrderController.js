@@ -2031,6 +2031,7 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
           famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
         }
       : null;
+    console.log("OrderFound", orderFound);
 
     const formattedResponse = {
       _id: orderFound._id,
