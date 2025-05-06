@@ -864,13 +864,23 @@ const downloadInvoiceBillController = async (req, res, next) => {
       return next(appError("Cart not found or no bill details available"));
     }
 
-    const populatedCartWithVariantNames = await formattedCartItems(cartFound);
-    const formattedItems = populatedCartWithVariantNames.items.map((item) => ({
-      itemName: item.productId.productName,
-      quantity: item.quantity,
-      price: item.price,
-      variantTypeName: item.variantTypeId?.variantTypeName || "",
-    }));
+    let formattedItems;
+    if (isStandardDelivery) {
+      const populatedCartWithVariantNames = await formattedCartItems(cartFound);
+      formattedItems = populatedCartWithVariantNames.items.map((item) => ({
+        itemName: item.productId.productName,
+        quantity: item.quantity,
+        price: item.price,
+        variantTypeName: item.variantTypeId?.variantTypeName || "",
+      }));
+    } else if (isCustomDelivery) {
+      formattedItems = cartFound.items.map((item) => ({
+        itemName: item.itemName,
+        quantity: item.quantity,
+        price: 0,
+        variantTypeName: "",
+      }));
+    }
 
     const { billDetail } = cartFound;
     const [
