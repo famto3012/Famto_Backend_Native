@@ -57,6 +57,9 @@ const csvWriter = require("csv-writer").createObjectCsvWriter;
 const getAllOrdersOfMerchantController = async (req, res, next) => {
   try {
     let { page = 1, limit = 50, isPaginated = "true" } = req.query;
+
+    console.log(req.query);
+
     isPaginated = isPaginated === "true";
 
     const skip = (page - 1) * limit;
@@ -137,6 +140,8 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
       ? await Order.countDocuments({ merchantId: currentMerchant })
       : orders.length;
     const totalPages = Math.ceil(totalDocuments / limit);
+
+    console.log({ orderDetails: orderDetails.length });
 
     res.status(200).json({
       message: "All orders of merchant",
@@ -1973,8 +1978,6 @@ const createInvoiceController = async (req, res, next) => {
       items,
       scheduledDetails,
       selectedBusinessCategory,
-      vehicleType,
-      pickupLocation,
     });
 
     let merchantDiscountAmount = 0;
