@@ -1,0 +1,70 @@
+
+[2025-05-06T14:21:39+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-06T14:21:39+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 404
+Message: Invalid refresh token or user not found
+Stack: Error: Invalid refresh token or user not found
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at refreshTokenController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\authController.js:132:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/auth/refresh-token
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-06T14:22:18+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'toString')
+Stack: Error: Cannot read properties of undefined (reading 'toString')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at downloadInvoiceBillController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\order\adminOrderController.js:1225:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/orders/download-invoice-bill
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-06T14:26:25+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Cannot read properties of undefined (reading 'toString')
+Stack: Error: Cannot read properties of undefined (reading 'toString')
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at downloadInvoiceBillController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\order\adminOrderController.js:1237:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+URL: /api/v1/orders/download-invoice-bill
+Method: POST
+IP: ::1
+--------------------------------------------------------
+
+[2025-05-06T14:59:35+05:30] // ISO format in IST
+Status: Failed
+StatusCode: 500
+Message: Could not find Chrome (ver. 131.0.6778.204). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: C:\Users\SARATH\.cache\puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+Stack: Error: Could not find Chrome (ver. 131.0.6778.204). This can occur if either
+ 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+ 2. your cache path is incorrectly configured (which is: C:\Users\SARATH\.cache\puppeteer).
+For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+    at appError (D:\Famto_Works\Famto_Backend_Native\utils\appError.js:2:13)
+    at downloadInvoiceBillController (D:\Famto_Works\Famto_Backend_Native\controllers\admin\order\adminOrderController.js:1247:10)
+URL: /api/v1/orders/download-invoice-bill
+Method: POST
+IP: ::1
+--------------------------------------------------------
