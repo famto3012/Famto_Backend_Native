@@ -99,15 +99,12 @@ const io = socketio(server, {
 
 const userSocketMap = {};
 
-// 定义一个异步函数，用于向用户发送推送通知
 const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
-  // 根据事件名称和状态，查找通知设置
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
     status: true,
   });
 
-  // 定义推送通知的内容
   const mes = {
     notification: {
       title: notificationSettings?.title || message?.title,
@@ -740,6 +737,7 @@ const getPendingNotificationsWithTimers = async (agentId) => {
 io.on("connection", async (socket) => {
   const userId = socket?.handshake?.query?.userId;
   const fcmToken = socket?.handshake?.query?.fcmToken;
+  socket.userId = userId;
 
   if (!userId || !fcmToken || ["null", "undefined"].includes(fcmToken)) {
     console.error("Invalid userId or fcmToken provided");
@@ -2017,10 +2015,11 @@ io.on("connection", async (socket) => {
 
     try {
       // If it's an agent, update location
-      if (role === "Agent" && userId) {
+      const isAgent = userId && userId.charAt(0) === "A";
+      if (isAgent) {
         const agent = await Agent.findById(userId);
         if (agent) {
-          agent.location = location;
+          agent.location = getUserLocationFromSocket(userId);
           await agent.save();
         }
       }

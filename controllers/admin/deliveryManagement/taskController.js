@@ -173,10 +173,11 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     }
 
     const agents = await Agent.find(matchCriteria).select(
-      "fullName workStructure.tag status"
+      "fullName workStructure.tag status location"
     );
 
     let filteredAgents = agents;
+    console.log("filteredAgent", filteredAgents);
 
     // Filter by geofence if required
     if (
@@ -204,7 +205,8 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
     const responseData = await Promise.all(
       filteredAgents.map(async (agent) => {
-        let agentLocation = getUserLocationFromSocket(agent._id);
+        let agentLocation =
+          getUserLocationFromSocket(agent._id) || agent.location;
 
         if (!Array.isArray(agentLocation) || agentLocation.length !== 2) {
           return null;
@@ -319,7 +321,7 @@ const getAgentsController = async (req, res, next) => {
     const agents = await Agent.find(query);
 
     const formattedResponse = agents?.map((agent) => ({
-      ...agent,
+      ...agent.toObject(),
       location: getUserLocationFromSocket(agent._id),
     }));
 
