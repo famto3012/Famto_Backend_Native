@@ -1076,7 +1076,8 @@ io.on("connection", async (socket) => {
       const agent = await Agent.findById(order?.agentId);
       if (agent) {
         const data = {
-          agentLocation: agent?.location,
+          agentLocation:
+            getUserLocationFromSocket(order?.agentId) || agent?.location,
         };
         sendSocketData(order?.customerId, "agentCurrentLocation", data);
       } else {
