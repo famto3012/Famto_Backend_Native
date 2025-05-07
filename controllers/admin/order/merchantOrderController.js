@@ -1933,7 +1933,6 @@ const createInvoiceController = async (req, res, next) => {
       customerId,
       newCustomer,
       customerAddress,
-      deliveryMode,
       addressType,
       otherAddressId,
     });

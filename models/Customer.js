@@ -169,7 +169,6 @@ const customerSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      required: true,
     },
     fullName: {
       type: String,
@@ -220,8 +219,8 @@ customerSchema.pre("save", async function (next) {
   try {
     if (this.isNew) {
       const now = new Date();
-      const year = now.getFullYear().toString().slice(-2); // Last two digits of the year
-      const month = `0${now.getMonth() + 1}`.slice(-2); // Zero-padded month
+      const year = now.getFullYear().toString().slice(-2);
+      const month = `0${now.getMonth() + 1}`.slice(-2);
 
       let counter = await DatabaseCounter.findOneAndUpdate(
         {

@@ -30,10 +30,8 @@ const findOrCreateCustomer = async ({
   customerId,
   newCustomer,
   customerAddress,
-  deliveryMode,
   addressType,
   otherAddressId,
-  formattedErrors,
 }) => {
   if (customerId) {
     const customer = await Customer.findById(customerId);
@@ -184,20 +182,7 @@ const findOrCreateCustomer = async ({
     return updatedCustomer;
   }
 
-  if (newCustomer) {
-    const customer = await Customer.create({
-      fullName: newCustomer?.fullName,
-      email: newCustomer?.email,
-      phoneNumber: newCustomer?.phoneNumber,
-      customerDetails: {
-        isBlocked: false,
-      },
-    });
-
-    return customer;
-  }
-
-  if (customerAddress) {
+  if (newCustomer && customerAddress) {
     const location = [customerAddress?.latitude, customerAddress?.longitude];
     const updatedAddress = {
       fullName: customerAddress?.fullName,
@@ -224,6 +209,7 @@ const findOrCreateCustomer = async ({
       customerDetails: {
         location,
         geofenceId: geofence._id,
+        isBlocked: false,
         homeAddress:
           customerAddress.addressType === "home" ? updatedAddress : null,
         workAddress:

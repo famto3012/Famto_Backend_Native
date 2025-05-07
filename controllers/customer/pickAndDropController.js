@@ -539,16 +539,18 @@ const confirmPickAndDropController = async (req, res, next) => {
           customer: newOrder?.customerId,
         };
 
+        res.status(200).json({
+          success: true,
+          orderId: newOrder._id,
+          createdAt: null,
+        });
+
         await sendSocketDataAndNotification({
           rolesToNotify,
           userIds,
           eventName,
           notificationData,
           socketData,
-        });
-        res.status(200).json({
-          success: true,
-          data: newOrder,
         });
 
         return;
@@ -766,6 +768,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       customerId,
       "cartDetail.deliveryMode": "Pick and Drop",
     });
+
     if (!cart) {
       return next(appError("Cart not found", 404));
     }
@@ -870,6 +873,12 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         customer: newOrder?.customerId,
       };
 
+      res.status(200).json({
+        success: true,
+        orderId: newOrder._id,
+        createdAt: null,
+      });
+
       await sendSocketDataAndNotification({
         rolesToNotify,
         userIds,
@@ -878,10 +887,6 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         socketData,
       });
 
-      res.status(200).json({
-        message: "Scheduled order created successfully",
-        data: newOrder,
-      });
       return;
     }
 

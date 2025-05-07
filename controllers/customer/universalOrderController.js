@@ -61,6 +61,8 @@ const getAllBusinessCategoryController = async (req, res, next) => {
   try {
     const { latitude, longitude } = req.body;
 
+    console.log("BODY", req.body);
+
     if (!latitude || !longitude)
       return next(appError("Latitude & Longitude are required", 400));
 
@@ -1744,6 +1746,11 @@ const orderPaymentController = async (req, res, next) => {
           customer: newOrder?.customerId,
         };
 
+        res.status(200).json({
+          success: true,
+          data: newOrder,
+        });
+
         // Send notifications to each role dynamically
         await sendSocketDataAndNotification({
           rolesToNotify,
@@ -1753,10 +1760,6 @@ const orderPaymentController = async (req, res, next) => {
           socketData,
         });
 
-        res.status(200).json({
-          success: true,
-          data: newOrder,
-        });
         return;
       } else {
         // Generate a unique order ID
@@ -1919,6 +1922,7 @@ const orderPaymentController = async (req, res, next) => {
     } else if (paymentMode === "Cash-on-delivery") {
       if (cart.cartDetail.deliveryOption === "Scheduled") {
         return res.status(400).json({
+          success: false,
           message: "Scheduled orders cannot be paid through Cash on delivery",
         });
       }
@@ -2292,18 +2296,19 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         customer: newOrder?.customerId,
       };
 
-      // Send notifications to each role dynamically
+      res.status(200).json({
+        success: true,
+        orderId: newOrder._id,
+        createdAt: null,
+        merchantName: null,
+      });
+
       await sendSocketDataAndNotification({
         rolesToNotify,
         userIds,
         eventName,
         notificationData,
         socketData,
-      });
-
-      res.status(200).json({
-        message: "Scheduled order created successfully",
-        data: newOrder,
       });
 
       return;
@@ -2340,8 +2345,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         CustomerTransaction.create(customerTransaction),
       ]);
 
-      // Return countdown timer to client
       res.status(200).json({
+        success: true,
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
