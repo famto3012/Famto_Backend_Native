@@ -66,6 +66,8 @@ const deleteOrderAndTask = async () => {
     if (orderIds.length > 0) {
       await Order.deleteMany({ _id: { $in: orderIds } });
     }
+
+    console.log(`Deleted orders and tasks for customer: ${customerId}`);
   } catch (err) {
     console.log(`Error in deleting orders & tasks: ${err}`);
   }

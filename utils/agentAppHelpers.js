@@ -1,5 +1,6 @@
 const AgentNotificationLogs = require("../models/AgentNotificationLog");
 const AgentPricing = require("../models/AgentPricing");
+const AgentSurge = require("../models/AgentSurge");
 const Customer = require("../models/Customer");
 const CustomerPricing = require("../models/CustomerPricing");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
@@ -487,9 +488,13 @@ const processReferralRewards = async (customer, orderAmount) => {
 };
 
 const calculateAgentEarnings = async (agent, order) => {
-  const agentPricing = await AgentPricing.findById(
-    agent?.workStructure?.salaryStructureId
-  );
+  const [agentPricing, agentSurge] = await Promise.all([
+    AgentPricing.findById(agent?.workStructure?.salaryStructureId),
+    AgentSurge.findOne({
+      geofenceId: agent.geofenceId,
+      status: true,
+    }),
+  ]);
 
   if (!agentPricing) throw new Error("Agent pricing not found");
   if (agentPricing?.type.startsWith("Monthly")) {
@@ -499,6 +504,15 @@ const calculateAgentEarnings = async (agent, order) => {
   let orderSalary =
     order.detailAddedByAgent.distanceCoveredByAgent *
     agentPricing.baseDistanceFarePerKM;
+
+  let surgePrice = 0;
+
+  if (agentSurge) {
+    surgePrice =
+      (order.detailAddedByAgent.distanceCoveredByAgent /
+        agentSurge.baseDistance) *
+      agentSurge.baseFare;
+  }
 
   let totalPurchaseFare = 0;
 
@@ -517,7 +531,7 @@ const calculateAgentEarnings = async (agent, order) => {
     }
   }
 
-  const totalEarnings = orderSalary + totalPurchaseFare;
+  const totalEarnings = orderSalary + totalPurchaseFare + surgePrice;
 
   // Use parseFloat to ensure it's a number with two decimal places
   return parseFloat(totalEarnings?.toFixed(2));
