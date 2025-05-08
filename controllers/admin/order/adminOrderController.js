@@ -60,6 +60,7 @@ const {
 } = require("../../../utils/socketHelper");
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 const Task = require("../../../models/Task");
+const moment = require("moment-timezone");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {
@@ -108,11 +109,11 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     }
 
     if (startDate && endDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
 
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
 
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
     }
@@ -681,11 +682,9 @@ const getOrderDetailByAdminController = async (req, res, next) => {
   }
 };
 
-//* Changed  query => orderId, orderStatus => status
 const downloadOrdersCSVByAdminController = async (req, res, next) => {
   try {
     const {
-      type,
       status,
       paymentMode,
       deliveryMode,
@@ -709,20 +708,20 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     }
 
     if (startDate && endDate) {
-      const formattedStartDate = new Date(startDate);
-      formattedStartDate.setHours(0, 0, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
 
-      const formattedEndDate = new Date(endDate);
-      formattedEndDate.setHours(23, 59, 59, 999);
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
 
-      filter.createdAt = { $gte: formattedStartDate, $lte: formattedEndDate };
+      filter.createdAt = { $gte: startDate, $lte: endDate };
     }
 
     // Fetch the data based on filter
     let allOrders = await Order.find(filter)
       .populate("merchantId", "merchantDetail.merchantName")
       .populate("customerId", "fullName")
-      .populate("agentId", "fullName")
+      .populate("agentId", "fullName phoneNumber")
       .sort({ createdAt: -1 })
       .exec();
 
@@ -739,6 +738,8 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
           customerPhoneNumber:
             order?.orderDetail?.deliveryAddress?.phoneNumber || "-",
           customerEmail: order?.customerId?.email || "-",
+          agentName: order?.agentId?.fullName || "-",
+          agentPhoneNumber: order?.agentId?.phoneNumber || "-",
           deliveryMode: order?.orderDetail?.deliveryMode || "-",
           orderTime:
             `${formatDate(order?.createdAt)} | ${formatTime(
@@ -755,6 +756,8 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
             `${order?.orderDetail?.deliveryAddress?.fullName}, ${order?.orderDetail?.deliveryAddress?.flat}, ${order?.orderDetail?.deliveryAddress?.area}, ${order?.orderDetail?.deliveryAddress?.landmark}` ||
             "-",
           distanceInKM: order?.orderDetail?.distance || "-",
+          distanceTravelledByAgent:
+            order?.detailAddedByAgent.distanceCoveredByAgent || "-",
           cancellationReason: order?.cancellationReason || "-",
           cancellationDescription: order?.cancellationDescription || "-",
           merchantEarnings: order?.merchantEarnings || "-",
@@ -786,6 +789,8 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       { id: "customerName", title: "Customer Name" },
       { id: "customerPhoneNumber", title: "Customer Phone Number" },
       { id: "customerEmail", title: "Customer Email" },
+      { id: "agentName", title: "Agent Name" },
+      { id: "agentPhoneNumber", title: "Agent Phone Number" },
       { id: "deliveryMode", title: "Delivery Mode" },
       { id: "orderTime", title: "Order Time" },
       { id: "deliveryTime", title: "Delivery Time" },
@@ -794,6 +799,10 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       { id: "totalAmount", title: "Total Amount" },
       { id: "deliveryAddress", title: "Delivery Address" },
       { id: "distanceInKM", title: "Distance (KM)" },
+      {
+        id: "distanceTravelledByAgent",
+        title: "Distance Travelled by Agent (KM)",
+      },
       { id: "cancellationReason", title: "Cancellation Reason" },
       { id: "cancellationDescription", title: "Cancellation Description" },
       { id: "merchantEarnings", title: "Merchant Earnings" },

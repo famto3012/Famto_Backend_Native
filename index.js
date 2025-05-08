@@ -194,7 +194,6 @@ cron.schedule("30 18 * * *", async () => {
   const now = new Date();
 
   await Promise.all([
-    // moveAppDetailToHistoryAndResetForAllAgents(),
     moveAppDetailToWorkHistoryAndResetForAllAgents(),
     preparePayoutForMerchant(),
     updateOneDayLoyaltyPointEarning(),
@@ -216,6 +215,8 @@ cron.schedule("30 18 * * *", async () => {
 cron.schedule("* * * * *", async () => {
   deleteExpiredConversationsAndMessages();
   populateUserSocketMap();
+
+  // await moveAppDetailToWorkHistoryAndResetForAllAgents();
 
   const now = new Date();
 
