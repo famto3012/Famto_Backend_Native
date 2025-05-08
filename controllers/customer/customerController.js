@@ -131,6 +131,8 @@ const registerAndLoginController = async (req, res, next) => {
       "2hr"
     );
 
+    customer.refreshToken = refreshToken;
+
     await customer.save();
 
     res.status(200).json({
