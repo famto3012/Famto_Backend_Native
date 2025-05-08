@@ -40,6 +40,7 @@ const ActivityLog = require("../../../models/ActivityLog");
 const MerchantSubscription = require("../../../models/MerchantSubscription");
 const Order = require("../../../models/Order");
 const MerchantPayout = require("../../../models/MerchantPayout");
+const moment = require("moment-timezone");
 
 // Helper function to handle null or empty string values
 const convertNullValues = (obj) => {
@@ -1923,7 +1924,6 @@ const getMerchantPayoutController = async (req, res, next) => {
       startDate,
       endDate,
       query,
-      timezoneOffset = 0,
     } = req.query;
 
     // Parse and normalize pagination inputs
@@ -1960,17 +1960,16 @@ const getMerchantPayoutController = async (req, res, next) => {
     const dateFilter = {};
 
     if (startDate) {
-      startDate = new Date(
-        new Date(startDate).getTime() - 5.5 * 60 * 60 * 1000
-      );
-      startDate.setUTCHours(18, 30, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      startDate = start.startOf("day").toDate();
+
       dateFilter.$gte = startDate;
     }
 
     if (endDate) {
-      endDate = new Date(new Date(endDate).getTime() - 5.5 * 60 * 60 * 1000);
-      endDate.setUTCDate(endDate.getUTCDate() + 1);
-      endDate.setUTCMilliseconds(-1);
+      const end = moment.tz(endDate, "Asia/Kolkata");
+      endDate = end.endOf("day").toDate();
+
       dateFilter.$lte = endDate;
     }
 
@@ -1979,17 +1978,20 @@ const getMerchantPayoutController = async (req, res, next) => {
     }
 
     // Aggregation query with filters applied to payoutDetail
-    const merchantPayout = await MerchantPayout.find(filterCriteria)
-      .populate("merchantId")
-      .skip(skip)
-      .limit(limit)
-      .exec();
+    const [merchantPayout, totalCount] = await Promise.all([
+      MerchantPayout.find(filterCriteria)
+        .populate("merchantId")
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      MerchantPayout.countDocuments(filterCriteria),
+    ]);
 
     const data = merchantPayout.map((merchant) => ({
       merchantId: merchant?.merchantId?._id,
       merchantName: merchant.merchantName,
       phoneNumber: merchant?.merchantId?.phoneNumber,
-      date: formatDate(merchant.date),
+      date: merchant.date,
       completedOrders: merchant.completedOrders,
       totalCostPrice: merchant.totalCostPrice,
       isSettled: merchant.isSettled,
@@ -1998,7 +2000,7 @@ const getMerchantPayoutController = async (req, res, next) => {
 
     // Respond with the data and pagination info
     res.status(200).json({
-      total: data.length,
+      total: totalCount,
       data,
     });
   } catch (err) {
@@ -2009,28 +2011,20 @@ const getMerchantPayoutController = async (req, res, next) => {
 // Get single merchant payout detail
 const getMerchantPayoutDetail = async (req, res, next) => {
   try {
-    const { date, merchantId, timezoneOffset = 0 } = req.query;
+    const { date, merchantId } = req.query;
 
     // Parse the input date string as a local date
-    const localDate = new Date(date);
+    const localDate = moment.tz(date, "Asia/Kolkata");
 
     // Set hours to start and end of the day in local time
-    const startOfDay = new Date(localDate);
-    const endOfDay = new Date(localDate);
-
-    if (process.env.NODE_ENV === "production") {
-      startOfDay.setUTCHours(18, 30, 0, 0);
-      endOfDay.setUTCHours(18, 29, 59, 999);
-    } else {
-      startOfDay.setHours(0, 0, 0, 0);
-      endOfDay.setHours(23, 59, 59, 999);
-    }
+    const start = localDate.startOf("day").toDate();
+    const end = localDate.endOf("day").toDate();
 
     // Find all completed orders for the specified merchant on the given day
     const allOrders = await Order.find({
       merchantId,
       status: "Completed",
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      createdAt: { $gte: start, $lte: end },
     })
       .select("purchasedItems")
       .lean();
@@ -2115,15 +2109,8 @@ const confirmMerchantPayout = async (req, res, next) => {
 // Download payout csv
 const downloadPayoutCSVController = async (req, res, next) => {
   try {
-    let {
-      paymentStatus,
-      merchantId,
-      geofenceId,
-      startDate,
-      endDate,
-      query,
-      timezoneOffset = 0,
-    } = req.query;
+    let { paymentStatus, merchantId, geofenceId, startDate, endDate, query } =
+      req.query;
 
     // Initial filter criteria setup
     const filterCriteria = {};
@@ -2155,17 +2142,16 @@ const downloadPayoutCSVController = async (req, res, next) => {
     const dateFilter = {};
 
     if (startDate) {
-      startDate = new Date(
-        new Date(startDate).getTime() - 5.5 * 60 * 60 * 1000
-      );
-      startDate.setUTCHours(18, 30, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      startDate = start.startOf("day").toDate();
+
       dateFilter.$gte = startDate;
     }
 
     if (endDate) {
-      endDate = new Date(new Date(endDate).getTime() - 5.5 * 60 * 60 * 1000);
-      endDate.setUTCDate(endDate.getUTCDate() + 1);
-      endDate.setUTCMilliseconds(-1);
+      const end = moment.tz(endDate, "Asia/Kolkata");
+      endDate = end.endOf("day").toDate();
+
       dateFilter.$lte = endDate;
     }
 

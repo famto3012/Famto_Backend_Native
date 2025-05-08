@@ -209,6 +209,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
     lastDay.setDate(lastDay.getDate() - 1);
 
     const historyDocuments = [];
+    const bulkOperations = [];
 
     for (const agent of agents) {
       const appDetail = agent.appDetail || {
@@ -232,60 +233,38 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       ).lean();
 
       if (agentPricing) {
-        if (agentPricing?.type && agentPricing?.type.startsWith("Monthly")) {
-          if (agentPricing?.type === "Monthly-Full-Time") {
-            const perHourBaseFare = Number(
-              (agentPricing?.baseFare / agentPricing?.minLoginHours).toFixed(2)
-            );
+        if (agentPricing?.type?.startsWith("Monthly")) {
+          const perHourBaseFare = Number(
+            (agentPricing.baseFare / agentPricing.minLoginHours).toFixed(2)
+          );
 
-            const loginDurationInHours = Number(
-              Math.min(
-                agentPricing?.minLoginHours,
-                Math.floor(appDetail.loginDuration / 3600000)
-              ).toFixed(2)
-            );
+          const loginDurationInHours = Math.min(
+            agentPricing.minLoginHours,
+            appDetail.loginDuration / 3600000
+          );
 
-            const earningForLoginHours = Math.round(
-              perHourBaseFare * loginDurationInHours
-            );
+          const earningForLoginHours = Math.round(
+            perHourBaseFare * loginDurationInHours
+          );
 
-            appDetail.totalEarning = earningForLoginHours;
-          } else {
-            const perHourBaseFare =
-              agentPricing?.baseFare / agentPricing?.minLoginHours;
-            const loginDurationInHours = Math.min(
-              agentPricing?.minLoginHours,
-              appDetail.loginDuration / 3600000
-            );
-            const earningForLoginHours = Math.round(
-              perHourBaseFare * loginDurationInHours
-            );
-            appDetail.totalEarning = earningForLoginHours;
-          }
+          appDetail.totalEarning = earningForLoginHours;
         } else {
           const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
 
           if (
             appDetail.loginDuration >= minLoginMillis &&
-            appDetail.orders >= agentPricing.minOrderNumber &&
-            appDetail.orders > agentPricing.minOrderNumber
+            appDetail.orders >= agentPricing.minOrderNumber
           ) {
-            // Calculate extra order earnings
+            const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
             const earningForExtraOrders =
-              (appDetail.orders - agentPricing.minOrderNumber) *
-              agentPricing.fareAfterMinOrderNumber;
+              extraOrders * agentPricing.fareAfterMinOrderNumber;
 
             appDetail.totalEarning += earningForExtraOrders;
           }
 
-          // Calculate extra login hours earnings
           const extraMillis = appDetail.loginDuration - minLoginMillis;
 
-          if (
-            appDetail.loginDuration >= minLoginMillis &&
-            appDetail.orders >= agentPricing.minOrderNumber &&
-            extraMillis > 0
-          ) {
+          if (extraMillis > 0) {
             const extraHours = Math.floor(extraMillis / (60 * 60 * 1000));
             if (extraHours >= 1) {
               const earningForExtraHours =
@@ -295,19 +274,16 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             }
           }
 
-          if (
-            appDetail.loginDuration >= minLoginMillis &&
-            appDetail.orders >= agentPricing.minOrderNumber &&
-            appDetail.totalEarning < agentPricing.baseFare
-          ) {
+          if (appDetail.totalEarning < agentPricing.baseFare) {
             appDetail.totalEarning = agentPricing.baseFare;
           }
         }
       }
 
+      // Construct the work history document
       historyDocuments.push({
         agentId: agent._id,
-        workedDate: lastDay,
+        workDate: lastDay, // ✅ Corrected field name from `workedDate` to `workDate`
         totalEarning: appDetail.totalEarning,
         orders: appDetail.orders,
         pendingOrders: appDetail.pendingOrders,
@@ -318,7 +294,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         orderDetail: appDetail.orderDetail,
       });
 
-      // Prepare the history and reset update
+      // Prepare the bulk update operation
       const update = {
         $set: {
           "appDetail.totalEarning": 0,
@@ -341,9 +317,19 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       });
     }
 
+    // Insert history documents
     if (historyDocuments.length > 0) {
       await AgentWorkHistory.insertMany(historyDocuments);
     }
+
+    // Execute bulk update operations
+    if (bulkOperations.length > 0) {
+      await Agent.bulkWrite(bulkOperations);
+    }
+
+    console.log(
+      "History documents inserted and agent data reset successfully."
+    );
   } catch (err) {
     console.log(
       `Error moving appDetail to history for all agents: ${err.message}`

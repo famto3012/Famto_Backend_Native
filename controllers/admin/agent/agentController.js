@@ -4,6 +4,7 @@ const csvWriter = require("csv-writer").createObjectCsvWriter;
 const fs = require("fs");
 const path = require("path");
 const { validationResult } = require("express-validator");
+const moment = require("moment-timezone");
 
 const appError = require("../../../utils/appError");
 const {
@@ -811,13 +812,11 @@ const filterAgentPayoutController = async (req, res, next) => {
     // Step 3: Create date filter (if date provided)
     const dateFilter = {};
     if (date) {
-      const startDate = new Date(
-        new Date(date).getTime() - 5.5 * 60 * 60 * 1000
-      );
-      startDate.setUTCHours(0, 0, 0, 0);
-      const endDate = new Date(startDate);
-      endDate.setUTCDate(endDate.getUTCDate() + 1);
-      endDate.setUTCMilliseconds(-1);
+      const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+      // Start and end of the previous day in IST
+      const startDate = formattedDay.startOf("day").toDate();
+      const endDate = formattedDay.endOf("day").toDate();
 
       dateFilter.workDate = { $gte: startDate, $lte: endDate };
     }
@@ -833,7 +832,10 @@ const filterAgentPayoutController = async (req, res, next) => {
 
     const [histories, totalCount] = await Promise.all([
       AgentWorkHistory.find(historyFilter)
-        .populate("agentId", "fullName email phoneNumber")
+        .populate(
+          "agentId",
+          "fullName email phoneNumber workStructure.cashInHand"
+        )
         .sort({ workDate: -1 })
         .skip(skip)
         .limit(limit),
@@ -1064,153 +1066,104 @@ const downloadAgentCSVController = async (req, res, next) => {
 
 const downloadAgentPayoutCSVController = async (req, res, next) => {
   try {
-    const { status, agent, search, date, geofence } = req.query;
+    const { status, agent, geofence, date, name } = req.query;
 
     const filterCriteria = { isApproved: "Approved" };
-    if (agent && agent.toLowerCase() !== "all") filterCriteria._id = agent;
-    if (geofence && geofence.toLowerCase() !== "all")
-      filterCriteria.geofenceId = geofence;
-    if (search)
-      filterCriteria.$or = [{ _id: { $regex: search, $options: "i" } }];
 
-    const dateFilter = {};
-    if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      dateFilter.date = { $gte: startDate, $lte: endDate };
+    if (agent && agent.toLowerCase() !== "all") {
+      filterCriteria._id = agent;
     }
 
-    const agents = await Agent.aggregate([
-      { $match: filterCriteria },
-      { $unwind: "$appDetailHistory" },
-      {
-        $match: {
-          ...(date ? { "appDetailHistory.date": dateFilter.date } : {}),
-          ...(status
-            ? {
-                "appDetailHistory.details.paymentSettled":
-                  status.toLowerCase() === "true",
-              }
-            : {}),
-        },
-      },
-      {
-        $lookup: {
-          from: "agentpricings",
-          localField: "workStructure.salaryStructureId",
-          foreignField: "_id",
-          as: "salaryStructure",
-        },
-      },
-      { $unwind: "$salaryStructure" },
-      {
-        $lookup: {
-          from: "geofences",
-          localField: "geofenceId",
-          foreignField: "_id",
-          as: "geofence",
-        },
-      },
-      { $unwind: { path: "$geofence", preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          adjustedEarnings: {
-            $cond: {
-              if: {
-                $and: [
-                  {
-                    $gte: [
-                      "$appDetailHistory.details.orders",
-                      "$salaryStructure.minOrderNumber",
-                    ],
-                  },
-                  {
-                    $gte: [
-                      "$appDetailHistory.details.loginDuration",
-                      {
-                        $multiply: ["$salaryStructure.minLoginHours", 3600000],
-                      },
-                    ],
-                  },
-                ],
-              },
-              then: {
-                $cond: {
-                  if: {
-                    $lt: [
-                      "$appDetailHistory.details.totalEarning",
-                      "$salaryStructure.baseFare",
-                    ],
-                  },
-                  then: {
-                    $subtract: [
-                      "$salaryStructure.baseFare",
-                      "$workStructure.cashInHand",
-                    ],
-                  },
-                  else: {
-                    $subtract: [
-                      "$appDetailHistory.details.totalEarning",
-                      "$workStructure.cashInHand",
-                    ],
-                  },
-                },
-              },
-              else: {
-                $subtract: [
-                  "$appDetailHistory.details.totalEarning",
-                  "$workStructure.cashInHand",
-                ],
-              },
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          fullName: 1,
-          phoneNumber: 1,
-          workedDate: "$appDetailHistory.date",
-          orders: "$appDetailHistory.details.orders",
-          cancelledOrders: "$appDetailHistory.details.cancelledOrders",
-          totalDistance: "$appDetailHistory.details.totalDistance",
-          loginHours: {
-            $divide: ["$appDetailHistory.details.loginDuration", 3600000],
-          },
-          cashInHand: "$workStructure.cashInHand",
-          totalEarnings: "$appDetailHistory.details.totalEarning",
-          adjustedEarnings: 1,
-          paymentSettled: "$appDetailHistory.details.paymentSettled",
-          geofenceName: "$geofence.name",
-          accountHolderName: "$bankDetail.accountHolderName",
-          accountNumber: "$bankDetail.accountNumber",
-          IFSCCode: "$bankDetail.IFSCCode",
-          UPIId: "$bankDetail.UPIId",
-        },
-      },
-    ]);
+    if (geofence && geofence.toLowerCase() !== "all") {
+      filterCriteria.geofenceId = mongoose.Types.ObjectId(geofence);
+    }
 
-    const formattedAgents = agents.map((agent) => ({
-      ...agent,
-      workedDate: agent.workedDate ? formatDate(agent.workedDate) : "-",
-    }));
+    if (name) {
+      filterCriteria.fullName = { $regex: name.trim(), $options: "i" };
+    }
+
+    // Fetch agents with geofence details
+    const matchedAgents = await Agent.find(filterCriteria)
+      .populate("geofenceId", "name")
+      .select(
+        "_id fullName phoneNumber workStructure.cashInHand geofenceId bankDetail"
+      );
+
+    const agentIds = matchedAgents.map((a) => a._id);
+
+    // Step 3: Create date filter (if date provided)
+    const dateFilter = {};
+    if (date) {
+      const previousDay = moment.tz(date, "Asia/Kolkata");
+
+      // Start and end of the previous day in IST
+      const startDate = previousDay.startOf("day").toDate();
+      const endDate = previousDay.endOf("day").toDate();
+
+      dateFilter.workDate = { $gte: startDate, $lte: endDate };
+    }
+
+    const historyFilter = {
+      agentId: { $in: agentIds },
+      ...dateFilter,
+    };
+
+    if (status !== undefined) {
+      historyFilter.paymentSettled = status === "true";
+    }
+
+    const histories = await AgentWorkHistory.find(historyFilter)
+      .populate(
+        "agentId",
+        "fullName email phoneNumber workStructure.cashInHand geofenceId"
+      )
+      .sort({ workDate: -1 });
+
+    const formattedResponse = histories.map((history) => {
+      const agentData = matchedAgents.find(
+        (agent) => String(agent._id) === String(history.agentId._id)
+      );
+
+      const calculatedEarning = (
+        history.totalEarning - (agentData?.workStructure?.cashInHand || 0)
+      ).toFixed(2);
+
+      return {
+        detailId: history._id,
+        agentId: history.agentId._id,
+        agentName: history.agentId.fullName,
+        phoneNumber: history.agentId.phoneNumber,
+        cashInHand: agentData?.workStructure?.cashInHand?.toFixed(2) || "0.00",
+        calculatedEarning,
+        workDate: formatDate(history.workDate),
+        totalEarning: history.totalEarning?.toFixed(2),
+        orders: history.orders,
+        pendingOrders: history.pendingOrders,
+        totalDistance: history.totalDistance?.toFixed(2),
+        cancelledOrders: history.cancelledOrders,
+        loginHours: formatToHours(history.loginDuration),
+        paymentSettled: history.paymentSettled,
+        accountHolderName: agentData?.bankDetail?.accountHolderName || "",
+        accountNumber: agentData?.bankDetail?.accountNumber || "",
+        IFSCCode: agentData?.bankDetail?.IFSCCode || "",
+        UPIId: agentData?.bankDetail?.UPIId || "",
+        geofenceName: agentData?.geofenceId?.name || "N/A",
+      };
+    });
 
     const filePath = path.join(__dirname, "../../../Agent_Payments.csv");
     const csvHeaders = [
-      { id: "_id", title: "Agent ID" },
-      { id: "fullName", title: "Full Name" },
+      { id: "agentId", title: "Agent ID" },
+      { id: "agentName", title: "Full Name" },
       { id: "phoneNumber", title: "Phone Number" },
-      { id: "workedDate", title: "Worked Date" },
+      { id: "workDate", title: "Worked Date" },
       { id: "orders", title: "Orders" },
       { id: "cancelledOrders", title: "Cancelled Orders" },
       { id: "totalDistance", title: "Total Distance" },
       { id: "loginHours", title: "Login Hours" },
       { id: "cashInHand", title: "Cash In Hand" },
-      { id: "totalEarnings", title: "Total Earnings" },
-      { id: "adjustedEarnings", title: "Adjusted Payment" },
+      { id: "totalEarning", title: "Total Earnings" },
+      { id: "calculatedEarning", title: "Adjusted Payment" },
       { id: "paymentSettled", title: "Payment Settled" },
       { id: "accountHolderName", title: "Account Holder Name" },
       { id: "accountNumber", title: "Account Number" },
@@ -1224,7 +1177,7 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
       header: csvHeaders,
     });
 
-    await writer.writeRecords(formattedAgents);
+    await writer.writeRecords(formattedResponse);
 
     res.status(200).download(filePath, "Agent_Payments.csv", (err) => {
       if (err) {

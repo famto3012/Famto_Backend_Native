@@ -16,7 +16,6 @@ const {
 const { razorpayRefund } = require("../../../utils/razorpayPayment");
 const {
   reduceProductAvailableQuantity,
-  filterProductIdAndQuantity,
 } = require("../../../utils/customerAppHelpers");
 const CustomerCart = require("../../../models/CustomerCart");
 const {
@@ -35,16 +34,10 @@ const {
   locationArraysEqual,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
-const {
-  sendNotification,
-  findRolesToNotify,
-  sendSocketData,
-} = require("../../../socket/socket");
+const { findRolesToNotify } = require("../../../socket/socket");
 const ActivityLog = require("../../../models/ActivityLog");
 const fs = require("fs");
 const Product = require("../../../models/Product");
-const ManagerRoles = require("../../../models/ManagerRoles");
-const Manager = require("../../../models/Manager");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 const {
@@ -52,6 +45,7 @@ const {
 } = require("../../../utils/socketHelper");
 const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
 const csvWriter = require("csv-writer").createObjectCsvWriter;
+const moment = require("moment-timezone");
 
 // TODO: Remove after panel V2
 const getAllOrdersOfMerchantController = async (req, res, next) => {
@@ -391,11 +385,11 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
     }
 
     if (startDate && endDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
 
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
 
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
     }
@@ -1586,7 +1580,14 @@ const getScheduledOrderByIdForMerchant = async (req, res) => {
 
 const downloadOrdersCSVByMerchantController = async (req, res, next) => {
   try {
-    const { orderStatus, paymentMode, deliveryMode, query } = req.query;
+    const {
+      orderStatus,
+      paymentMode,
+      deliveryMode,
+      query,
+      startDate,
+      endDate,
+    } = req.query;
 
     // Build query object based on filters
     const filter = {
@@ -1598,6 +1599,15 @@ const downloadOrdersCSVByMerchantController = async (req, res, next) => {
       filter["orderDetail.deliveryMode"] = deliveryMode;
     if (query) {
       filter.$or = [{ _id: { $regex: query, $options: "i" } }];
+    }
+    if (startDate && endDate) {
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
+
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
+
+      filter.createdAt = { $gte: startDate, $lte: endDate };
     }
 
     // Fetch the data based on filter
