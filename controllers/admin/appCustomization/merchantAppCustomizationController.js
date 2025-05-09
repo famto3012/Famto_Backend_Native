@@ -21,6 +21,7 @@ const createOrUpdateMerchantCustomizationController = async (
       loginViaGoogle,
       loginViaApple,
       loginViaFacebook,
+      appUpdateType,
     } = req.body;
 
     const customization = await MerchantAppCustomization.findOne();
@@ -61,6 +62,7 @@ const createOrUpdateMerchantCustomizationController = async (
           ? loginViaFacebook
           : customization.loginViaFacebook;
       customization.splashScreenUrl = splashScreenUrl;
+      customization.appUpdateType = appUpdateType;
 
       await customization.save();
 
@@ -87,6 +89,7 @@ const createOrUpdateMerchantCustomizationController = async (
         loginViaApple,
         loginViaFacebook,
         splashScreenUrl,
+        appUpdateType,
       });
 
       await newMerchantAppCustomization.save();
@@ -120,7 +123,23 @@ const getMerchantCustomizationController = async (req, res, next) => {
   }
 };
 
+const getMerchantAppAppUpdateType = async (req, res, next) => {
+  try {
+    const customization = await MerchantAppCustomization.findOne({}).select(
+      "appUpdateType"
+    );
+
+    res.status(200).json({
+      success: true,
+      appUpdateType: customization.appUpdateType === "IMMEDIATE",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   createOrUpdateMerchantCustomizationController,
   getMerchantCustomizationController,
+  getMerchantAppAppUpdateType,
 };

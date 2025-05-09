@@ -38,6 +38,11 @@ const merchantAppCustomizationSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    appUpdateType: {
+      type: String,
+      enum: ["IMMEDIATE", "FLEXIBLE"],
+      required: true,
+    },
   },
   {
     timestamps: true,

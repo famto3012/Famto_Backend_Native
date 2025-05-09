@@ -217,8 +217,30 @@ const deleteOldLogs = () => {
   });
 };
 
+const removeOldNotifications = async () => {
+  try {
+    const AdminNotificationLog = require("../models/AdminNotificationLog");
+    const MerchantNotificationLog = require("../models/MerchantNotificationLog");
+
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 20);
+
+    await Promise.all([
+      AdminNotificationLog.deleteMany({
+        createdAt: { $lt: tenDaysAgo },
+      }),
+      MerchantNotificationLog.deleteMany({
+        createdAt: { $lt: tenDaysAgo },
+      }),
+    ]);
+  } catch (err) {
+    console.log(`Error in removeOldNotifications: ${err}`);
+  }
+};
+
 module.exports = {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
   deleteOldLogs,
+  removeOldNotifications,
 };
