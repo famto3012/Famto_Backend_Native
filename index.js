@@ -93,7 +93,7 @@ const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
 const { deleteOldLogs } = require("./libs/automatic.js");
 
 //middlewares
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(morgan("tiny"));
 app.use(express.urlencoded({ extended: true }));
 app.use(
