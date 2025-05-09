@@ -345,7 +345,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
         productId: product._id,
         productName: product.productName || null,
         price: product.price || null,
-        discountPrice: discountPrice || null,
+        discountPrice: Number(discountPrice?.toFixed(2)) || null,
         minQuantityToOrder: product.minQuantityToOrder || null,
         maxQuantityPerOrder: product.maxQuantityPerOrder || null,
         isFavorite,
@@ -874,13 +874,9 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
           let discountAmount = (product.price * discount.discountValue) / 100;
           if (discountAmount > discount.maxAmount)
             discountAmount = discount.maxAmount;
-          discountPrice = Math.round(
-            Math.max(0, product.price - discountAmount)
-          );
+          discountPrice = Math.max(0, product.price - discountAmount);
         } else if (discount.discountType === "Flat-discount") {
-          discountPrice = Math.round(
-            Math.max(0, product.price - discount.discountValue)
-          );
+          discountPrice = Math.max(0, product.price - discount.discountValue);
         }
       }
 
@@ -888,7 +884,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
         productId: product._id,
         productName: product.productName || null,
         price: product.price || null,
-        discountPrice: Math.round(discountPrice) || null,
+        discountPrice: Number(discountPrice?.toFixed(2)) || null,
         minQuantityToOrder: product.minQuantityToOrder || null,
         maxQuantityPerOrder: product.maxQuantityPerOrder || null,
         isFavorite:
