@@ -597,8 +597,6 @@ const getOrderDetailByAdminController = async (req, res, next) => {
       return next(appError("Order not found", 404));
     }
 
-    console.log("orderFound", orderFound);
-
     const formattedResponse = {
       _id: orderFound._id,
       scheduledOrderId: orderFound?.scheduledOrderId || null,
@@ -652,7 +650,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         _id: orderFound?.agentId?._id || "-",
         name: orderFound?.agentId?.fullName || "-",
         phoneNumber: orderFound?.agentId?.phoneNumber || "-",
-        avatar: orderFound?.agentId?.agentImageURL || "-",
+        orderEarning: orderFound?.detailAddedByAgent?.agentEarning || "0.00",
         team: orderFound?.agentId?.workStructure?.managerId?.name || "-",
         instructionsByCustomer:
           orderFound?.orderDetail?.instructionToDeliveryAgent || "-",
@@ -758,6 +756,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
           distanceInKM: order?.orderDetail?.distance || "-",
           distanceTravelledByAgent:
             order?.detailAddedByAgent.distanceCoveredByAgent || "-",
+          agentEarning: order?.detailAddedByAgent.agentEarning || 0,
           cancellationReason: order?.cancellationReason || "-",
           cancellationDescription: order?.cancellationDescription || "-",
           merchantEarnings: order?.merchantEarnings || "-",
@@ -802,6 +801,10 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       {
         id: "distanceTravelledByAgent",
         title: "Distance Travelled by Agent (KM)",
+      },
+      {
+        id: "agentEarning",
+        title: "Agent Earning",
       },
       { id: "cancellationReason", title: "Cancellation Reason" },
       { id: "cancellationDescription", title: "Cancellation Description" },

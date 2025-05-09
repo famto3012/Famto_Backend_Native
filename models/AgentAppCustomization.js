@@ -50,6 +50,11 @@ const agentAppCustomizationSchema = new mongoose.Schema(
       default: true,
     },
     workingTime: [workingTimeSchema],
+    appUpdateType: {
+      type: String,
+      enum: ["IMMEDIATE", "FLEXIBLE"],
+      required: true,
+    },
   },
   {
     timestamps: true,

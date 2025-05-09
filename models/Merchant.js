@@ -221,6 +221,10 @@ const merchantDetailSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    preOrderType: {
+      type: String,
+      default: null,
+    },
     servingArea: {
       type: String,
       enum: ["No-restrictions", "Mention-radius", " "],

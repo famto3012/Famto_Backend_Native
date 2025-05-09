@@ -4,12 +4,14 @@ const {
   createOrUpdateAgentCustomizationController,
   getAgentCustomizationController,
   getAgentWorkTimings,
+  getAgentAppAppUpdateType,
 } = require("../../../controllers/admin/appCustomization/agentAppCustomizationController");
 const isAuthenticated = require("../../../middlewares/isAuthenticated");
 const isAdmin = require("../../../middlewares/isAdmin");
 const {
   createOrUpdateMerchantCustomizationController,
   getMerchantCustomizationController,
+  getMerchantAppAppUpdateType,
 } = require("../../../controllers/admin/appCustomization/merchantAppCustomizationController");
 const {
   createOrUpdateCustomerCustomizationController,
@@ -74,6 +76,13 @@ appCustomizationRoute.get(
 appCustomizationRoute.get(
   "/customer-app-update-type",
   getCustomerAppAppUpdateType
+);
+
+appCustomizationRoute.get("/agent-app-update-type", getAgentAppAppUpdateType);
+
+appCustomizationRoute.get(
+  "/merchant-app-update-type",
+  getMerchantAppAppUpdateType
 );
 
 module.exports = appCustomizationRoute;

@@ -52,6 +52,7 @@ const createOrUpdateAgentCustomizationController = async (req, res, next) => {
       loginViaApple: req.body.loginViaApple || false,
       loginViaFacebook: req.body.loginViaFacebook || false,
       workingTime,
+      appUpdateType: req.body.appUpdateType,
     };
 
     if (req.file) {
@@ -134,8 +135,24 @@ const getAgentWorkTimings = async (req, res, next) => {
   }
 };
 
+const getAgentAppAppUpdateType = async (req, res, next) => {
+  try {
+    const customization = await AgentAppCustomization.findOne({}).select(
+      "appUpdateType"
+    );
+
+    res.status(200).json({
+      success: true,
+      appUpdateType: customization.appUpdateType === "IMMEDIATE",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   createOrUpdateAgentCustomizationController,
   getAgentCustomizationController,
   getAgentWorkTimings,
+  getAgentAppAppUpdateType,
 };
