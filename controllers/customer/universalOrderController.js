@@ -849,7 +849,11 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
     // Fetch the filtered and sorted products
     const products = await Product.find(query)
       .select(
-        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description"
+        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId"
+      )
+      .populate(
+        "discountId",
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
       )
       .sort(sortObj);
 
@@ -859,7 +863,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       const discount = product?.discountId;
       const validFrom = new Date(discount?.validFrom);
       const validTo = new Date(discount?.validTo);
-      validTo?.setHours(23, 59, 59, 999);
+      validTo?.setHours(18, 29, 59, 999);
 
       let discountPrice = null;
 
@@ -1349,7 +1353,9 @@ const getDeliveryOptionOfMerchantController = async (req, res, next) => {
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
     res.status(200).json({
-      data: merchantFound.merchantDetail.deliveryOption,
+      deliveryOption: merchantFound.merchantDetail.deliveryOption,
+      preOrderStatus: merchantFound.merchantDetail.preOrderStatus,
+      preOrderType: merchantFound.merchantDetail.preOrderType,
     });
   } catch (err) {
     next(appError(err.message));
