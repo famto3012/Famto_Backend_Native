@@ -5,6 +5,8 @@ const Order = require("./models/Order");
 const Task = require("./models/Task");
 const Agent = require("./models/Agent");
 const AgentWorkHistory = require("./models/AgentWorkHistory");
+const Merchant = require("./models/Merchant");
+const MerchantPayout = require("./models/MerchantPayout");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -170,4 +172,51 @@ const migrateAgentAppDetailHistory = async () => {
   }
 };
 
-// migrateAgentAppDetailHistory();
+const migrateMerchantPayoutData = async () => {
+  try {
+    const merchants = await Merchant.find({
+      "merchantDetail.geofenceId": { $ne: null },
+    });
+
+    let payoutArray = [];
+    for (const merchant of merchants) {
+      if (merchant?.payoutDetail?.length > 0) {
+        for (const payout of merchant.payoutDetail) {
+          // Get merchant name and geofence ID from merchant details
+          const merchantName =
+            merchant.merchantDetail?.merchantName || merchant.fullName;
+          const geofenceId = merchant.merchantDetail?.geofenceId;
+
+          // Create new payout object
+          payoutArray.push({
+            merchantId: merchant._id,
+            merchantName: merchantName,
+            geofenceId: geofenceId,
+            date: payout.date,
+            totalCostPrice: payout.totalCostPrice,
+            completedOrders: payout.completedOrders,
+            isSettled: payout.isSettled,
+          });
+        }
+
+        console.log(`Prepared payouts for merchant ${merchant._id}`);
+      }
+    }
+
+    // Insert all payouts in batch
+    if (payoutArray.length > 0) {
+      await MerchantPayout.insertMany(payoutArray);
+      console.log(
+        `Successfully migrated ${payoutArray.length} merchant payouts`
+      );
+    } else {
+      console.log("No payouts found to migrate");
+    }
+
+    console.log("Merchant payout migration completed");
+  } catch (err) {
+    console.error(`Error in migrating merchant payouts: ${err.message}`);
+  }
+};
+
+// migrateMerchantPayoutData();
