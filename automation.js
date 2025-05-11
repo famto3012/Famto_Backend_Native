@@ -42,7 +42,7 @@ const migrateCustomerTransactions = async () => {
 
 const deleteOrderAndTask = async () => {
   try {
-    const customerId = "C241213";
+    const customerId = "C24091";
 
     // Fetch all orders for the customer
     const orders = await Order.find({ customerId });

@@ -7,61 +7,6 @@ const { formatDate } = require("../../../../utils/formatters");
 // =====================================
 // ===============Merchant==============
 // =====================================
-// const addProductDiscountController = async (req, res, next) => {
-//   const errors = validationResult(req);
-
-//   if (!errors.isEmpty()) {
-//     let formattedErrors = {};
-//     errors.array().forEach((error) => {
-//       formattedErrors[error.param] = error.msg;
-//     });
-//     return res.status(400).json({ errors: formattedErrors });
-//   }
-
-//   try {
-//     const {
-//       discountName,
-//       maxAmount,
-//       discountType,
-//       discountValue,
-//       description,
-//       productId,
-//       validFrom,
-//       validTo,
-//       geofenceId,
-//       onAddOn,
-//     } = req.body;
-
-//     const discount = await ProductDiscount.create({
-//       discountName,
-//       maxAmount,
-//       discountType,
-//       discountValue,
-//       description,
-//       validFrom,
-//       validTo,
-//       geofenceId,
-//       merchantId: req.userRole === "Admin" ? merchantId : req.userAuth,
-//       productId,
-//       onAddOn,
-//     });
-
-//     await Product.updateOne({ _id: productId }, { discountId: discount._id });
-
-//     const populatedDiscount = await ProductDiscount.findById(discount._id)
-//       .populate("geofenceId", "name")
-//       .populate("productId", "productName");
-
-//     res.status(201).json({
-//       success: "Product Discount created successfully",
-//       data: populatedDiscount,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 const addProductDiscountController = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -86,6 +31,33 @@ const addProductDiscountController = async (req, res, next) => {
       onAddOn,
     } = req.body;
 
+    const merchantId = req.userAuth;
+
+    const existingDiscounts = await ProductDiscount.find({
+      merchantId,
+      productId: { $in: productId },
+    });
+
+    if (existingDiscounts.length > 0) {
+      const conflictingProductIds = existingDiscounts
+        .flatMap((discount) => discount.productId)
+        .filter((id) => productId.includes(id.toString()));
+
+      const conflictingProducts = await Product.find({
+        _id: { $in: conflictingProductIds },
+      }).select("productName");
+
+      const conflictingProductNames = conflictingProducts.map(
+        (product) => product.productName
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Some products are already associated with another discount",
+        conflictingProducts: conflictingProductNames,
+      });
+    }
+
     const discount = await ProductDiscount.create({
       discountName,
       maxAmount,
@@ -95,7 +67,7 @@ const addProductDiscountController = async (req, res, next) => {
       validFrom,
       validTo,
       geofenceId,
-      merchantId: req.userAuth,
+      merchantId,
       productId,
       onAddOn,
     });
@@ -134,71 +106,6 @@ const addProductDiscountController = async (req, res, next) => {
   }
 };
 
-// const editProductDiscountController = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-
-//     // Find the existing discount to check the current productId
-//     let existingDiscount = await ProductDiscount.findById(id);
-//     if (!existingDiscount) return next(appError("Discount not found", 404));
-
-//     const {
-//       discountName,
-//       maxAmount,
-//       discountType,
-//       discountValue,
-//       description,
-//       productId,
-//       validFrom,
-//       validTo,
-//       geofenceId,
-//       onAddOn,
-//     } = req.body;
-
-//     // Check if the productId has changed
-//     if (productId && productId !== existingDiscount.productId.toString()) {
-//       // Remove discountId from the old product
-//       await Product.updateOne(
-//         { _id: existingDiscount.productId },
-//         { $unset: { discountId: "" } }
-//       );
-
-//       // Update the new product with the discountId
-//       await Product.updateOne({ _id: productId }, { discountId: id });
-//     }
-
-//     // Update the discount document
-//     const updatedDiscount = await ProductDiscount.findByIdAndUpdate(
-//       id,
-//       {
-//         discountName,
-//         maxAmount,
-//         discountType,
-//         discountValue,
-//         description,
-//         productId,
-//         validFrom,
-//         validTo,
-//         geofenceId,
-//         onAddOn,
-//       },
-//       { new: true }
-//     )
-//       .populate("geofenceId", "name")
-//       .populate("productId", "productName");
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Product Discount updated successfully",
-//       data: updatedDiscount,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
-
 const editProductDiscountController = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -220,6 +127,37 @@ const editProductDiscountController = async (req, res, next) => {
       onAddOn,
     } = req.body;
 
+    // ✅ Check for conflicting product IDs
+    const conflictingDiscounts = await ProductDiscount.find({
+      _id: { $ne: id }, // Exclude the current discount
+      merchantId,
+      productId: { $in: productId },
+    });
+
+    if (conflictingDiscounts.length > 0) {
+      // Extract conflicting product IDs
+      const conflictingProductIds = conflictingDiscounts
+        .flatMap((discount) => discount.productId)
+        .filter((prodId) => productId.includes(prodId.toString()));
+
+      // Fetch product names for conflicting product IDs
+      const conflictingProducts = await Product.find({
+        _id: { $in: conflictingProductIds },
+      }).select("productName");
+
+      const conflictingProductNames = conflictingProducts.map(
+        (product) => product.productName
+      );
+
+      console.log({ conflictingProductNames });
+
+      return res.status(400).json({
+        success: false,
+        message: "Some products are already associated with another discount",
+        conflictingProducts: conflictingProductNames,
+      });
+    }
+
     const removedProductIds = existingDiscount.productId.filter(
       (prodId) => !productId.includes(prodId.toString())
     );
@@ -227,7 +165,7 @@ const editProductDiscountController = async (req, res, next) => {
     if (removedProductIds.length > 0) {
       await Product.updateMany(
         { _id: { $in: removedProductIds } },
-        { $unset: { discountId: null } }
+        { $set: { discountId: null } }
       );
     }
 
@@ -282,26 +220,6 @@ const editProductDiscountController = async (req, res, next) => {
   }
 };
 
-// const deleteProductDiscountController = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-
-//     const discount = await ProductDiscount.findById(id);
-//     if (!discount) {
-//       return res.status(404).json({ error: "Discount not found" });
-//     }
-
-//     await ProductDiscount.findByIdAndDelete(id);
-
-//     res.status(200).json({
-//       success: "Product Discount deleted successfully",
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 const deleteProductDiscountController = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -321,25 +239,6 @@ const deleteProductDiscountController = async (req, res, next) => {
     next(appError(err.message));
   }
 };
-
-// const getAllProductDiscountController = async (req, res, next) => {
-//   try {
-//     const merchantId = req.userAuth;
-
-//     const discounts = await ProductDiscount.find({ merchantId })
-//       .populate("geofenceId", "name")
-//       .populate("productId", "productName");
-
-//     res.status(200).json({
-//       success: "Product Discounts retrieved successfully",
-//       data: discounts || [],
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 
 const getAllProductDiscountController = async (req, res, next) => {
   try {
@@ -398,24 +297,6 @@ const updateProductDiscountStatusController = async (req, res, next) => {
   }
 };
 
-// const getProductDiscountByIdController = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-
-//     const productDiscount = await ProductDiscount.findById(id);
-
-//     if (!productDiscount) return next(appError("Discount not found", 404));
-
-//     res.status(200).json({
-//       success: "ProductDiscount retrieved successfully",
-//       data: productDiscount,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 const getProductDiscountByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -451,58 +332,6 @@ const getProductDiscountByIdController = async (req, res, next) => {
 // =======================================
 // =================Admin=================
 // =======================================
-// const addProductDiscountAdminController = async (req, res, next) => {
-//   const errors = validationResult(req);
-
-//   if (!errors.isEmpty()) {
-//     let formattedErrors = {};
-//     errors.array().forEach((error) => {
-//       formattedErrors[error.param] = error.msg;
-//     });
-//     return res.status(400).json({ errors: formattedErrors });
-//   }
-
-//   try {
-//     const {
-//       discountName,
-//       maxAmount,
-//       discountType,
-//       discountValue,
-//       description,
-//       validFrom,
-//       validTo,
-//       geofenceId,
-//       merchantId,
-//       productId,
-//       onAddOn,
-//     } = req.body;
-
-//     let addDiscount = await ProductDiscount.create({
-//       discountName,
-//       maxAmount,
-//       discountType,
-//       discountValue,
-//       description,
-//       validFrom,
-//       validTo,
-//       geofenceId,
-//       merchantId,
-//       productId,
-//       onAddOn,
-//     });
-
-//     addDiscount = await addDiscount.populate("geofenceId", "name");
-
-//     res.status(201).json({
-//       success: "Product Discount created successfully",
-//       data: addDiscount,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 const addProductDiscountAdminController = async (req, res, next) => {
   const errors = validationResult(req);
 
@@ -528,6 +357,31 @@ const addProductDiscountAdminController = async (req, res, next) => {
       productId,
       onAddOn,
     } = req.body;
+
+    const existingDiscounts = await ProductDiscount.find({
+      merchantId,
+      productId: { $in: productId },
+    });
+
+    if (existingDiscounts.length > 0) {
+      const conflictingProductIds = existingDiscounts
+        .flatMap((discount) => discount.productId)
+        .filter((id) => productId.includes(id.toString()));
+
+      const conflictingProducts = await Product.find({
+        _id: { $in: conflictingProductIds },
+      }).select("productName");
+
+      const conflictingProductNames = conflictingProducts.map(
+        (product) => product.productName
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Some products are already associated with another discount",
+        conflictingProducts: conflictingProductNames,
+      });
+    }
 
     const discount = await ProductDiscount.create({
       discountName,
@@ -577,26 +431,6 @@ const addProductDiscountAdminController = async (req, res, next) => {
   }
 };
 
-// const getAllProductDiscountAdminController = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-
-//     const productDiscounts = await ProductDiscount.find({
-//       merchantId: id,
-//     })
-//       .populate("geofenceId", "name")
-//       .populate("productId", "productName");
-
-//     res.status(200).json({
-//       success: "Discounts retrieved successfully",
-//       data: productDiscounts,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
-
-// For multiple products
 const getAllProductDiscountAdminController = async (req, res, next) => {
   try {
     const { id } = req.params;

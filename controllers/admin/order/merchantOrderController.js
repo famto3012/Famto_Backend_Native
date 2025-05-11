@@ -1061,11 +1061,11 @@ const rejectOrderController = async (req, res, next) => {
 
       updateOrderStatus(orderFound);
 
-      await Promise.all([
-        customerFound.save(),
-        orderFound.save(),
-        CustomerTransaction.create(updatedTransactionDetail),
-      ]);
+      if (updatedTransactionDetail.transactionAmount) {
+        await CustomerTransaction.create(updatedTransactionDetail);
+      }
+
+      await Promise.all([orderFound.save(), customerFound.save()]);
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       updateOrderStatus(orderFound);
 
@@ -1098,11 +1098,11 @@ const rejectOrderController = async (req, res, next) => {
       }
       updateOrderStatus(orderFound);
 
-      await Promise.all([
-        orderFound.save(),
-        customerFound.save(),
-        CustomerTransaction.create(updatedTransactionDetail),
-      ]);
+      if (updatedTransactionDetail.transactionAmount) {
+        await CustomerTransaction.create(updatedTransactionDetail);
+      }
+
+      await Promise.all([orderFound.save(), customerFound.save()]);
     }
 
     await ActivityLog.create({
