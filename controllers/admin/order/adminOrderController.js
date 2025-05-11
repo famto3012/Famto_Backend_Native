@@ -505,10 +505,11 @@ const rejectOrderByAdminController = async (req, res, next) => {
 
         orderFound.refundId = refundResponse?.refundId;
 
-        await Promise.all([
-          customerFound.save(),
-          CustomerTransaction.create(updatedTransactionDetail),
-        ]);
+        if (updatedTransactionDetail.$transactionAmount) {
+          await CustomerTransaction.create(updatedTransactionDetail);
+        }
+
+        await Promise.all([customerFound.save()]);
       }
 
       updateOrderStatus(orderFound);
