@@ -8,6 +8,7 @@ const Referral = require("../models/Referral");
 const SubscriptionLog = require("../models/SubscriptionLog");
 const Task = require("../models/Task");
 const { calculateDeliveryCharges } = require("./customerAppHelpers");
+const moment = require("moment-timezone");
 
 const formatToHours = (milliseconds) => {
   const totalMinutes = Math.floor(milliseconds / 60000);
@@ -394,9 +395,14 @@ const updateAgentDetails = async (
     grandTotal: order?.billDetail?.grandTotal,
   });
 
+  const currentDay = moment.tz(new Date(), "Asia/Kolkata");
+  const startOfDay = currentDay.startOf("day").toDate();
+  const endOfDay = currentDay.endOf("day").toDate();
+
   const agentTasks = await Task.find({
     taskStatus: "Assigned",
     agentId: agent._id,
+    createdAt: { $gte: startOfDay, $lte: endOfDay },
   }).sort({
     createdAt: 1,
   });

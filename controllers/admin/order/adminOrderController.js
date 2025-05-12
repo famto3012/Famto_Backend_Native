@@ -2292,9 +2292,14 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       grandTotal: orderFound.billDetail.grandTotal || 0,
     };
 
+    const currentDay = moment.tz(new Date(), "Asia/Kolkata");
+    const startOfDay = currentDay.startOf("day").toDate();
+    const endOfDay = currentDay.endOf("day").toDate();
+
     const agentTasks = await Task.find({
       taskStatus: "Assigned",
       agentId: agentFound._id,
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
     }).sort({
       createdAt: 1,
     });
