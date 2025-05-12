@@ -172,6 +172,10 @@ const migrateAgentAppDetailHistory = async () => {
   }
 };
 
+// *========================================
+// *========================================
+// *========================================
+
 const migrateMerchantPayoutData = async () => {
   try {
     const merchants = await Merchant.find({

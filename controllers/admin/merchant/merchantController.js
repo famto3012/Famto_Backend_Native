@@ -1981,6 +1981,7 @@ const getMerchantPayoutController = async (req, res, next) => {
     const [merchantPayout, totalCount] = await Promise.all([
       MerchantPayout.find(filterCriteria)
         .populate("merchantId")
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .exec(),
