@@ -65,7 +65,6 @@ const {
 } = require("./utils/resetAllAgentTaskHelper.js");
 const taskRoute = require("./routes/adminRoute/deliveryManagementRoute/taskRoute.js");
 const {
-  moveAppDetailToHistoryAndResetForAllAgents,
   moveAppDetailToWorkHistoryAndResetForAllAgents,
 } = require("./utils/agentAppHelpers.js");
 const tokenRoute = require("./routes/tokenRoute/tokenRoute.js");
@@ -216,8 +215,6 @@ cron.schedule("30 18 * * *", async () => {
 cron.schedule("* * * * *", async () => {
   deleteExpiredConversationsAndMessages();
   populateUserSocketMap();
-
-  // await moveAppDetailToWorkHistoryAndResetForAllAgents();
 
   const now = new Date();
 
