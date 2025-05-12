@@ -20,6 +20,7 @@ const CustomerCart = require("../models/CustomerCart");
 const { deleteFromFirebase, uploadToFirebase } = require("./imageOperation");
 const ManagerRoles = require("../models/ManagerRoles");
 const Manager = require("../models/Manager");
+const { formatDate, formatTime } = require("./formatters");
 
 // Helper function to sort merchants by sponsorship
 const sortMerchantsBySponsorship = (merchants) => {
@@ -164,6 +165,7 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       paymentStatus: scheduledOrder.paymentStatus,
       status: "Pending",
       "orderDetailStepper.created": stepperData,
+      purchasedItems: scheduledOrder.purchasedItems,
     };
 
     let newOrderCreated = await Order.create(options);

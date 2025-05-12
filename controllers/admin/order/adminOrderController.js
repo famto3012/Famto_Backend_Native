@@ -682,7 +682,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
 
 const downloadOrdersCSVByAdminController = async (req, res, next) => {
   try {
-    const {
+    let {
       status,
       paymentMode,
       deliveryMode,
@@ -693,7 +693,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     } = req.query;
 
     // Build query object based on filters
-    const filter = {};
+    let filter = {};
     if (status && status !== "All") filter.status = status;
     if (paymentMode && paymentMode !== "All") filter.paymentMode = paymentMode;
     if (deliveryMode && deliveryMode !== "All")
@@ -755,8 +755,8 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
             "-",
           distanceInKM: order?.orderDetail?.distance || "-",
           distanceTravelledByAgent:
-            order?.detailAddedByAgent.distanceCoveredByAgent || "-",
-          agentEarning: order?.detailAddedByAgent.agentEarning || 0,
+            order?.detailAddedByAgent?.distanceCoveredByAgent || "-",
+          agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
           cancellationReason: order?.cancellationReason || "-",
           cancellationDescription: order?.cancellationDescription || "-",
           merchantEarnings: order?.merchantEarnings || "-",
@@ -769,16 +769,16 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
           subTotal: order?.billDetail?.subTotal || "-",
           surgePrice: order?.billDetail?.surgePrice || "-",
           transactionId: order?.paymentId || "-",
-          itemName: item.itemName || "-",
-          quantity: item.quantity || "-",
-          length: item.length || "-",
-          width: item.width || "-",
-          height: item.height || "-",
+          itemName: item?.itemName || "-",
+          quantity: item?.quantity || "-",
+          length: item?.length || "-",
+          width: item?.width || "-",
+          height: item?.height || "-",
         });
       });
     });
 
-    const filePath = path.join(__dirname, "../../../Order_CSV.csv");
+    let filePath = path.join(__dirname, "../../../Order_CSV.csv");
 
     const csvHeaders = [
       { id: "orderId", title: "Order ID" },
@@ -825,7 +825,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       { id: "height", title: "height" },
     ];
 
-    const writer = csvWriter({
+    let writer = csvWriter({
       path: filePath,
       header: csvHeaders,
     });

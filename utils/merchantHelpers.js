@@ -79,21 +79,46 @@ const preparePayoutForMerchant = async () => {
       payout.completedOrders += 1;
     }
 
-    const bulkOperations = allMerchants.map((merchant) => {
-      const payoutData = {
-        merchantId: merchant._id,
-        merchantName: merchant?.merchantDetail?.merchantName,
-        geofenceId: merchant?.merchantDetail?.geofenceId,
-        totalCostPrice:
-          merchantPayouts.get(merchant._id.toString())?.totalCostPrice || 0,
-        completedOrders:
-          merchantPayouts.get(merchant._id.toString())?.completedOrders || 0,
-        date: startTime,
-      };
-      console.log("Payout Data:", payoutData);
+    // const bulkOperations = allMerchants.map((merchant) => {
+    //   const payoutData = {
+    //     merchantId: merchant._id,
+    //     merchantName: merchant?.merchantDetail?.merchantName,
+    //     geofenceId: merchant?.merchantDetail?.geofenceId,
+    //     totalCostPrice:
+    //       merchantPayouts.get(merchant._id.toString())?.totalCostPrice || 0,
+    //     completedOrders:
+    //       merchantPayouts.get(merchant._id.toString())?.completedOrders || 0,
+    //     date: startTime,
+    //   };
+    //   console.log("Payout Data:", payoutData);
 
-      return payoutData;
-    });
+    //   return payoutData;
+    // });
+    const bulkOperations = allMerchants
+      .map((merchant) => {
+        const merchantId = merchant._id.toString();
+        const totalCostPrice =
+          merchantPayouts.get(merchantId)?.totalCostPrice || 0;
+        const completedOrders =
+          merchantPayouts.get(merchantId)?.completedOrders || 0;
+
+        // Only return data if either totalCostPrice or completedOrders is greater than zero
+        if (totalCostPrice > 0 || completedOrders > 0) {
+          const payoutData = {
+            merchantId: merchant._id,
+            merchantName: merchant?.merchantDetail?.merchantName,
+            geofenceId: merchant?.merchantDetail?.geofenceId,
+            totalCostPrice: totalCostPrice,
+            completedOrders: completedOrders,
+            date: startTime,
+          };
+          console.log("Payout Data:", payoutData);
+
+          return payoutData;
+        }
+        return null; // Skip merchants with no activity
+      })
+      .filter(Boolean);
 
     if (bulkOperations.length > 0) {
       await MerchantPayout.insertMany(bulkOperations);

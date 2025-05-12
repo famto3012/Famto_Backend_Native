@@ -7,6 +7,7 @@ const Agent = require("./models/Agent");
 const AgentWorkHistory = require("./models/AgentWorkHistory");
 const Merchant = require("./models/Merchant");
 const MerchantPayout = require("./models/MerchantPayout");
+const Product = require("./models/Product");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -220,3 +221,139 @@ const migrateMerchantPayoutData = async () => {
 };
 
 // migrateMerchantPayoutData();
+
+const preparePayoutForMerchant = async () => {
+  try {
+    const allMerchants = await Merchant.find({ isApproved: "Approved" }).lean();
+
+    // Set date to May 10, 2025
+    const targetDate = new Date(2025, 4, 11); // Month is 0-based, so 4 = May
+
+    // Start time: Beginning of May 10 in IST (00:00:00), converted to UTC
+    // IST is UTC+5:30, so 00:00 IST = 18:30 UTC of previous day
+    let startTime = new Date(targetDate);
+    startTime.setUTCHours(18, 30, 0, 0);
+    startTime.setUTCDate(startTime.getUTCDate()); // Previous day in UTC
+
+    // End time: End of May 10 in IST (23:59:59.999), converted to UTC
+    // 23:59:59.999 IST = 18:29:59.999 UTC of the next day
+    let endTime = new Date(targetDate);
+    endTime.setUTCDate(endTime.getUTCDate() + 1); // Next day in UTC
+    endTime.setUTCHours(18, 29, 59, 999);
+
+    console.log("Start Time (UTC):", startTime);
+    console.log("End Time (UTC):", endTime);
+
+    const allOrders = await Order.find({
+      createdAt: {
+        $gte: startTime,
+        $lte: endTime,
+      },
+      "orderDetail.deliveryMode": "Home Delivery",
+      status: "Completed",
+    })
+      .select("merchantId purchasedItems")
+      .lean();
+
+    const merchantPayouts = new Map();
+
+    const productIds = allOrders.flatMap((order) =>
+      order.purchasedItems.map((item) => item.productId)
+    );
+
+    const products = await Product.find({ _id: { $in: productIds } }).lean();
+    const productMap = new Map(
+      products.map((product) => [product._id.toString(), product])
+    );
+
+    for (const order of allOrders) {
+      const merchantId = order?.merchantId?.toString();
+      const { purchasedItems } = order;
+      let totalCostPrice = 0;
+
+      for (const item of purchasedItems) {
+        const { productId, variantId, quantity } = item;
+        const product = productMap.get(productId.toString());
+
+        if (product) {
+          if (variantId) {
+            const variant = product.variants.find((v) =>
+              v.variantTypes.some((type) => type._id.equals(variantId))
+            );
+
+            if (variant) {
+              const variantType = variant.variantTypes.find((type) =>
+                type._id.equals(variantId)
+              );
+              if (variantType) {
+                totalCostPrice += variantType.costPrice * quantity;
+              }
+            }
+          } else {
+            totalCostPrice += product.costPrice * quantity;
+          }
+        }
+      }
+
+      if (!merchantPayouts.has(merchantId)) {
+        merchantPayouts.set(merchantId, {
+          totalCostPrice: 0,
+          completedOrders: 0,
+        });
+      }
+
+      const payout = merchantPayouts.get(merchantId);
+      payout.totalCostPrice += totalCostPrice;
+      payout.completedOrders += 1;
+    }
+
+    // const bulkOperations = allMerchants.map((merchant) => {
+    //   const payoutData = {
+    //     merchantId: merchant._id,
+    //     merchantName: merchant?.merchantDetail?.merchantName,
+    //     geofenceId: merchant?.merchantDetail?.geofenceId,
+    //     totalCostPrice:
+    //       merchantPayouts.get(merchant._id.toString())?.totalCostPrice || 0,
+    //     completedOrders:
+    //       merchantPayouts.get(merchant._id.toString())?.completedOrders || 0,
+    //     date: startTime,
+    //   };
+    //   // console.log("Payout Data:", payoutData);
+
+    //   return payoutData;
+    // });
+    const bulkOperations = allMerchants
+      .map((merchant) => {
+        const merchantId = merchant._id.toString();
+        const totalCostPrice =
+          merchantPayouts.get(merchantId)?.totalCostPrice || 0;
+        const completedOrders =
+          merchantPayouts.get(merchantId)?.completedOrders || 0;
+
+        // Only return data if either totalCostPrice or completedOrders is greater than zero
+        if (totalCostPrice > 0 || completedOrders > 0) {
+          const payoutData = {
+            merchantId: merchant._id,
+            merchantName: merchant?.merchantDetail?.merchantName,
+            geofenceId: merchant?.merchantDetail?.geofenceId,
+            totalCostPrice: totalCostPrice,
+            completedOrders: completedOrders,
+            date: startTime,
+          };
+          console.log("Payout Data:", payoutData);
+
+          return payoutData;
+        }
+        return null; // Skip merchants with no activity
+      })
+      .filter(Boolean);
+
+    // if (bulkOperations.length > 0) {
+    //   await MerchantPayout.insertMany(bulkOperations);
+    // }
+  } catch (err) {
+    console.error("Error in preparing payout:", err);
+  }
+};
+
+// preparePayoutForMerchant();

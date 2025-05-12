@@ -277,6 +277,7 @@ const processSchedule = (ifScheduled) => {
 
   // Standardize start date to UTC
   const adjustedStartDate = new Date(startDate);
+  adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
   adjustedStartDate.setUTCHours(18, 30, 0, 0);
 
   if (process.env.NODE_ENV === "production") {
@@ -290,7 +291,7 @@ const processSchedule = (ifScheduled) => {
 
   // Standardize end date to 18:29:59.999 UTC
   const adjustedEndDate = new Date(endDate);
-  adjustedEndDate.setUTCDate(adjustedEndDate.getUTCDate() + 1);
+  adjustedEndDate.setUTCDate(adjustedEndDate.getUTCDate());
   adjustedEndDate.setUTCHours(18, 29, 59, 999);
 
   // Calculate number of days correctly
