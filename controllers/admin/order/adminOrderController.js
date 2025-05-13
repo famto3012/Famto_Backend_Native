@@ -2276,13 +2276,10 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       return next(appError("Agent not found", 404));
     }
 
-    let calculatedSalary;
-
-    if (isNaN(orderFound?.detailAddedByAgent?.distanceCoveredByAgent)) {
-      calculatedSalary = await calculateAgentEarnings(agentFound, orderFound);
-    } else {
-      calculatedSalary = await calculateAgentEarnings(agentFound, orderFound);
-    }
+    const calculatedSalary = await calculateAgentEarnings(
+      agentFound,
+      orderFound
+    );
 
     const detail = {
       orderId,

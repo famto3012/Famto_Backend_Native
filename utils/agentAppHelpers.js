@@ -314,17 +314,17 @@ const calculateAgentEarnings = async (agent, order) => {
     return 0;
   }
 
-  let orderSalary =
-    order.detailAddedByAgent.distanceCoveredByAgent *
-    agentPricing.baseDistanceFarePerKM;
+  const distanceForOrder = order?.detailAddedByAgent?.distanceCoveredByAgent
+    ? order.detailAddedByAgent.distanceCoveredByAgent
+    : order.orderDetail.distance;
+
+  let orderSalary = distanceForOrder * agentPricing.baseDistanceFarePerKM;
 
   let surgePrice = 0;
 
   if (agentSurge) {
     surgePrice =
-      (order.detailAddedByAgent.distanceCoveredByAgent /
-        agentSurge.baseDistance) *
-      agentSurge.baseFare;
+      (distanceForOrder / agentSurge.baseDistance) * agentSurge.baseFare;
   }
 
   let totalPurchaseFare = 0;
@@ -346,8 +346,8 @@ const calculateAgentEarnings = async (agent, order) => {
 
   const totalEarnings = orderSalary + totalPurchaseFare + surgePrice;
 
-  // Use parseFloat to ensure it's a number with two decimal places
-  return parseFloat(totalEarnings?.toFixed(2));
+  // Use Number to ensure it's a number with two decimal places
+  return Number(totalEarnings?.toFixed(2));
 };
 
 const updateOrderDetails = (order, calculatedSalary) => {
