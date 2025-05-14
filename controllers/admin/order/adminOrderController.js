@@ -61,6 +61,8 @@ const {
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 const Task = require("../../../models/Task");
 const moment = require("moment-timezone");
+const AgentPricing = require("../../../models/AgentPricing");
+const AgentSurge = require("../../../models/AgentSurge");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {
@@ -2276,10 +2278,54 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       return next(appError("Agent not found", 404));
     }
 
-    const calculatedSalary = await calculateAgentEarnings(
-      agentFound,
-      orderFound
-    );
+    let calculatedSalary = 0;
+
+    const [agentPricing, agentSurge] = await Promise.all([
+      AgentPricing.findById(agentFound?.workStructure?.salaryStructureId),
+      AgentSurge.findOne({
+        geofenceId: agentFound.geofenceId,
+        status: true,
+      }),
+    ]);
+
+    if (!agentPricing) throw new Error("Agent pricing not found");
+    if (agentPricing?.type.startsWith("Monthly")) {
+      calculatedSalary = 0;
+    } else {
+      const distanceForOrder = orderFound.orderDetail.distance;
+
+      let orderSalary = distanceForOrder * agentPricing.baseDistanceFarePerKM;
+
+      let surgePrice = 0;
+
+      if (agentSurge) {
+        surgePrice =
+          (distanceForOrder / agentSurge.baseDistance) * agentSurge.baseFare;
+      }
+
+      let totalPurchaseFare = 0;
+
+      if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+        const taskFound = await Task.findOne({ orderId: orderFound._id });
+        if (taskFound) {
+          const durationInHours =
+            (new Date(taskFound?.deliveryDetail?.startTime) -
+              new Date(taskFound.pickupDetail.startTime)) /
+            (1000 * 60 * 60);
+
+          const normalizedHours =
+            durationInHours < 1 ? 1 : Math.floor(durationInHours);
+
+          totalPurchaseFare =
+            normalizedHours * agentPricing.purchaseFarePerHour;
+        }
+      }
+
+      const totalEarnings = orderSalary + totalPurchaseFare + surgePrice;
+
+      // Use Number to ensure it's a number with two decimal places
+      calculatedSalary = Number(totalEarnings?.toFixed(2));
+    }
 
     const detail = {
       orderId,
@@ -2305,13 +2351,18 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       ? (agentFound.status = "Busy")
       : (agentFound.status = "Free");
     agentFound.appDetail.totalEarning += calculatedSalary;
-    agentFound.appDetail.totalDistance +=
-      orderFound?.detailAddedByAgent?.distanceCoveredByAgent ||
-      orderFound?.orderDetail?.distance;
+    agentFound.appDetail.totalDistance += orderFound?.orderDetail?.distance;
     agentFound.appDetail.orders += 1;
     agentFound.appDetail.orderDetail.push(detail);
 
+    if (!orderFound.detailAddedByAgent) {
+      orderFound.detailAddedByAgent = {};
+    }
+
     orderFound.status = "Completed";
+    orderFound.detailAddedByAgent.agentEarning = calculatedSalary;
+    orderFound.detailAddedByAgent.distanceCoveredByAgent =
+      orderFound?.orderDetail?.distance;
 
     await Promise.all([
       orderFound.save(),

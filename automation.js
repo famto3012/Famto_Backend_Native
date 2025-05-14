@@ -9,6 +9,8 @@ const Merchant = require("./models/Merchant");
 const MerchantPayout = require("./models/MerchantPayout");
 const Product = require("./models/Product");
 
+const moment = require("moment-timezone");
+
 const migrateCustomerTransactions = async () => {
   try {
     const customers = await Customer.find({ transactionDetail: { $ne: [] } });
@@ -226,6 +228,10 @@ const migrateMerchantPayoutData = async () => {
 
 // migrateMerchantPayoutData();
 
+// *========================================
+// *========================================
+// *========================================
+
 const preparePayoutForMerchant = async () => {
   try {
     const allMerchants = await Merchant.find({ isApproved: "Approved" }).lean();
@@ -361,3 +367,52 @@ const preparePayoutForMerchant = async () => {
 };
 
 // preparePayoutForMerchant();
+
+// *========================================
+// *========================================
+// *========================================
+
+const findOrdersOfAgentsDetails = async () => {
+  try {
+    const date = "2025-05-13";
+    const agentId = "A250419";
+
+    const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+    // Start and end of the previous day in IST
+    const startDate = formattedDay.startOf("day").toDate();
+    const endDate = formattedDay.endOf("day").toDate();
+
+    const orders = await Order.find({
+      agentId,
+      createdAt: { $gte: startDate, $lte: endDate },
+    });
+
+    const result = orders.map((order) => ({
+      orderId: order._id,
+      distance: order.orderDetail.distance,
+      agentDistance: order.detailAddedByAgent.distanceCoveredByAgent,
+    }));
+
+    const totalOrderDistance = result.reduce((acc, order) => {
+      const distance = order.distance;
+      return acc + distance;
+    }, 0);
+
+    const totalAgentDistance = result.reduce((acc, order) => {
+      const distance = order.agentDistance ? order.agentDistance : 0;
+      return acc + distance;
+    }, 0);
+
+    console.log({
+      totalOrderDistance,
+      totalAgentDistance,
+      totalDistance: totalOrderDistance + totalAgentDistance,
+      result,
+    });
+  } catch (err) {
+    console.log(`Error in findOrdersOfAgentsDetails: ${err}`);
+  }
+};
+
+findOrdersOfAgentsDetails();

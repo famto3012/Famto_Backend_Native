@@ -60,6 +60,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         orderDetail: [],
       };
 
+      let totalEarning = appDetail?.totalEarning || 0;
+
       // Reset login duration before recalculating
       const loginStart = new Date(agent?.loginStartTime || currentTime);
       const loginDuration = currentTime - loginStart;
@@ -73,14 +75,14 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       if (agentPricing) {
         if (agentPricing?.type?.startsWith("Monthly")) {
           if (appDetail.orders > 0 && appDetail.loginDuration > 0) {
-            appDetail.totalEarning = agentPricing.baseFare;
+            totalEarning = agentPricing.baseFare;
           }
         } else {
           if (
             appDetail.orders >= agentPricing.minOrderNumber &&
             appDetail.loginDuration >= agentPricing.minOrderNumber
           ) {
-            appDetail.totalEarning += agentPricing.baseFare;
+            totalEarning += agentPricing.baseFare;
           }
 
           if (appDetail.orders > agentPricing.minOrderNumber) {
@@ -88,7 +90,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             const earningForExtraOrders =
               extraOrders * agentPricing.fareAfterMinOrderNumber;
 
-            appDetail.totalEarning += earningForExtraOrders;
+            totalEarning += earningForExtraOrders;
           }
 
           const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
@@ -101,7 +103,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
               const earningForExtraHours =
                 Math.floor(extraHours) * agentPricing.fareAfterMinLoginHours;
 
-              appDetail.totalEarning += earningForExtraHours;
+              totalEarning += earningForExtraHours;
             }
           }
         }
@@ -111,7 +113,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       historyDocuments.push({
         agentId: agent._id,
         workDate: lastDay,
-        totalEarning: appDetail.totalEarning,
+        totalEarning: totalEarning,
         orders: appDetail.orders,
         pendingOrders: appDetail.pendingOrders,
         totalDistance: appDetail.totalDistance,
