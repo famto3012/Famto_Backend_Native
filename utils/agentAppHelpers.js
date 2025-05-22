@@ -61,6 +61,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       };
 
       let totalEarning = appDetail?.totalEarning || 0;
+      let totalDistance = appDetail?.totalDistance || 0;
 
       // Reset login duration before recalculating
       const loginStart = new Date(agent?.loginStartTime || currentTime);
@@ -78,6 +79,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             totalEarning = agentPricing.baseFare;
           }
         } else {
+          totalEarning = totalDistance * agentPricing.baseDistanceFarePerKM;
+
           if (
             appDetail.orders >= agentPricing.minOrderNumber &&
             appDetail.loginDuration >= agentPricing.minOrderNumber

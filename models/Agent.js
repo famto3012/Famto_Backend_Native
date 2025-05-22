@@ -72,10 +72,10 @@ const governmentCertificateDetailSchema = mongoose.Schema(
 
 const bankDetailSchema = mongoose.Schema(
   {
-    accountHolderName: { type: String, required: true },
-    accountNumber: { type: String, required: true },
-    IFSCCode: { type: String, required: true },
-    UPIId: { type: String, required: true },
+    accountHolderName: { type: String, required: false },
+    accountNumber: { type: String, required: false },
+    IFSCCode: { type: String, required: false },
+    UPIId: { type: String, required: false },
   },
   { _id: false }
 );

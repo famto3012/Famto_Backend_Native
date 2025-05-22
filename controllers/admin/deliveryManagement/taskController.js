@@ -1,4 +1,5 @@
 const turf = require("@turf/turf");
+const moment = require("moment-timezone");
 
 const Agent = require("../../../models/Agent");
 const Order = require("../../../models/Order");
@@ -157,9 +158,9 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     });
 
     const deliveryMode = task?.orderId?.orderDetail?.deliveryMode;
-    const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+    // const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
     const merchant = task?.orderId?.merchantId;
-    const merchantLocation = merchant?.merchantDetail?.location;
+    // const merchantLocation = merchant?.merchantDetail?.location;
     const geofence = merchant?.merchantDetail?.geofenceId;
 
     // Match Criteria
@@ -177,7 +178,6 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     );
 
     let filteredAgents = agents;
-    console.log("filteredAgent", filteredAgents);
 
     // Filter by geofence if required
     if (
@@ -214,19 +214,20 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         let distance = 0;
 
-        if (deliveryMode === "Pick and Drop") {
-          const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agentLocation,
-            deliveryLocation
-          );
-          distance = distanceInKM;
-        } else if (deliveryMode !== "Custom Order") {
-          const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            agentLocation,
-            merchantLocation
-          );
-          distance = distanceInKM;
-        }
+        // TODO: When uncommenting the condition make sure to exclude the distance calculation of Inactive agents (make it default to 0)
+        // if (deliveryMode === "Pick and Drop") {
+        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        //     agentLocation,
+        //     deliveryLocation
+        //   );
+        //   distance = distanceInKM;
+        // } else if (deliveryMode !== "Custom Order") {
+        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        //     agentLocation,
+        //     merchantLocation
+        //   );
+        //   distance = distanceInKM;
+        // }
 
         return {
           _id: agent._id,
@@ -251,21 +252,22 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
 const getTasksController = async (req, res, next) => {
   try {
-    const { startDate, endDate, orderId, filter } = req.query;
+    let { startDate, endDate, orderId, filter } = req.query;
 
     // Build the query object dynamically
     const query = {};
 
     // Add date range filter if provided
     if (startDate && endDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
+
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
 
       query.createdAt = {
-        $gte: start,
-        $lte: end,
+        $gte: startDate,
+        $lte: endDate,
       };
     }
 
