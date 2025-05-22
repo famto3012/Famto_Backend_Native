@@ -61,8 +61,6 @@ const getAllBusinessCategoryController = async (req, res, next) => {
   try {
     const { latitude, longitude } = req.body;
 
-    console.log("BODY", req.body);
-
     if (!latitude || !longitude)
       return next(appError("Latitude & Longitude are required", 400));
 
