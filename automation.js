@@ -10,6 +10,9 @@ const MerchantPayout = require("./models/MerchantPayout");
 const Product = require("./models/Product");
 
 const moment = require("moment-timezone");
+const {
+  moveAppDetailToWorkHistoryAndResetForAllAgents,
+} = require("./utils/agentAppHelpers");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -415,4 +418,4 @@ const findOrdersOfAgentsDetails = async () => {
   }
 };
 
-findOrdersOfAgentsDetails();
+// findOrdersOfAgentsDetails();

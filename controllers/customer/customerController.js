@@ -77,14 +77,14 @@ const registerAndLoginController = async (req, res, next) => {
     if (!customer) {
       customer = await Customer.create({
         phoneNumber,
-        lastPlatformUsed: os.platform(),
+        lastPlatformUsed: platform ? platform : "Not recognized",
         customerDetails: {
           location,
           geofenceId: geofence?._id ? geofence?._id : null,
         },
       });
     } else {
-      customer.lastPlatformUsed = platform ? platform : os.platform();
+      customer.lastPlatformUsed = platform ? platform : "Not recognized";
 
       customer.customerDetails = {
         ...customer.customerDetails,

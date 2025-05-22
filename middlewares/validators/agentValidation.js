@@ -27,16 +27,16 @@ const addAgentByAdminValidations = [
     }
     return true;
   }),
-  body("accountHolderName")
-    .trim()
-    .notEmpty()
-    .withMessage("Account holder is required"),
-  body("accountNumber")
-    .trim()
-    .notEmpty()
-    .withMessage("Account number is required"),
-  body("IFSCCode").trim().notEmpty().withMessage("IFSC code is required"),
-  body("UPIId").trim().notEmpty().withMessage("UPI Id is required"),
+  // body("accountHolderName")
+  //   .trim()
+  //   .notEmpty()
+  //   .withMessage("Account holder is required"),
+  // body("accountNumber")
+  //   .trim()
+  //   .notEmpty()
+  //   .withMessage("Account number is required"),
+  // body("IFSCCode").trim().notEmpty().withMessage("IFSC code is required"),
+  // body("UPIId").trim().notEmpty().withMessage("UPI Id is required"),
   body("aadharNumber")
     .trim()
     .notEmpty()

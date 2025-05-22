@@ -350,14 +350,11 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
       endDate,
       orderId,
       page = 1,
-      limit = 50,
+      limit = 30,
     } = req.query;
 
-    // Convert to integers
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
-
-    // Calculate the number of documents to skip
     const skip = (page - 1) * limit;
 
     const filterCriteria = { merchantId: req.userAuth };
@@ -385,17 +382,16 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
     }
 
     if (startDate && endDate) {
-      const start = moment.tz(startDate, "Asia/Kolkata");
-      const end = moment.tz(endDate, "Asia/Kolkata");
-
-      startDate = start.startOf("day").toDate();
-      endDate = end.endOf("day").toDate();
-
-      filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
+      const start = moment
+        .tz(startDate, "Asia/Kolkata")
+        .startOf("day")
+        .toDate();
+      const end = moment.tz(endDate, "Asia/Kolkata").endOf("day").toDate();
+      filterCriteria.createdAt = { $gte: start, $lte: end };
     }
 
     const [orders, totalCount] = await Promise.all([
-      await Order.find(filterCriteria)
+      Order.find(filterCriteria)
         .populate({
           path: "merchantId",
           select: "merchantDetail.merchantName merchantDetail.deliveryTime",
@@ -410,40 +406,71 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
       Order.countDocuments(filterCriteria),
     ]);
 
-    const formattedOrders = orders?.map((order) => {
-      return {
-        orderId: order._id,
-        orderStatus: order?.status,
-        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName ||
-          null,
-        deliveryMode: order?.orderDetail?.deliveryMode || null,
-        orderDate: formatDate(order?.createdAt) || null,
-        orderTime: formatTime(order?.createdAt) || null,
-        deliveryDate: order?.orderDetail?.deliveryTime
-          ? formatDate(order.orderDetail.deliveryTime)
-          : "-",
-        deliveryTime: order?.orderDetail?.deliveryTime
-          ? formatTime(order.orderDetail.deliveryTime)
-          : "-",
-        paymentMethod:
-          order?.paymentMode === "Cash-on-delivery"
-            ? "Pay-on-delivery"
-            : order?.paymentMode,
-        deliveryOption: order?.orderDetail?.deliveryOption || null,
-        amount: order.billDetail.grandTotal,
-        isReady: order?.orderDetail?.isReady,
-      };
-    });
+    const formattedOrders = await Promise.all(
+      orders.map(async (order) => {
+        const populatedOrder = await order.populate("purchasedItems.productId");
+
+        const formattedItems = await Promise.all(
+          populatedOrder.purchasedItems.map(async (item) => {
+            const product = await Product.findById(item.productId);
+            if (!product) return item;
+
+            const variant = product.variants?.find((variant) =>
+              variant.variantTypes?.some((type) =>
+                type._id.equals(item.variantId)
+              )
+            );
+
+            const variantType = variant?.variantTypes?.find((type) =>
+              type._id.equals(item.variantId)
+            );
+
+            return {
+              productName: product.productName,
+              variantTypeName: variantType ? variantType.typeName : null,
+              quantity: item.quantity,
+              price: item.price,
+            };
+          })
+        );
+
+        return {
+          orderId: order._id,
+          orderStatus: order.status,
+          isReady: order.orderDetail?.isReady || false,
+          merchantName: order.merchantId?.merchantDetail?.merchantName || "-",
+          customerName:
+            order.customerId?.fullName ||
+            order.orderDetail?.deliveryAddress?.fullName ||
+            "-",
+          deliveryMode: order.orderDetail?.deliveryMode || null,
+          orderDate: formatDate(order.createdAt),
+          orderTime: formatTime(order.createdAt),
+          deliveryDate: order.orderDetail?.deliveryTime
+            ? formatDate(order.orderDetail.deliveryTime)
+            : "-",
+          deliveryTime: order.orderDetail?.deliveryTime
+            ? formatTime(order.orderDetail.deliveryTime)
+            : "-",
+          paymentMethod:
+            order.paymentMode === "Cash-on-delivery"
+              ? "Pay-on-delivery"
+              : order.paymentMode,
+          deliveryOption: order.orderDetail?.deliveryOption || null,
+          amount: order.billDetail?.grandTotal || 0,
+          items: formattedItems,
+        };
+      })
+    );
 
     res.status(200).json({
       totalCount,
       data: formattedOrders,
     });
   } catch (err) {
-    next(appError(err.message));
+    next(
+      appError(err.message || "Something went wrong while fetching orders.")
+    );
   }
 };
 
