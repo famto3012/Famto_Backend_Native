@@ -891,6 +891,20 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
           $limit: limit,
         },
       ]),
+      ScheduledOrder.aggregate([
+        {
+          $match: filterCriteria,
+        },
+        {
+          $unionWith: {
+            coll: "scheduledpickandcustoms",
+            pipeline: [{ $match: filterCriteria }],
+          },
+        },
+        {
+          $count: "totalCount",
+        },
+      ]).then((countResult) => countResult[0]?.totalCount || 0),
     ]);
 
     const unSeenOrdersCount = result?.filter((order) => !order.isViewed).length;
