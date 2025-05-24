@@ -503,16 +503,34 @@ const changeAgentStatusController = async (req, res, next) => {
 
 const approveAgentRegistrationController = async (req, res, next) => {
   try {
-    const agentFound = await Agent.findById(req.params.agentId);
+    const agent = await Agent.findById(req.params.agentId);
 
-    if (!agentFound) {
+    if (!agent) {
       return next(appError("Agent not found", 404));
     }
 
-    agentFound.isApproved = "Approved";
+    const errors = [];
 
-    if (!agentFound.appDetail) {
-      agentFound.appDetail = {
+    if (!agent.workStructure.salaryStructureId) {
+      errors.push("Please add a salary structure");
+    }
+
+    if (!agent.workStructure.tag) {
+      errors.push("Please add a tag");
+    }
+
+    if (agent.workStructure.workTimings.length === 0) {
+      errors.push("Please add a work timing");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json(errors);
+    }
+
+    agent.isApproved = "Approved";
+
+    if (!agent.appDetail) {
+      agent.appDetail = {
         totalEarning: 0,
         orders: 0,
         pendingOrders: 0,
@@ -522,7 +540,7 @@ const approveAgentRegistrationController = async (req, res, next) => {
       };
     }
 
-    await agentFound.save();
+    await agent.save();
 
     res.status(200).json({
       message: "Agent registration approved",

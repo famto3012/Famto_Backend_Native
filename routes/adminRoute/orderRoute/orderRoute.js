@@ -36,6 +36,7 @@ const {
   fetchAllScheduledOrdersByAdminController,
   markOrderAsCompletedByAdminController,
   markPaymentCollectedFromCustomer,
+  markOrderAsCancelled,
 } = require("../../../controllers/admin/order/adminOrderController");
 const isAdmin = require("../../../middlewares/isAdmin");
 const { upload } = require("../../../utils/imageOperation");
@@ -252,6 +253,13 @@ orderRoute.patch(
   isAuthenticated,
   isAdmin,
   markPaymentCollectedFromCustomer
+);
+
+orderRoute.patch(
+  "/admin/cancel-order/:orderId",
+  isAuthenticated,
+  isAdmin,
+  markOrderAsCancelled
 );
 
 module.exports = orderRoute;

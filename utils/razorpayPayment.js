@@ -59,6 +59,7 @@ const createRazorpayQrCode = async (amount) => {
       payment_amount: amount * 100,
       description: "Amount to be paid",
       name: "FAMTO Delivery",
+      close_by: 1681615838,
     });
 
     return qrCode;

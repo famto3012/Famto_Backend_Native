@@ -61,8 +61,6 @@ const getAllBusinessCategoryController = async (req, res, next) => {
   try {
     const { latitude, longitude } = req.body;
 
-    console.log("BODY", req.body);
-
     if (!latitude || !longitude)
       return next(appError("Latitude & Longitude are required", 400));
 
@@ -526,6 +524,8 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
   }
 };
 
+const distanceCache = {};
+
 const filterAndSearchMerchantController = async (req, res, next) => {
   try {
     let {
@@ -543,10 +543,14 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
 
+    const cacheKey = `${businessCategoryId}_${latitude}_${longitude}_${query.trim()}_${filterType}_${merchantId}_${productName}`;
+    let cachedDistances = distanceCache[cacheKey];
+
     const customerId = req.userAuth;
 
-    if (!businessCategoryId)
+    if (!businessCategoryId) {
       return next(appError("Business category is required", 400));
+    }
 
     let customer;
     if (customerId) {
@@ -555,35 +559,35 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     }
 
     const foundGeofence = await geoLocation(latitude, longitude);
-    if (!foundGeofence) return next(appError("Geofence not found", 404));
+    if (!foundGeofence) {
+      return next(appError("Geofence not found", 404));
+    }
 
-    const filterCriteria = {
+    const baseCriteria = {
       isBlocked: false,
       isApproved: "Approved",
       "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.location": { $exists: true, $ne: [] },
       "merchantDetail.pricing.0": { $exists: true },
-      "merchantDetail.pricing.modelType": { $exists: true }, // Ensures modelType exists
+      "merchantDetail.pricing.modelType": { $exists: true },
       "merchantDetail.pricing.modelId": { $exists: true },
     };
 
     if (query) {
-      filterCriteria["merchantDetail.merchantName"] = {
+      baseCriteria["merchantDetail.merchantName"] = {
         $regex: query.trim(),
         $options: "i",
       };
     }
-    if (filterType.toLowerCase() === "veg") {
-      filterCriteria["merchantDetail.merchantFoodType"] = "Veg";
-    } else if (filterType.toLowerCase() === "rating 4.0+") {
-      filterCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
+
+    if (filterType?.toLowerCase() === "veg") {
+      baseCriteria["merchantDetail.merchantFoodType"] = "Veg";
+    } else if (filterType?.toLowerCase() === "rating 4.0+") {
+      baseCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
     }
 
-    // Fetch all merchants (without pagination)
-    let merchants = await Merchant.find(filterCriteria).lean();
-
-    // console.log("Total merchants found before filtering:", merchants.length);
+    let merchants = await Merchant.find(baseCriteria).lean();
 
     let sortedCount = 0;
     let merchantsWithProducts = [];
@@ -592,7 +596,6 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       const matchingProducts = await Product.find({
         productName: { $regex: productName, $options: "i" },
       }).select("categoryId");
-      // console.log("matchingProducts:", matchingProducts.length);
 
       const categoryIds = matchingProducts.map((product) =>
         product.categoryId.toString()
@@ -604,7 +607,6 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       const merchantIdsFromProducts = matchingCategories.map((category) =>
         category.merchantId.toString()
       );
-      console.log("merchantIdsFromProducts:", merchantIdsFromProducts.length);
 
       merchantsWithProducts = merchants.filter((merchant) =>
         merchantIdsFromProducts.includes(merchant._id.toString())
@@ -630,27 +632,49 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       });
     }
 
-    const openedMerchantsFirst = sortedMerchants.sort((a, b) => {
-      return b.status - a.status;
+    if (!cachedDistances) {
+      const customerLocation = [latitude, longitude];
+
+      const merchantsWithDistance = await Promise.all(
+        sortedMerchants.map(async (merchant) => {
+          const merchantLocation = merchant.merchantDetail.location;
+          const { distanceInKM: distance } =
+            await getDistanceFromPickupToDelivery(
+              customerLocation,
+              merchantLocation
+            );
+          return { ...merchant, distance };
+        })
+      );
+
+      // Cache the distances
+      distanceCache[cacheKey] = merchantsWithDistance;
+      cachedDistances = merchantsWithDistance;
+    }
+
+    cachedDistances.sort((a, b) => {
+      if (a.status === true && b.status === false) return -1;
+      if (a.status === false && b.status === true) return 1;
+      return a.distance - b.distance;
     });
 
-    // Apply pagination AFTER sorting
-    const paginatedMerchants = openedMerchantsFirst.slice(
-      (page - 1) * limit,
-      page * limit
-    );
-    // console.log("Final paginated merchants:", paginatedMerchants.length);
+    // Apply pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+
+    const paginatedMerchants = cachedDistances.slice(startIndex, endIndex);
 
     const responseMerchants = paginatedMerchants.map((merchant) => ({
       id: merchant._id,
       merchantName: merchant.merchantDetail.merchantName,
       description: merchant.merchantDetail.description || "",
       averageRating: merchant.merchantDetail.averageRating || 0,
-      status: merchant?.status,
-      restaurantType: merchant?.merchantDetail?.merchantFoodType || null,
+      status: merchant.status,
+      restaurantType: merchant.merchantDetail.merchantFoodType || null,
       merchantImageURL: merchant.merchantDetail.merchantImageURL || null,
       displayAddress: merchant.merchantDetail.displayAddress || null,
-      preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
+      preOrderStatus: merchant.merchantDetail.preOrderStatus,
+      distance: merchant.distance,
       isFavorite: customer?.customerDetails?.favoriteMerchants?.some(
         (fav) => fav.merchantId === merchant._id
       ),
@@ -1440,6 +1464,8 @@ const confirmOrderDetailController = async (req, res, next) => {
       customer,
       itemTotal
     );
+
+    console.log({ loyaltyDiscount });
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
@@ -2934,4 +2960,5 @@ module.exports = {
   addItemsToCart,
   getFiltersFromBusinessCategory,
   getMerchantTodayAvailability,
+  distanceCache,
 };

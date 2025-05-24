@@ -668,6 +668,7 @@ const fetchAllMerchantsController = async (req, res, next) => {
       serviceable,
       businessCategory,
       geofence,
+      subscriptionStatus,
     } = req.query;
 
     // Ensure correct data types
@@ -698,6 +699,14 @@ const fetchAllMerchantsController = async (req, res, next) => {
     if (geofence && geofence.toLowerCase() !== "all") {
       matchCriteria["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
+    }
+
+    if (subscriptionStatus && subscriptionStatus.toLowerCase() !== "all") {
+      if (subscriptionStatus.toLowerCase() === "active") {
+        matchCriteria["merchantDetail.pricing.0"] = { $exists: true };
+      } else if (subscriptionStatus.toLowerCase() === "expired") {
+        matchCriteria["merchantDetail.pricing"] = { $eq: [] };
+      }
     }
 
     // Fetch merchants

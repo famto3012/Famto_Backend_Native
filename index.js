@@ -90,6 +90,9 @@ const {
 } = require("./controllers/admin/activityLogs/activityLogController.js");
 const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
 const { deleteOldLogs } = require("./libs/automatic.js");
+const {
+  distanceCache,
+} = require("./controllers/customer/universalOrderController.js");
 
 //middlewares
 app.use(express.json({ limit: "10mb" }));
@@ -248,6 +251,10 @@ cron.schedule("* * * * *", async () => {
       await createOrdersFromScheduledPickAndDrop(scheduledOrder);
     }
   }
+});
+
+cron.schedule("*/5 * * * *", () => {
+  Object.keys(distanceCache).forEach((key) => delete distanceCache[key]);
 });
 
 // Global errors

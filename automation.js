@@ -10,6 +10,9 @@ const MerchantPayout = require("./models/MerchantPayout");
 const Product = require("./models/Product");
 
 const moment = require("moment-timezone");
+const {
+  moveAppDetailToWorkHistoryAndResetForAllAgents,
+} = require("./utils/agentAppHelpers");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -47,7 +50,7 @@ const migrateCustomerTransactions = async () => {
 
 const deleteOrderAndTask = async () => {
   try {
-    const customerId = "C24091";
+    const customerId = "C241213";
 
     // Fetch all orders for the customer
     const orders = await Order.find({ customerId });
@@ -415,4 +418,4 @@ const findOrdersOfAgentsDetails = async () => {
   }
 };
 
-findOrdersOfAgentsDetails();
+// findOrdersOfAgentsDetails();

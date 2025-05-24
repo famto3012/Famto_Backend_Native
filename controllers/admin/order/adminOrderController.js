@@ -341,8 +341,10 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderFound?.merchantId?.merchantDetail?.pricing[0]?.modelType;
 
     if (orderFound?.merchantId && modelType === "Commission") {
+      console.log("Here");
       const { payableAmountToFamto, payableAmountToMerchant } =
         await orderCommissionLogHelper(orderFound);
+      console.log("Here 2");
 
       let updatedCommission = {
         merchantEarnings: payableAmountToMerchant,
@@ -2400,6 +2402,27 @@ const markPaymentCollectedFromCustomer = async (req, res, next) => {
   }
 };
 
+const markOrderAsCancelled = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) return next(appError("Order not found", 404));
+
+    order.status = "Cancelled";
+
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Order marked as cancelled",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   confirmOrderByAdminController,
   rejectOrderByAdminController,
@@ -2417,4 +2440,5 @@ module.exports = {
   fetchAllScheduledOrdersByAdminController,
   markOrderAsCompletedByAdminController,
   markPaymentCollectedFromCustomer,
+  markOrderAsCancelled,
 };
