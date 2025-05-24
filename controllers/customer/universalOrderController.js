@@ -1549,9 +1549,14 @@ const getCartBillController = async (req, res, next) => {
   try {
     const { cartId } = req.query;
 
-    const cartFound = await CustomerCart.findById(cartId).select("billDetail");
+    const cartFound = await CustomerCart.findById(cartId).select(
+      "billDetail merchantId"
+    );
 
-    res.status(200).json({ billDetail: cartFound.billDetail });
+    res.status(200).json({
+      billDetail: cartFound.billDetail,
+      merchantId: cartFound.merchantId,
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -2760,6 +2765,168 @@ const getFiltersFromBusinessCategory = async (req, res, next) => {
   }
 };
 
+// const getMerchantTodayAvailability = async (req, res) => {
+//   try {
+//     const { merchantId } = req.query;
+//     console.log("MerchantID", merchantId);
+
+//     const merchant = await Merchant.findById(merchantId, {
+//       "merchantDetail.availability": 1,
+//     });
+//     console.log("Merchant", merchant);
+
+//     if (!merchant) {
+//       return res.status(404).json({ message: "Merchant not found" });
+//     }
+
+//     const availability = merchant.merchantDetail?.availability;
+
+//     if (!availability || !availability.type) {
+//       return res.status(400).json({ message: "Availability data not found" });
+//     }
+
+//     // Convert current time to IST
+//     const nowUTC = new Date();
+//     const nowIST = new Date(
+//       nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+//     );
+//     const dayIndex = nowIST.getDay(); // 0 = Sunday, 6 = Saturday
+//     const days = [
+//       "sunday",
+//       "monday",
+//       "tuesday",
+//       "wednesday",
+//       "thursday",
+//       "friday",
+//       "saturday",
+//     ];
+//     const today = days[dayIndex];
+
+//     // If full-time availability
+//     if (availability.type === "Full-time") {
+//       return res.status(200).json({
+//         type: "Full-time",
+//         day: today,
+//         status: "Open all day",
+//       });
+//     }
+
+//     // Specific-time availability
+//     const todayAvailability = availability.specificDays?.[today];
+
+//     if (!todayAvailability) {
+//       return res.status(200).json({
+//         type: "Specific-time",
+//         day: today,
+//         status: "No data for today",
+//       });
+//     }
+
+//     return res.status(200).json({
+//       type: "Specific-time",
+//       day: today,
+//       todayAvailability,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching merchant availability:", error);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+const getMerchantTodayAvailability = async (req, res) => {
+  try {
+    const { merchantId } = req.query;
+    console.log("MerchantID", merchantId);
+
+    const merchant = await Merchant.findById(merchantId, {
+      "merchantDetail.availability": 1,
+    });
+    console.log("Merchant", merchant);
+
+    if (!merchant) {
+      return res.status(404).json({ message: "Merchant not found" });
+    }
+
+    const availability = merchant.merchantDetail?.availability;
+
+    if (!availability || !availability.type) {
+      return res.status(400).json({ message: "Availability data not found" });
+    }
+
+    // Convert current time to IST
+    const nowUTC = new Date();
+    const nowIST = new Date(
+      nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const dayIndex = nowIST.getDay(); // 0 = Sunday, 6 = Saturday
+    const days = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+    const today = days[dayIndex];
+
+    // If full-time availability
+    if (availability.type === "Full-time") {
+      return res.status(200).json({
+        type: "Full-time",
+        day: today,
+        status: "Open all day",
+        nextDay: {
+          day: days[(dayIndex + 1) % 7],
+          startTime: "Anytime",
+        },
+      });
+    }
+
+    // Specific-time availability
+    const todayAvailability = availability.specificDays?.[today];
+
+    const nextDayIndex = (dayIndex + 1) % 7;
+    const nextDayName = days[nextDayIndex];
+    const nextDayAvailability = availability.specificDays?.[nextDayName];
+
+    let nextDayStartTime = "Unavailable";
+
+    if (nextDayAvailability) {
+      if (nextDayAvailability.openAllDay) {
+        nextDayStartTime = "Anytime";
+      } else if (
+        nextDayAvailability.specificTime &&
+        nextDayAvailability.startTime
+      ) {
+        const [hours, minutes] = nextDayAvailability.startTime
+          .split(":")
+          .map(Number);
+
+        // Convert 24-hour to 12-hour format manually
+        const hour12 = hours % 12 || 12;
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const formattedMinutes = minutes.toString().padStart(2, "0");
+
+        nextDayStartTime = `${hour12}:${formattedMinutes} ${ampm}`;
+      }
+    }
+
+    return res.status(200).json({
+      type: "Specific-time",
+      day: today,
+      todayAvailability,
+      nextDay: {
+        day: nextDayName,
+        startTime: nextDayStartTime,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching merchant availability:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   getAllBusinessCategoryController,
   homeSearchController,
@@ -2792,5 +2959,6 @@ module.exports = {
   getProductsWithVariantsInCart,
   addItemsToCart,
   getFiltersFromBusinessCategory,
+  getMerchantTodayAvailability,
   distanceCache,
 };

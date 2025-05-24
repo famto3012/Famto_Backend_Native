@@ -79,6 +79,7 @@ const {
   getProductsWithVariantsInCart,
   addItemsToCart,
   getFiltersFromBusinessCategory,
+  getMerchantTodayAvailability,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -604,5 +605,7 @@ customerRoute.get(
 customerRoute.post("/update-tip", isAuthenticated, updateOrderTipController);
 
 customerRoute.post("/apply-promo", isAuthenticated, applyPromoCode);
+
+customerRoute.get("/merchant-availability", isAuthenticated, getMerchantTodayAvailability);
 
 module.exports = customerRoute;
