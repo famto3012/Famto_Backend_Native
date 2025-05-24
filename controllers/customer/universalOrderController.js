@@ -1465,6 +1465,8 @@ const confirmOrderDetailController = async (req, res, next) => {
       itemTotal
     );
 
+    console.log({ loyaltyDiscount });
+
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
     let actualDeliveryCharge = 0;
