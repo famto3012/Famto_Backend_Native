@@ -463,9 +463,18 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
       })
     );
 
+    const totalPages = Math.ceil(totalCount / limit);
+
     res.status(200).json({
       totalCount,
       data: formattedOrders,
+      pagination: {
+        totalDocuments: totalCount,
+        totalPages,
+        currentPage: page,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(
@@ -831,7 +840,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
     }
 
-    const [result, totalCOunt] = await Promise.all([
+    const [result, totalCount] = await Promise.all([
       ScheduledOrder.aggregate([
         {
           $match: filterCriteria,
@@ -909,10 +918,20 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
       };
     });
 
+    const totalPages = Math.ceil(totalCount / limit);
+
     res.status(200).json({
       notViewed: unSeenOrdersCount,
-      total: totalCOunt,
+      total: totalCount,
       data: formattedOrders,
+      pagination: {
+        totalDocuments: totalCount,
+        totalPages,
+        currentPage: page,
+        pageSize: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (err) {
     next(appError(err.message));

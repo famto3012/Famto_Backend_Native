@@ -389,7 +389,7 @@ const updateAgentDetails = async (
 
   agent.appDetail.totalEarning += parseFloat(calculatedSalary);
   agent.appDetail.totalDistance += parseFloat(
-    order.detailAddedByAgent?.distanceCoveredByAgent.toFixed(2)
+    1 //order.detailAddedByAgent?.distanceCoveredByAgent.toFixed(2)
   );
 
   agent.appDetail.orderDetail.push({

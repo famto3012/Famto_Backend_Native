@@ -36,7 +36,7 @@ const orderCommissionLogHelper = async (order) => {
     }
 
     const commissionLog = new CommissionLogs({
-      orderId,
+      orderId: order._id,
       merchantId: order.merchantId,
       merchantName,
       totalAmount,
