@@ -125,6 +125,10 @@ const billSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    loyaltyDiscount: {
+      type: Number,
+      default: null,
+    },
     promoCodeUsed: {
       type: String,
       default: null,
