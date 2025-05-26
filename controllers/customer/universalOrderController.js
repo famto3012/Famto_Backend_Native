@@ -1465,8 +1465,6 @@ const confirmOrderDetailController = async (req, res, next) => {
       itemTotal
     );
 
-    console.log({ loyaltyDiscount });
-
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
     let actualDeliveryCharge = 0;
@@ -1529,6 +1527,7 @@ const confirmOrderDetailController = async (req, res, next) => {
         billDetail: {
           ...billDetail,
           deliveryChargePerDay: actualDeliveryCharge,
+          loyaltyDiscount: loyaltyDiscount ? loyaltyDiscount : null,
         },
       },
       { new: true, upsert: true }
