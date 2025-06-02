@@ -558,19 +558,29 @@ const rejectAgentRegistrationController = async (req, res, next) => {
       return next(appError("Agent not found", 404));
     }
 
-    // Send email with message
+    // Save necessary data before deletion
+    const { fullName, email } = agentFound;
+
+    // Delete the agent
+    await Agent.findByIdAndDelete(req.params.agentId);
+
+    // Send response to the client immediately
+    res.status(200).json({
+      message: "Agent registration rejected and removed",
+    });
+
+    // Continue with sending the email in the background
     const rejectionTemplatePath = path.join(
       __dirname,
       "../../../templates/rejectionTemplate.ejs"
     );
 
     const htmlContent = await ejs.renderFile(rejectionTemplatePath, {
-      recipientName: agentFound.fullName,
+      recipientName: fullName,
       app: "agent",
       email: "hr@famto.in",
     });
 
-    // Set up nodemailer transport
     const transporter = createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -582,15 +592,9 @@ const rejectAgentRegistrationController = async (req, res, next) => {
     });
 
     await transporter.sendMail({
-      to: agentFound.email,
+      to: email,
       subject: "Registration rejection",
       html: htmlContent,
-    });
-
-    await Agent.findByIdAndDelete(req.params.agentId);
-
-    res.status(200).json({
-      message: "Agent registration rejected",
     });
   } catch (err) {
     next(appError(err.message));

@@ -80,6 +80,7 @@ const {
   addItemsToCart,
   getFiltersFromBusinessCategory,
   getMerchantTodayAvailability,
+  getImageDisplayType,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -195,6 +196,8 @@ customerRoute.get(
 
 // Get all merchant card data
 customerRoute.get("/merchant-data", isLooselyAuthenticated, getMerchantData);
+
+customerRoute.get("/image-display", getImageDisplayType);
 
 // Get variants of a product
 customerRoute.get(
@@ -606,6 +609,10 @@ customerRoute.post("/update-tip", isAuthenticated, updateOrderTipController);
 
 customerRoute.post("/apply-promo", isAuthenticated, applyPromoCode);
 
-customerRoute.get("/merchant-availability", isAuthenticated, getMerchantTodayAvailability);
+customerRoute.get(
+  "/merchant-availability",
+  isAuthenticated,
+  getMerchantTodayAvailability
+);
 
 module.exports = customerRoute;

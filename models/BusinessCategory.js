@@ -36,6 +36,11 @@ const BusinessCategorySchema = new mongoose.Schema(
     productFilters: {
       type: [String],
     },
+    imageDisplayType: {
+      type: String,
+      enum: ["cover", "contain"],
+      default: "cover",
+    },
   },
   {
     timestamps: true,

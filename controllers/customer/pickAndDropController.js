@@ -9,14 +9,15 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const ScheduledPickAndCustom = require("../../models/ScheduledPickAndCustom");
 const CustomerSurge = require("../../models/CustomerSurge");
 const TemporaryOrder = require("../../models/TemporaryOrder");
-const NotificationSetting = require("../../models/NotificationSetting");
+const Tax = require("../../models/Tax");
+const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 const appError = require("../../utils/appError");
 const {
   getDistanceFromPickupToDelivery,
   calculateDeliveryCharges,
-  calculatePromoCodeDiscount,
-  calculateScheduledCartValue,
 } = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
@@ -28,20 +29,10 @@ const {
   deleteFromFirebase,
   uploadToFirebase,
 } = require("../../utils/imageOperation");
-
-const {
-  sendNotification,
-  sendSocketData,
-  findRolesToNotify,
-} = require("../../socket/socket");
 const {
   processSchedule,
   processDeliveryDetailInApp,
 } = require("../../utils/createOrderHelpers");
-const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
-const Tax = require("../../models/Tax");
-const CustomerTransaction = require("../../models/CustomerTransactionDetail");
-const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 // Initialize cart
@@ -488,6 +479,19 @@ const confirmPickAndDropController = async (req, res, next) => {
           customer.save(),
           PickAndCustomCart.deleteOne({ customerId }),
           CustomerTransaction.create(customerTransaction),
+          ActivityLog.create({
+            userId: req.userAuth,
+            userType: req.userRole,
+            description: `Scheduled Pick & Drop (#${
+              newOrder._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${
+              req.userAuth
+            } )`,
+          }),
+          PromoCode.findOneAndUpdate(
+            { promoCode: newOrder.billDetail.promoCodeUsed },
+            { $inc: { noOfUserUsed: 1 } }
+          ),
         ]);
 
         const eventName = "newOrderCreated";
@@ -580,6 +584,10 @@ const confirmPickAndDropController = async (req, res, next) => {
         PickAndCustomCart.deleteOne({ customerId }),
         CustomerTransaction.create(customerTransaction),
         CustomerWalletTransaction.create({ ...walletTransaction, orderId }),
+        PromoCode.findOneAndUpdate(
+          { promoCode: tempOrder.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: 1 } }
+        ),
       ]);
 
       if (!tempOrder)
@@ -627,60 +635,22 @@ const confirmPickAndDropController = async (req, res, next) => {
               { $set: { orderId: newOrder._id } },
               { new: true }
             ),
+            ActivityLog.create({
+              userId: req.userAuth,
+              userType: req.userRole,
+              description: `Pick & Drop Order (#${
+                newOrder._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${
+                req.userAuth
+              } )`,
+            }),
           ]);
 
           //? Notify the USER and ADMIN about successful order creation
-
           const eventName = "newOrderCreated";
 
           // Fetch notification settings to determine roles
           const { rolesToNotify, data } = await findRolesToNotify(eventName);
-          // const customerData = {
-          //   socket: {
-          //     orderId: newOrder._id,
-          //     orderDetail: newOrder.orderDetail,
-          //     billDetail: newOrder.billDetail,
-          //     orderDetailStepper: newOrder.orderDetailStepper.created,
-          //   },
-          //   fcm: {
-          //     title: "Order created",
-          //     body: "Your order was created successfully",
-          //     image: "",
-          //     orderId: newOrder._id,
-          //     customerId: newOrder.customerId,
-          //   },
-          // };
-
-          // const adminData = {
-          //   socket: {
-          //     _id: newOrder._id,
-          //     orderStatus: newOrder.status,
-          //     merchantName: "-",
-          //     customerName:
-          //       newOrder?.orderDetail?.deliveryAddress?.fullName ||
-          //       newOrder?.customerId?.fullName ||
-          //       "-",
-          //     deliveryMode: newOrder?.orderDetail?.deliveryMode,
-          //     orderDate: formatDate(newOrder.createdAt),
-          //     orderTime: formatTime(newOrder.createdAt),
-          //     deliveryDate: newOrder?.orderDetail?.deliveryTime
-          //       ? formatDate(newOrder.orderDetail.deliveryTime)
-          //       : "-",
-          //     deliveryTime: newOrder?.orderDetail?.deliveryTime
-          //       ? formatTime(newOrder.orderDetail.deliveryTime)
-          //       : "-",
-          //     paymentMethod: newOrder.paymentMode,
-          //     deliveryOption: newOrder?.orderDetail?.deliveryOption,
-          //     amount: newOrder.billDetail.grandTotal,
-          //     orderDetailStepper: newOrder.orderDetailStepper.created,
-          //   },
-          //   fcm: {
-          //     title: "New Order Admin",
-          //     body: "Your have a new pending order",
-          //     image: "",
-          //     orderId: newOrder._id,
-          //   },
-          // };
 
           const notificationData = {
             fcm: {
@@ -823,6 +793,19 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         PickAndCustomCart.deleteOne({ customerId }),
         customer.save(),
         CustomerTransaction.create(customerTransaction),
+        ActivityLog.create({
+          userId: req.userAuth,
+          userType: req.userRole,
+          description: `Scheduled Pick & Drop Order (#${
+            newOrder._id
+          }) from customer app by ${req?.userName || "N/A"} ( ${
+            req.userAuth
+          } )`,
+        }),
+        PromoCode.findOneAndUpdate(
+          { promoCode: newOrder.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: 1 } }
+        ),
       ]);
 
       const eventName = "newOrderCreated";
@@ -911,6 +894,10 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       PickAndCustomCart.deleteOne({ customerId }),
       customer.save(),
       CustomerTransaction.create(customerTransaction),
+      PromoCode.findOneAndUpdate(
+        { promoCode: tempOrder.billDetail.promoCodeUsed },
+        { $inc: { noOfUserUsed: 1 } }
+      ),
     ]);
 
     if (!tempOrder) {
@@ -950,7 +937,18 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         }
 
         // Remove the temporary order data from the database
-        await TemporaryOrder.deleteOne({ orderId });
+        await Promise.all([
+          TemporaryOrder.deleteOne({ orderId }),
+          ActivityLog.create({
+            userId: req.userAuth,
+            userType: req.userRole,
+            description: `Pick & Drop Order (#${
+              newOrder._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${
+              req.userAuth
+            } )`,
+          }),
+        ]);
 
         const eventName = "newOrderCreated";
 
@@ -1095,6 +1093,10 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
         TemporaryOrder.deleteOne({ orderId }),
         customerFound.save(),
         CustomerTransaction.create(updatedTransactionDetail),
+        PromoCode.findOneAndUpdate(
+          { promoCode: orderFound.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: -1 } }
+        ),
       ]);
 
       res.status(200).json({
