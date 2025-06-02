@@ -503,7 +503,7 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
 
               return {
                 ...variantType._doc,
-                discountPrice: variantDiscountPrice,
+                discountPrice: Number(variantDiscountPrice.toFixed(2)),
               };
             }
           );
@@ -2835,12 +2835,10 @@ const getFiltersFromBusinessCategory = async (req, res, next) => {
 const getMerchantTodayAvailability = async (req, res) => {
   try {
     const { merchantId } = req.query;
-    console.log("MerchantID", merchantId);
 
     const merchant = await Merchant.findById(merchantId, {
       "merchantDetail.availability": 1,
     });
-    console.log("Merchant", merchant);
 
     if (!merchant) {
       return res.status(404).json({ message: "Merchant not found" });
