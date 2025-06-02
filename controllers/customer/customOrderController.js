@@ -6,8 +6,8 @@ const Order = require("../../models/Order");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
 const Tax = require("../../models/Tax");
-const ManagerRoles = require("../../models/ManagerRoles");
-const Manager = require("../../models/Manager");
+const PromoCode = require("../../models/PromoCode");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 
 const appError = require("../../utils/appError");
 const {
@@ -19,14 +19,13 @@ const {
   deleteFromFirebase,
 } = require("../../utils/imageOperation");
 const { formatDate, formatTime } = require("../../utils/formatters");
+const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const {
   sendNotification,
   sendSocketData,
   findRolesToNotify,
 } = require("../../socket/socket");
-const CustomerTransaction = require("../../models/CustomerTransactionDetail");
-const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -578,6 +577,8 @@ const confirmCustomOrderController = async (req, res, next) => {
       paymentStatus: "Pending",
     });
 
+    if (!tempOrder) return next(appError("Error in creating temporary order"));
+
     await Promise.all([
       customer.save(),
       CustomerTransaction.create({
@@ -587,12 +588,12 @@ const confirmCustomOrderController = async (req, res, next) => {
         transactionAmount: orderAmount,
         type: "Debit",
       }),
+      PickAndCustomCart.deleteOne({ customerId }),
+      PromoCode.findOneAndUpdate(
+        { promoCode: tempOrder.billDetail.promoCodeUsed },
+        { $inc: { noOfUserUsed: 1 } }
+      ),
     ]);
-
-    if (!tempOrder) return next(appError("Error in creating temporary order"));
-
-    // Clear the cart
-    await PickAndCustomCart.deleteOne({ customerId });
 
     // Return countdown timer to client
     res.status(200).json({
@@ -630,7 +631,18 @@ const confirmCustomOrderController = async (req, res, next) => {
         }
 
         // Remove the temporary order data from the database
-        await TemporaryOrder.deleteOne({ orderId });
+        await Promise.all([
+          TemporaryOrder.deleteOne({ orderId }),
+          ActivityLog.create({
+            userId: req.userAuth,
+            userType: req.userRole,
+            description: `Custom Order (#${
+              newOrder._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${
+              req.userAuth
+            } )`,
+          }),
+        ]);
 
         const eventName = "newOrderCreated";
 
@@ -741,7 +753,13 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
       return;
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       // Remove the temporary order data from the database
-      await TemporaryOrder.deleteOne({ orderId });
+      await Promise.all([
+        TemporaryOrder.deleteOne({ orderId }),
+        PromoCode.findOneAndUpdate(
+          { promoCode: orderFound.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: -1 } }
+        ),
+      ]);
 
       res.status(200).json({ success: true, message: "Order cancelled" });
 

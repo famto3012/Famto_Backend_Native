@@ -15,6 +15,7 @@ const addBusinessCategoryController = async (req, res, next) => {
     increasedPercentage,
     merchantFilters,
     productFilters,
+    imageDisplayType,
   } = req.body;
 
   const errors = validationResult(req);
@@ -51,6 +52,7 @@ const addBusinessCategoryController = async (req, res, next) => {
       increasedPercentage,
       merchantFilters,
       productFilters,
+      imageDisplayType,
     });
 
     if (!newBusinessCategory) {
@@ -111,6 +113,7 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
       bannerImageURL: businessCategory.bannerImageURL,
       merchantFilters: businessCategory.merchantFilters,
       productFilters: businessCategory.productFilters,
+      imageDisplayType: businessCategory.imageDisplayType ?? "cover",
     };
 
     res.status(200).json({
@@ -129,6 +132,7 @@ const editBusinessCategoryController = async (req, res, next) => {
     increasedPercentage,
     merchantFilters,
     productFilters,
+    imageDisplayType,
   } = req.body;
 
   const errors = validationResult(req);
@@ -174,6 +178,7 @@ const editBusinessCategoryController = async (req, res, next) => {
         status: businessCategoryFound.status,
         merchantFilters,
         productFilters,
+        imageDisplayType,
       },
       { new: true }
     );

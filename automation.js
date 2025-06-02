@@ -8,11 +8,18 @@ const AgentWorkHistory = require("./models/AgentWorkHistory");
 const Merchant = require("./models/Merchant");
 const MerchantPayout = require("./models/MerchantPayout");
 const Product = require("./models/Product");
+const csvWriter = require("csv-writer").createObjectCsvWriter;
+const fs = require("fs");
+const path = require("path");
 
 const moment = require("moment-timezone");
 const {
   moveAppDetailToWorkHistoryAndResetForAllAgents,
 } = require("./utils/agentAppHelpers");
+const { formatDate } = require("./utils/formatters");
+const appError = require("./utils/appError");
+const Category = require("./models/Category");
+const ProductDiscount = require("./models/ProductDiscount");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -419,3 +426,144 @@ const findOrdersOfAgentsDetails = async () => {
 };
 
 // findOrdersOfAgentsDetails();
+
+// *========================================
+// *========================================
+// *========================================
+
+const prepareCSVOfAgentPayout = async (req, res, next) => {
+  try {
+    const agentIds = ["A250419", "A250428"];
+    const startDate = "2025-05-16";
+    const endDate = "2025-05-26";
+
+    const formattedStartDay = moment.tz(startDate, "Asia/Kolkata");
+    const formattedEndDay = moment.tz(endDate, "Asia/Kolkata");
+
+    // Start and end of the previous day in IST
+    const start = formattedStartDay.startOf("day").toDate();
+    const end = formattedEndDay.endOf("day").toDate();
+
+    const orders = await Order.find({
+      agentId: { $in: agentIds },
+      createdAt: { $gte: start, $lte: end },
+    }).populate("agentId", "fullName");
+
+    const formattedResponse = orders.map((order) => ({
+      agentId: order.agentId._id,
+      fullName: order.agentId.fullName,
+      workedDate: formatDate(order.createdAt),
+      distance: order.orderDetail.distance,
+      agentDistance: order.detailAddedByAgent.distanceCoveredByAgent,
+      agentEarning: order.detailAddedByAgent.agentEarning,
+    }));
+
+    const groupedResponse = formattedResponse.reduce((acc, curr) => {
+      const key = `${curr.agentId}-${curr.workedDate}`;
+
+      if (!acc[key]) {
+        acc[key] = {
+          agentId: curr.agentId,
+          fullName: curr.fullName,
+          workedDate: curr.workedDate,
+          orders: 0,
+          // agentDistance: 0,
+          agentEarning: 0,
+        };
+      }
+
+      acc[key].orders += 1;
+      // acc[key].agentDistance += curr.agentDistance;
+      acc[key].agentEarning += curr.agentEarning;
+
+      return acc;
+    }, {});
+
+    const reducedArray = Object.values(groupedResponse);
+
+    // console.log(reducedArray);
+
+    const filePath = path.join(__dirname, "sample_CSV/Agent_Payments.csv");
+
+    const csvHeaders = [
+      { id: "agentId", title: "Agent ID" },
+      { id: "fullName", title: "Full Name" },
+      { id: "workedDate", title: "Worked Date" },
+      { id: "orders", title: "Orders" },
+      { id: "agentEarning", title: "Total Earnings" },
+    ];
+
+    const writer = csvWriter({
+      path: filePath,
+      header: csvHeaders,
+    });
+
+    await writer.writeRecords(reducedArray);
+
+    res.status(200).download(filePath, "Agent_Payments.csv", (err) => {
+      if (err) {
+        next(err);
+      } else {
+        fs.unlink(filePath, (unlinkErr) => {
+          if (unlinkErr) {
+            console.error("Error deleting file:", unlinkErr);
+          }
+        });
+      }
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+// prepareCSVOfAgentPayout();
+
+// *========================================
+// *========================================
+// *========================================
+
+const findMerchantsWithoutDiscountForProducts = async () => {
+  try {
+    // Step 1: Find all products without a discount
+    const products = await Product.find({
+      $or: [{ discountId: null }, { discountId: { $exists: false } }],
+    }).select("categoryId");
+
+    // Step 2: Extract unique categoryIds
+    const categoryIds = [
+      ...new Set(products.map((p) => p.categoryId.toString())),
+    ];
+
+    // Step 3: Get all categories and extract merchantIds
+    const categories = await Category.find({
+      _id: { $in: categoryIds },
+    }).select("merchantId");
+
+    const merchantIds = categories.map((cat) => cat.merchantId.toString());
+    const uniqueMerchantIds = [...new Set(merchantIds)];
+
+    // Step 4: Get merchants that already have discounts
+    const merchantsWithDiscounts = await ProductDiscount.distinct("merchantId");
+
+    // Step 5: Filter out those merchants
+    const merchantsWithoutDiscounts = uniqueMerchantIds.filter((id) =>
+      merchantsWithDiscounts.includes(id)
+    );
+
+    console.log(merchantsWithoutDiscounts);
+
+    const merchants = await Merchant.find({
+      _id: { $in: merchantsWithoutDiscounts },
+    }).select("merchantDetail.merchantName");
+
+    console.log(
+      merchants.map((merchant) => merchant.merchantDetail.merchantName)
+    );
+  } catch (err) {
+    console.log(`Error in getting merchant list: ${err}`);
+  }
+};
+
+findMerchantsWithoutDiscountForProducts();
+
+module.exports = { prepareCSVOfAgentPayout };

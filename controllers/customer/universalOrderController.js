@@ -13,7 +13,6 @@ const Order = require("../../models/Order");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const SubscriptionLog = require("../../models/SubscriptionLog");
 const TemporaryOrder = require("../../models/TemporaryOrder");
-const NotificationSetting = require("../../models/NotificationSetting");
 
 const {
   sortMerchantsBySponsorship,
@@ -23,10 +22,6 @@ const {
   fetchCustomerAndMerchantAndCart,
   processVoiceInstructions,
   getDiscountAmountFromLoyalty,
-  calculateScheduledCartValue,
-  calculatePromoCodeDiscount,
-  applyPromoCodeDiscount,
-  populateCartDetails,
 } = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
@@ -38,11 +33,7 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
 const { geoLocation } = require("../../utils/getGeoLocation");
 
-const {
-  sendNotification,
-  sendSocketData,
-  findRolesToNotify,
-} = require("../../socket/socket");
+const { findRolesToNotify } = require("../../socket/socket");
 const {
   validateDeliveryOption,
   processHomeDeliveryDetailInApp,
@@ -55,6 +46,7 @@ const Task = require("../../models/Task");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
+const ActivityLog = require("../../models/ActivityLog");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -1722,6 +1714,15 @@ const orderPaymentController = async (req, res, next) => {
           CustomerCart.deleteOne({ customerId }),
           CustomerTransaction.create(customerTransaction),
           CustomerWalletTransaction.create(walletTransaction),
+          ActivityLog.create({
+            userId: req.userAuth,
+            userType: req.userRole,
+            description: `Scheduled order (#${
+              newOrderCreated._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${
+              req.userAuth
+            } )`,
+          }),
         ]);
 
         newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -1827,6 +1828,10 @@ const orderPaymentController = async (req, res, next) => {
           CustomerCart.deleteOne({ customerId }),
           CustomerTransaction.create(customerTransaction),
           CustomerWalletTransaction.create(walletTransaction),
+          PromoCode.findOneAndUpdate(
+            { promoCode: tempOrder.billDetail.promoCodeUsed },
+            { $inc: { noOfUserUsed: 1 } }
+          ),
         ]);
 
         // Return countdown timer to client
@@ -1887,6 +1892,15 @@ const orderPaymentController = async (req, res, next) => {
                 { $set: { orderId: newOrderCreated._id } },
                 { new: true }
               ),
+              ActivityLog.create({
+                userId: req.userAuth,
+                userType: req.userRole,
+                description: `Order (#${
+                  newOrderCreated._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${
+                  req.userAuth
+                } )`,
+              }),
             ]);
 
             const eventName = "newOrderCreated";
@@ -1987,6 +2001,10 @@ const orderPaymentController = async (req, res, next) => {
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
         CustomerTransaction.create(customerTransaction),
+        PromoCode.findOneAndUpdate(
+          { promoCode: tempOrder.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: 1 } }
+        ),
       ]);
 
       // Return countdown timer to client
@@ -2040,7 +2058,18 @@ const orderPaymentController = async (req, res, next) => {
           }
 
           // Remove the temporary order data from the database
-          await TemporaryOrder.deleteOne({ orderId });
+          await Promise.all([
+            TemporaryOrder.deleteOne({ orderId }),
+            ActivityLog.create({
+              userId: req.userAuth,
+              userType: req.userRole,
+              description: `Order (#${
+                newOrderCreated._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${
+                req.userAuth
+              } )`,
+            }),
+          ]);
 
           const eventName = "newOrderCreated";
 
@@ -2270,9 +2299,22 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       });
 
       await Promise.all([
+        PromoCode.findOneAndUpdate(
+          { promoCode: newOrderCreated.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: 1 } }
+        ),
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
         CustomerTransaction.create(customerTransaction),
+        ActivityLog.create({
+          userId: req.userAuth,
+          userType: req.userRole,
+          description: `Scheduled order (#${
+            newOrderCreated._id
+          }) from customer app by ${req?.userName || "N/A"} ( ${
+            req.userAuth
+          } )`,
+        }),
       ]);
 
       newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
@@ -2374,6 +2416,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         customer.save(),
         CustomerCart.deleteOne({ customerId }),
         CustomerTransaction.create(customerTransaction),
+        PromoCode.findOneAndUpdate(
+          { promoCode: tempOrder.billDetail.promoCodeUsed },
+          { $inc: { noOfUserUsed: 1 } }
+        ),
       ]);
 
       res.status(200).json({
@@ -2432,7 +2478,18 @@ const verifyOnlinePaymentController = async (req, res, next) => {
           }
 
           // Remove the temporary order data from the database
-          await TemporaryOrder.deleteOne({ orderId });
+          await Promise.all([
+            TemporaryOrder.deleteOne({ orderId }),
+            ActivityLog.create({
+              userId: req.userAuth,
+              userType: req.userRole,
+              description: `Order (#${
+                newOrderCreated._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${
+                req.userAuth
+              } )`,
+            }),
+          ]);
 
           const eventName = "newOrderCreated";
 
@@ -2764,83 +2821,13 @@ const getFiltersFromBusinessCategory = async (req, res, next) => {
   }
 };
 
-// const getMerchantTodayAvailability = async (req, res) => {
-//   try {
-//     const { merchantId } = req.query;
-//     console.log("MerchantID", merchantId);
-
-//     const merchant = await Merchant.findById(merchantId, {
-//       "merchantDetail.availability": 1,
-//     });
-//     console.log("Merchant", merchant);
-
-//     if (!merchant) {
-//       return res.status(404).json({ message: "Merchant not found" });
-//     }
-
-//     const availability = merchant.merchantDetail?.availability;
-
-//     if (!availability || !availability.type) {
-//       return res.status(400).json({ message: "Availability data not found" });
-//     }
-
-//     // Convert current time to IST
-//     const nowUTC = new Date();
-//     const nowIST = new Date(
-//       nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-//     );
-//     const dayIndex = nowIST.getDay(); // 0 = Sunday, 6 = Saturday
-//     const days = [
-//       "sunday",
-//       "monday",
-//       "tuesday",
-//       "wednesday",
-//       "thursday",
-//       "friday",
-//       "saturday",
-//     ];
-//     const today = days[dayIndex];
-
-//     // If full-time availability
-//     if (availability.type === "Full-time") {
-//       return res.status(200).json({
-//         type: "Full-time",
-//         day: today,
-//         status: "Open all day",
-//       });
-//     }
-
-//     // Specific-time availability
-//     const todayAvailability = availability.specificDays?.[today];
-
-//     if (!todayAvailability) {
-//       return res.status(200).json({
-//         type: "Specific-time",
-//         day: today,
-//         status: "No data for today",
-//       });
-//     }
-
-//     return res.status(200).json({
-//       type: "Specific-time",
-//       day: today,
-//       todayAvailability,
-//     });
-//   } catch (error) {
-//     console.error("Error fetching merchant availability:", error);
-//     return res.status(500).json({ message: "Server error" });
-//   }
-// };
-
 const getMerchantTodayAvailability = async (req, res) => {
   try {
     const { merchantId } = req.query;
-    console.log("MerchantID", merchantId);
 
     const merchant = await Merchant.findById(merchantId, {
       "merchantDetail.availability": 1,
     });
-    console.log("Merchant", merchant);
 
     if (!merchant) {
       return res.status(404).json({ message: "Merchant not found" });
@@ -2926,6 +2913,22 @@ const getMerchantTodayAvailability = async (req, res) => {
   }
 };
 
+const getImageDisplayType = async (req, res, next) => {
+  try {
+    const { businessCategoryId } = req.query;
+
+    const category = await BusinessCategory.findById(businessCategoryId).select(
+      "imageDisplayType"
+    );
+
+    const displayType = category?.imageDisplayType ?? "cover";
+
+    return res.status(200).json({ displayType });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   getAllBusinessCategoryController,
   homeSearchController,
@@ -2960,4 +2963,5 @@ module.exports = {
   getFiltersFromBusinessCategory,
   getMerchantTodayAvailability,
   distanceCache,
+  getImageDisplayType,
 };

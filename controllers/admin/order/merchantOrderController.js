@@ -984,7 +984,7 @@ const confirmOrderController = async (req, res, next) => {
 
       if (modelType === "Commission") {
         const { payableAmountToFamto, payableAmountToMerchant } =
-          await orderCommissionLogHelper(orderId);
+          await orderCommissionLogHelper(orderFound);
 
         let updatedCommission = {
           merchantEarnings: payableAmountToMerchant,
