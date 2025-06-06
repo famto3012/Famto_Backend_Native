@@ -92,6 +92,7 @@ const {
   getVehiclePricingDetailsController,
   initializePickAndDrop,
   getPickAndDropBill,
+  updatePickAndDropItems,
 } = require("../../controllers/customer/pickAndDropController");
 const {
   addShopController,
@@ -422,6 +423,12 @@ customerRoute.get(
   "/get-pick-and-drop-bill",
   isAuthenticated,
   getPickAndDropBill
+);
+
+customerRoute.post(
+  "/add-additional-pick-items",
+  isAuthenticated,
+  updatePickAndDropItems
 );
 
 customerRoute.post(
