@@ -1,7 +1,9 @@
 const { validationResult } = require("express-validator");
+
 const MerchantDiscount = require("../../../../models/MerchantDiscount");
-const appError = require("../../../../utils/appError");
 const ProductDiscount = require("../../../../models/ProductDiscount");
+
+const appError = require("../../../../utils/appError");
 
 // =========================
 // ========Merchant=========

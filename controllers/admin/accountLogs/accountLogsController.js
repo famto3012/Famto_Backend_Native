@@ -1,97 +1,15 @@
 const moment = require("moment");
 const path = require("path");
+const fs = require("fs");
+const csvWriter = require("csv-writer").createObjectCsvWriter;
+
 const AccountLogs = require("../../../models/AccountLogs");
 const Agent = require("../../../models/Agent");
 const Customer = require("../../../models/Customer");
 const Merchant = require("../../../models/Merchant");
+
 const appError = require("../../../utils/appError");
 const { formatDate, formatTime } = require("../../../utils/formatters");
-const csvWriter = require("csv-writer").createObjectCsvWriter;
-const fs = require("fs");
-
-// TODO: remove after finishing Panel V2
-const searchUserByRoleController = async (req, res, next) => {
-  try {
-    const { role } = req.query;
-
-    let user = await AccountLogs.find({ role });
-
-    res.status(200).json({
-      message: "Data fetched successfully",
-      data: user,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: remove after finishing Panel V2
-const searchUserByNameController = async (req, res, next) => {
-  try {
-    const { name } = req.query;
-
-    let user = await AccountLogs.find({
-      fullName: { $regex: name, $options: "i" },
-    });
-
-    res.status(200).json({
-      message: "Data fetched successfully",
-      data: user,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
-
-// TODO: remove after finishing Panel V2
-const searchUserByDateController = async (req, res, next) => {
-  try {
-    const { date } = req.query;
-
-    if (!date) {
-      return res.status(400).json({
-        message: "Date query parameter is required",
-      });
-    }
-
-    // Parse the user-provided date using moment
-    const inputDate = moment(date, moment.ISO_8601, true);
-
-    // Check if the date is valid
-    if (!inputDate.isValid()) {
-      // Attempt to convert the invalid date format to a valid format
-      const formattedDate = moment(date, "MM/DD/YYYY", true);
-
-      // Check if the conversion to a valid format was successful
-      if (!formattedDate.isValid()) {
-        return res.status(400).json({
-          message: "Invalid date format. Please use YYYY-MM-DD or MM/DD/YYYY.",
-        });
-      }
-
-      inputDate = formattedDate;
-    }
-
-    // Get the start and end of the day
-    const startOfDay = inputDate.startOf("day").toDate();
-    const endOfDay = inputDate.endOf("day").toDate();
-
-    // Query the database for records within the start and end of the day
-    let users = await AccountLogs.find({
-      createdAt: {
-        $gte: startOfDay,
-        $lte: endOfDay,
-      },
-    });
-
-    res.status(200).json({
-      message: "Data fetched successfully",
-      data: users,
-    });
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
 
 const filterUserInAccountLogs = async (req, res, next) => {
   try {
@@ -108,14 +26,15 @@ const filterUserInAccountLogs = async (req, res, next) => {
     }
 
     if (date) {
-      const formattedStartDate = new Date(date);
-      formattedStartDate.setHours(0, 0, 0, 0);
-      const formattedEndDate = new Date(date);
-      formattedEndDate.setHours(23, 59, 59, 999);
+      const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+      // Start and end of the previous day in IST
+      const startDate = formattedDay.startOf("day").toDate();
+      const endDate = formattedDay.endOf("day").toDate();
 
       filterCriteria.createdAt = {
-        $gte: formattedStartDate,
-        $lte: formattedEndDate,
+        $gte: startDate,
+        $lte: endDate,
       };
     }
 
@@ -253,9 +172,6 @@ const downloadUserCSVInAccountLogs = async (req, res, next) => {
 };
 
 module.exports = {
-  searchUserByRoleController,
-  searchUserByNameController,
-  searchUserByDateController,
   filterUserInAccountLogs,
   downloadUserCSVInAccountLogs,
   unBlockUserController,

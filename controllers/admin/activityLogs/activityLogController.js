@@ -1,4 +1,5 @@
 const ActivityLog = require("../../../models/ActivityLog");
+
 const appError = require("../../../utils/appError");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 

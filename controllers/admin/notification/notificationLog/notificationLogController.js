@@ -1,6 +1,7 @@
+const appError = require("../../../../utils/appError");
+
 const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
 const MerchantNotificationLogs = require("../../../../models/MerchantNotificationLog");
-const appError = require("../../../../utils/appError");
 
 const getAdminNotificationLogController = async (req, res, next) => {
   try {

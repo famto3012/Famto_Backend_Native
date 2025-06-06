@@ -1,13 +1,37 @@
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 
+const Agent = require("../../models/Agent");
+const Task = require("../../models/Task");
+const LoyaltyPoint = require("../../models/LoyaltyPoint");
+const NotificationSetting = require("../../models/NotificationSetting");
+const AgentNotificationLogs = require("../../models/AgentNotificationLog");
+const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
+const Customer = require("../../models/Customer");
+const Order = require("../../models/Order");
+const FcmToken = require("../../models/fcmToken");
+const Merchant = require("../../models/Merchant");
+const AgentAppCustomization = require("../../models/AgentAppCustomization");
+const ManagerRoles = require("../../models/ManagerRoles");
+const Manager = require("../../models/Manager");
+const AgentActivityLog = require("../../models/AgentActivityLog");
+const AgentTransaction = require("../../models/AgentTransaction");
+
+const {
+  sendSocketData,
+  sendNotification,
+  findRolesToNotify,
+  getUserLocationFromSocket,
+} = require("../../socket/socket");
+
+const verifyToken = require("../../utils/verifyToken");
+const { geoLocation } = require("../../utils/getGeoLocation");
 const {
   uploadToFirebase,
   deleteFromFirebase,
 } = require("../../utils/imageOperation");
 const generateToken = require("../../utils/generateToken");
 const appError = require("../../utils/appError");
-
 const {
   formatToHours,
   updateLoyaltyPoints,
@@ -19,16 +43,6 @@ const {
   updateCustomerSubscriptionCount,
 } = require("../../utils/agentAppHelpers");
 const { formatDate, formatTime } = require("../../utils/formatters");
-
-const Agent = require("../../models/Agent");
-const Task = require("../../models/Task");
-const LoyaltyPoint = require("../../models/LoyaltyPoint");
-const NotificationSetting = require("../../models/NotificationSetting");
-const AgentNotificationLogs = require("../../models/AgentNotificationLog");
-const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
-const Customer = require("../../models/Customer");
-const Order = require("../../models/Order");
-
 const {
   getDistanceFromPickupToDelivery,
 } = require("../../utils/customerAppHelpers");
@@ -37,22 +51,6 @@ const {
   verifyPayment,
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
-
-const {
-  sendSocketData,
-  sendNotification,
-  findRolesToNotify,
-  getUserLocationFromSocket,
-} = require("../../socket/socket");
-const FcmToken = require("../../models/fcmToken");
-const Merchant = require("../../models/Merchant");
-const AgentAppCustomization = require("../../models/AgentAppCustomization");
-const ManagerRoles = require("../../models/ManagerRoles");
-const Manager = require("../../models/Manager");
-const verifyToken = require("../../utils/verifyToken");
-const { geoLocation } = require("../../utils/getGeoLocation");
-const AgentActivityLog = require("../../models/AgentActivityLog");
-const AgentTransaction = require("../../models/AgentTransaction");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -1488,8 +1486,6 @@ const completeOrderController = async (req, res, next) => {
 
     const { itemTotal } = orderFound.billDetail;
 
-    console.log("Here 1");
-
     // Calculate loyalty points for customer
     const loyaltyPointCriteria = await LoyaltyPoint.findOne({ status: true });
     if (
@@ -1503,14 +1499,10 @@ const completeOrderController = async (req, res, next) => {
       );
     }
 
-    console.log("Here 2");
-
     // Calculate referral rewards for customer
     if (!customerFound?.referralDetail?.processed) {
       await processReferralRewards(customerFound, itemTotal);
     }
-
-    console.log("Here 3");
 
     // Calculate earnings for agent
     const calculatedSalary = await calculateAgentEarnings(
@@ -1518,12 +1510,8 @@ const completeOrderController = async (req, res, next) => {
       orderFound
     );
 
-    console.log("Here 4");
-
     // Update order details
     updateOrderDetails(orderFound, calculatedSalary);
-
-    console.log("Here 5");
 
     const isOrderCompleted = true;
 
@@ -1537,8 +1525,6 @@ const completeOrderController = async (req, res, next) => {
         isOrderCompleted
       ),
     ]);
-
-    console.log("Here 6");
 
     const stepperDetail = {
       by: agentFound.fullName,
@@ -1556,8 +1542,6 @@ const completeOrderController = async (req, res, next) => {
         // $inc: { taskCompleted: 1, "appDetail.orders": 1 },
       }),
     ]);
-
-    console.log("Here 7");
 
     const eventName = "orderCompleted";
 

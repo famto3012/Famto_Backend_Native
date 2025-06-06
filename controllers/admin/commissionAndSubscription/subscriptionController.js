@@ -4,10 +4,10 @@ const MerchantSubscription = require("../../../models/MerchantSubscription");
 const CustomerSubscription = require("../../../models/CustomerSubscription");
 const ActivityLog = require("../../../models/ActivityLog");
 const Tax = require("../../../models/Tax");
+const Merchant = require("../../../models/Merchant");
+const SubscriptionLog = require("../../../models/SubscriptionLog");
 
 const appError = require("../../../utils/appError");
-const SubscriptionLog = require("../../../models/SubscriptionLog");
-const Merchant = require("../../../models/Merchant");
 
 // Merchant Subscription Plan
 // ===========================

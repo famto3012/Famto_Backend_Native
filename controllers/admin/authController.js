@@ -1,17 +1,19 @@
-const appError = require("../../utils/appError");
-const generateToken = require("../../utils/generateToken");
+const ejs = require("ejs");
+const path = require("path");
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
-const Admin = require("../../models/Admin");
+const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 const { validationResult } = require("express-validator");
+
+const Admin = require("../../models/Admin");
 const Merchant = require("../../models/Merchant");
 const Manager = require("../../models/Manager");
 const Agent = require("../../models/Agent");
-const nodemailer = require("nodemailer");
-const crypto = require("crypto");
-const ejs = require("ejs");
-const path = require("path");
 const Customer = require("../../models/Customer");
-const jwt = require("jsonwebtoken");
+
+const appError = require("../../utils/appError");
+const generateToken = require("../../utils/generateToken");
 
 //For Admin and Merchant
 // =============================

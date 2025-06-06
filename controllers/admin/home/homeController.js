@@ -1,5 +1,6 @@
 const HomeScreenRealTimeData = require("../../../models/HomeScreenRealTimeData");
 const HomeScreenRevenueData = require("../../../models/HomeScreenRevenueData");
+
 const appError = require("../../../utils/appError");
 
 const getHomeScreenRealTimeData = async (req, res, next) => {

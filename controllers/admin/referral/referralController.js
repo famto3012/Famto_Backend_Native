@@ -1,5 +1,6 @@
 const Referral = require("../../../models/Referral");
 const ReferralCode = require("../../../models/ReferralCode");
+
 const appError = require("../../../utils/appError");
 
 const addOrUpdateReferralController = async (req, res, next) => {

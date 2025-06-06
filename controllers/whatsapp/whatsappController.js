@@ -1,11 +1,14 @@
 const axios = require("axios");
+
+const Admin = require("../../models/Admin");
+const Manager = require("../../models/Manager");
 const WhatsApp = require("../../models/Whatsapp");
+
 const {
   uploadFileToFirebaseForWhatsapp,
 } = require("../../utils/imageOperation");
 const { timeAgo } = require("../../utils/formatters");
-const Admin = require("../../models/Admin");
-const Manager = require("../../models/Manager");
+
 const { sendSocketData, sendNotification } = require("../../socket/socket");
 
 const verifyWebhook = (req, res) => {

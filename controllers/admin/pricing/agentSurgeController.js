@@ -1,6 +1,8 @@
 const { validationResult } = require("express-validator");
-const appError = require("../../../utils/appError");
+
 const AgentSurge = require("../../../models/AgentSurge");
+
+const appError = require("../../../utils/appError");
 
 const addAgentSurgeController = async (req, res, next) => {
   const {

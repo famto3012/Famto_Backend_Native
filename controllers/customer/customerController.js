@@ -1,6 +1,5 @@
 const { validationResult } = require("express-validator");
 const crypto = require("crypto");
-const os = require("os");
 const mongoose = require("mongoose");
 
 const Customer = require("../../models/Customer");
@@ -17,10 +16,17 @@ const NotificationSetting = require("../../models/NotificationSetting");
 const CustomerNotificationLogs = require("../../models/CustomerNotificationLog");
 const AppBanner = require("../../models/AppBanner");
 const CustomerCart = require("../../models/CustomerCart");
-const Geofence = require("../../models/Geofence");
 const Referral = require("../../models/Referral");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const scheduledPickAndCustom = require("../../models/ScheduledPickAndCustom");
+const LoyaltyPoint = require("../../models/LoyaltyPoint");
+const Banner = require("../../models/Banner");
+const PickAndCustomCart = require("../../models/PickAndCustomCart");
+const Merchant = require("../../models/Merchant");
+const Product = require("../../models/Product");
+const Category = require("../../models/Category");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 const appError = require("../../utils/appError");
 const generateToken = require("../../utils/generateToken");
@@ -43,15 +49,6 @@ const {
 const { formatDate, formatTime } = require("../../utils/formatters");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
-const LoyaltyPoint = require("../../models/LoyaltyPoint");
-const Banner = require("../../models/Banner");
-const PickAndCustomCart = require("../../models/PickAndCustomCart");
-const verifyToken = require("../../utils/verifyToken");
-const Merchant = require("../../models/Merchant");
-const Product = require("../../models/Product");
-const Category = require("../../models/Category");
-const CustomerTransaction = require("../../models/CustomerTransactionDetail");
-const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {

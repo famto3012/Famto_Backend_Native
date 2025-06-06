@@ -1,5 +1,7 @@
 const { validationResult } = require("express-validator");
+
 const PromoCode = require("../../../models/PromoCode");
+
 const appError = require("../../../utils/appError");
 const {
   uploadToFirebase,

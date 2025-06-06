@@ -2,17 +2,21 @@ const mongoose = require("mongoose");
 const turf = require("@turf/turf");
 const { validationResult } = require("express-validator");
 
-const Customer = require("../../models/Customer");
-const Product = require("../../models/Product");
-const BusinessCategory = require("../../models/BusinessCategory");
-const Merchant = require("../../models/Merchant");
-const Category = require("../../models/Category");
-const CustomerCart = require("../../models/CustomerCart");
-const PromoCode = require("../../models/PromoCode");
+const Task = require("../../models/Task");
 const Order = require("../../models/Order");
+const Product = require("../../models/Product");
+const Category = require("../../models/Category");
+const Customer = require("../../models/Customer");
+const Merchant = require("../../models/Merchant");
+const PromoCode = require("../../models/PromoCode");
+const ActivityLog = require("../../models/ActivityLog");
+const CustomerCart = require("../../models/CustomerCart");
 const ScheduledOrder = require("../../models/ScheduledOrder");
-const SubscriptionLog = require("../../models/SubscriptionLog");
 const TemporaryOrder = require("../../models/TemporaryOrder");
+const SubscriptionLog = require("../../models/SubscriptionLog");
+const BusinessCategory = require("../../models/BusinessCategory");
+const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 
 const {
   sortMerchantsBySponsorship,
@@ -29,11 +33,8 @@ const {
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
-
 const appError = require("../../utils/appError");
 const { geoLocation } = require("../../utils/getGeoLocation");
-
-const { findRolesToNotify } = require("../../socket/socket");
 const {
   validateDeliveryOption,
   processHomeDeliveryDetailInApp,
@@ -42,11 +43,9 @@ const {
   calculateBill,
   processScheduledDelivery,
 } = require("../../utils/createOrderHelpers");
-const Task = require("../../models/Task");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
-const CustomerTransaction = require("../../models/CustomerTransactionDetail");
-const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
-const ActivityLog = require("../../models/ActivityLog");
+
+const { findRolesToNotify } = require("../../socket/socket");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -1649,12 +1648,14 @@ const orderPaymentController = async (req, res, next) => {
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
       discountedAmount: cart.billDetail.discountedAmount,
+      promoCodeUsed: cart.billDetail.promoCodeUsed,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
         cart.billDetail.originalGrandTotal,
       itemTotal: cart.billDetail.itemTotal,
       addedTip: cart.billDetail.addedTip,
       subTotal: cart.billDetail.subTotal,
+      surgePrice: cart.billDetail.surgePrice,
     };
 
     let walletTransaction = {
@@ -2253,12 +2254,14 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
       discountedAmount: cart.billDetail.discountedAmount,
+      promoCodeUsed: cart.billDetail.promoCodeUsed,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
         cart.billDetail.originalGrandTotal,
       itemTotal: cart.billDetail.itemTotal,
       addedTip: cart.billDetail.addedTip,
       subTotal: cart.billDetail.subTotal,
+      surgePrice: cart.billDetail.surgePrice,
     };
 
     let customerTransaction = {

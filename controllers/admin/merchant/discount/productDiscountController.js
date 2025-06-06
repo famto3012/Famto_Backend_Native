@@ -1,8 +1,10 @@
 const { validationResult } = require("express-validator");
+
 const ProductDiscount = require("../../../../models/ProductDiscount");
-const appError = require("../../../../utils/appError");
 const Product = require("../../../../models/Product");
+
 const { formatDate } = require("../../../../utils/formatters");
+const appError = require("../../../../utils/appError");
 
 // =====================================
 // ===============Merchant==============
@@ -148,8 +150,6 @@ const editProductDiscountController = async (req, res, next) => {
       const conflictingProductNames = conflictingProducts.map(
         (product) => product.productName
       );
-
-      console.log({ conflictingProductNames });
 
       return res.status(400).json({
         success: false,

@@ -1,4 +1,6 @@
 const { validationResult } = require("express-validator");
+const moment = require("moment");
+
 const ActivityLog = require("../../../models/ActivityLog");
 const Commission = require("../../../models/Commission");
 const Customer = require("../../../models/Customer");
@@ -6,6 +8,7 @@ const CustomerSubscription = require("../../../models/CustomerSubscription");
 const Merchant = require("../../../models/Merchant");
 const MerchantSubscription = require("../../../models/MerchantSubscription");
 const SubscriptionLog = require("../../../models/SubscriptionLog");
+const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 
 const appError = require("../../../utils/appError");
 const { formatDate } = require("../../../utils/formatters");
@@ -13,7 +16,6 @@ const {
   createRazorpayOrderId,
   verifyPayment,
 } = require("../../../utils/razorpayPayment");
-const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 
 const createSubscriptionLog = async (req, res, next) => {
   const errors = validationResult(req);
@@ -675,10 +677,12 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
     const filterCriteria = { typeOfUser: "Merchant" };
 
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+      // Start and end of the previous day in IST
+      const startOfDay = formattedDay.startOf("day").toDate();
+      const endOfDay = formattedDay.endOf("day").toDate();
+
       filterCriteria.startDate = { $gte: startOfDay, $lte: endOfDay };
     }
 
@@ -956,11 +960,11 @@ const fetchAllCustomerSubscriptionLogs = async (req, res, next) => {
     const filterCriteria = { typeOfUser: "Customer" };
 
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
+      const formattedDay = moment.tz(date, "Asia/Kolkata");
 
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Start and end of the previous day in IST
+      const startOfDay = formattedDay.startOf("day").toDate();
+      const endOfDay = formattedDay.endOf("day").toDate();
 
       filterCriteria.startDate = { $gte: startOfDay, $lte: endOfDay };
     }

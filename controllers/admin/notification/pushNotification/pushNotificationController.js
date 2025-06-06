@@ -1,22 +1,24 @@
-const appError = require("../../../../utils/appError");
 const { validationResult } = require("express-validator");
-const PushNotification = require("../../../../models/PushNotification");
-const {
-  uploadToFirebase,
-  deleteFromFirebase,
-} = require("../../../../utils/imageOperation");
+
 const Customer = require("../../../../models/Customer");
 const Merchant = require("../../../../models/Merchant");
 const Agent = require("../../../../models/Agent");
-const {
-  sendNotification,
-  sendSocketData,
-} = require("../../../../socket/socket");
-const AgentNotificationLogs = require("../../../../models/AgentNotificationLog");
+const PushNotification = require("../../../../models/PushNotification");
 const AgentAnnouncementLogs = require("../../../../models/AgentAnnouncementLog");
 const CustomerNotificationLogs = require("../../../../models/CustomerNotificationLog");
 const MerchantNotificationLogs = require("../../../../models/MerchantNotificationLog");
 const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
+
+const appError = require("../../../../utils/appError");
+const {
+  uploadToFirebase,
+  deleteFromFirebase,
+} = require("../../../../utils/imageOperation");
+
+const {
+  sendNotification,
+  sendSocketData,
+} = require("../../../../socket/socket");
 
 const addPushNotificationController = async (req, res, next) => {
   const errors = validationResult(req);

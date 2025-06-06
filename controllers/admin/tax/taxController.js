@@ -1,5 +1,7 @@
 const { validationResult } = require("express-validator");
+
 const Tax = require("../../../models/Tax");
+
 const appError = require("../../../utils/appError");
 
 //Add tax

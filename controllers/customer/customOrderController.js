@@ -21,11 +21,7 @@ const {
 const { formatDate, formatTime } = require("../../utils/formatters");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
-const {
-  sendNotification,
-  sendSocketData,
-  findRolesToNotify,
-} = require("../../socket/socket");
+const { findRolesToNotify } = require("../../socket/socket");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -553,6 +549,8 @@ const confirmCustomOrderController = async (req, res, next) => {
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
       discountedAmount: cart.billDetail.discountedAmount,
+      promoCodeUsed: cart.billDetail.promoCodeUsed,
+      surgePrice: cart.billDetail.surgePrice,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
         cart.billDetail.originalGrandTotal,

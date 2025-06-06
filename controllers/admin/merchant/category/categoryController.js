@@ -1,15 +1,17 @@
+const path = require("path");
+const csvWriter = require("csv-writer").createObjectCsvWriter;
 const { validationResult } = require("express-validator");
+
 const Category = require("../../../../models/Category");
+const Product = require("../../../../models/Product");
+const Merchant = require("../../../../models/Merchant");
+const ActivityLog = require("../../../../models/ActivityLog");
+
 const appError = require("../../../../utils/appError");
 const {
   uploadToFirebase,
   deleteFromFirebase,
 } = require("../../../../utils/imageOperation");
-const path = require("path");
-const Product = require("../../../../models/Product");
-const Merchant = require("../../../../models/Merchant");
-const ActivityLog = require("../../../../models/ActivityLog");
-const csvWriter = require("csv-writer").createObjectCsvWriter;
 
 const getSelectedBusinessCategoriesOfMerchant = async (req, res, next) => {
   try {

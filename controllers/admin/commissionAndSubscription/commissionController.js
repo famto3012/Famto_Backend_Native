@@ -1,12 +1,13 @@
 const { validationResult } = require("express-validator");
+const moment = require("moment");
 
 const Commission = require("../../../models/Commission");
 const CommissionLogs = require("../../../models/CommissionLog");
 const Merchant = require("../../../models/Merchant");
-
-const appError = require("../../../utils/appError");
 const ActivityLog = require("../../../models/ActivityLog");
 const SubscriptionLog = require("../../../models/SubscriptionLog");
+
+const appError = require("../../../utils/appError");
 const { formatDate } = require("../../../utils/formatters");
 
 const addAndEditCommissionController = async (req, res, next) => {
@@ -222,11 +223,11 @@ const fetchCommissionLogs = async (req, res, next) => {
 
     // Date filter
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
+      const formattedDay = moment.tz(date, "Asia/Kolkata");
 
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
+      // Start and end of the previous day in IST
+      const startDate = formattedDay.startOf("day").toDate();
+      const endDate = formattedDay.endOf("day").toDate();
 
       filterCriteria.createdAt = {
         $gte: startDate,
@@ -287,13 +288,14 @@ const updateCommissionLogStatus = async (req, res) => {
 
     commissionLog.status = "Paid";
 
-    await commissionLog.save();
-
-    await ActivityLog.create({
-      userId: req.userAuth,
-      userType: req.userRole,
-      description: `Updated commission payment status of ${commissionLog.merchantName} (${commissionLog.merchantId}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
-    });
+    await Promise.all([
+      commissionLog.save(),
+      ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Updated commission payment status of ${commissionLog.merchantName} (${commissionLog.merchantId}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+      }),
+    ]);
 
     res.status(200).json({
       status: "success",

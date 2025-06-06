@@ -5,6 +5,8 @@ const Agent = require("../../../models/Agent");
 const Order = require("../../../models/Order");
 const Task = require("../../../models/Task");
 const AutoAllocation = require("../../../models/AutoAllocation");
+const Manager = require("../../../models/Manager");
+const ManagerRoles = require("../../../models/ManagerRoles");
 
 const {
   sendNotification,
@@ -18,8 +20,6 @@ const {
   getDistanceFromPickupToDelivery,
 } = require("../../../utils/customerAppHelpers");
 const { formatDate, formatTime } = require("../../../utils/formatters");
-const Manager = require("../../../models/Manager");
-const ManagerRoles = require("../../../models/ManagerRoles");
 
 const getTaskByIdController = async (req, res, next) => {
   try {

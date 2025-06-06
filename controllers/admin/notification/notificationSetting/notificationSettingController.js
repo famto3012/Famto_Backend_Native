@@ -1,5 +1,7 @@
-const appError = require("../../../../utils/appError");
 const { validationResult } = require("express-validator");
+
+const appError = require("../../../../utils/appError");
+
 const NotificationSetting = require("../../../../models/NotificationSetting");
 
 const addNotificationSettingController = async (req, res, next) => {
