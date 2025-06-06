@@ -66,6 +66,7 @@ const addPickUpAddressController = async (req, res, next) => {
       startDate,
       endDate,
       time,
+      item,
     } = req.body;
 
     const customerId = req.userAuth;
@@ -133,6 +134,14 @@ const addPickUpAddressController = async (req, res, next) => {
       scheduled = processSchedule(ifScheduled);
     }
 
+    let parsedItem = JSON.parse(item);
+
+    const cartItems = [];
+
+    if (parsedItem.itemName) {
+      cartItems.push(parsedItem);
+    }
+
     let updatedCartDetail = {
       pickupAddress: pickupAddress,
       pickupLocation: pickupLocation,
@@ -169,7 +178,7 @@ const addPickUpAddressController = async (req, res, next) => {
         cartFound._id,
         {
           cartDetail: updatedCartDetail,
-          items: cartFound.items,
+          items: cartItems,
         },
         {
           new: true,
@@ -179,6 +188,7 @@ const addPickUpAddressController = async (req, res, next) => {
       cartFound = await PickAndCustomCart.create({
         customerId,
         cartDetail: updatedCartDetail,
+        items: cartItems,
       });
     }
 
@@ -209,7 +219,12 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     if (!cartFound) return next(appError("Customer cart not found", 404));
 
-    const agents = await Agent.find({});
+    const totalItemWeight = cartFound.items.reduce((total, item) => {
+      const weight = item?.weight || 0;
+      return total + weight;
+    }, 0);
+
+    const agents = await Agent.find({}).select("vehicleDetail");
     const vehicleTypes = agents.flatMap((agent) =>
       agent.vehicleDetail.map((vehicle) => vehicle.type)
     );
@@ -267,7 +282,15 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
             fareAfterBaseDistance
           );
 
-          let calculatedDeliveryCharges = deliveryCharges;
+          let additionalWeightCharge = 0;
+          if (totalItemWeight > pricing.baseWeightUpto) {
+            additionalWeightCharge =
+              (totalItemWeight - pricing.baseWeightUpto) *
+              pricing.fareAfterBaseWeight;
+          }
+
+          let calculatedDeliveryCharges =
+            deliveryCharges + additionalWeightCharge;
 
           if (cartFound?.cartDetail?.numOfDays === null) {
             calculatedDeliveryCharges += surgeCharges || 0;
@@ -293,6 +316,46 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
     res.status(200).json(vehicleData);
   } catch (err) {
     next(appError(err.message));
+  }
+};
+
+const updatePickAndDropItems = async (req, res, next) => {
+  try {
+    const customerId = req.userAuth;
+
+    if (!customerId) {
+      return next(appError("Unauthorized: customer ID missing", 401));
+    }
+
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return next(appError("Invalid or empty items array", 400));
+    }
+
+    const updatedCart = await PickAndCustomCart.findOneAndUpdate(
+      {
+        customerId,
+        "cartDetail.deliveryMode": "Pick and Drop",
+      },
+      {
+        $set: {
+          items,
+        },
+      },
+      {
+        new: true,
+        upsert: false,
+      }
+    );
+
+    if (!updatedCart) {
+      return next(appError("Pick and Drop cart not found", 404));
+    }
+
+    res.status(200).json({ success: true, updatedCart });
+  } catch (err) {
+    next(appError(err.message || "Internal Server Error"));
   }
 };
 
@@ -1124,4 +1187,5 @@ module.exports = {
   cancelPickBeforeOrderCreationController,
   initializePickAndDrop,
   getPickAndDropBill,
+  updatePickAndDropItems,
 };

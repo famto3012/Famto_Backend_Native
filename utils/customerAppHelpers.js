@@ -53,6 +53,8 @@ const getDistanceFromPickupToDelivery = async (
 
     return { distanceInKM, durationInMinutes };
   }
+
+  // return { distanceInKM: 10, durationInMinutes: 15 };
 };
 
 const calculateDeliveryCharges = (
