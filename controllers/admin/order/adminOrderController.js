@@ -1,8 +1,28 @@
+const fs = require("fs");
+const path = require("path");
+const mongoose = require("mongoose");
+const puppeteer = require("puppeteer");
+const moment = require("moment-timezone");
+const csvWriter = require("csv-writer").createObjectCsvWriter;
 const { validationResult } = require("express-validator");
+
 const Customer = require("../../../models/Customer");
 const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
+const CustomerCart = require("../../../models/CustomerCart");
+const PickAndCustomCart = require("../../../models/PickAndCustomCart");
+const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
+const AgentAnnouncementLogs = require("../../../models/AgentAnnouncementLog");
+const ActivityLog = require("../../../models/ActivityLog");
+const Agent = require("../../../models/Agent");
+const Manager = require("../../../models/Manager");
+const ManagerRoles = require("../../../models/ManagerRoles");
+const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
+const Task = require("../../../models/Task");
+const AgentPricing = require("../../../models/AgentPricing");
+const AgentSurge = require("../../../models/AgentSurge");
+
 const appError = require("../../../utils/appError");
 const { formatTime, formatDate } = require("../../../utils/formatters");
 const {
@@ -16,7 +36,6 @@ const { razorpayRefund } = require("../../../utils/razorpayPayment");
 const {
   reduceProductAvailableQuantity,
 } = require("../../../utils/customerAppHelpers");
-const CustomerCart = require("../../../models/CustomerCart");
 const {
   findOrCreateCustomer,
   formattedCartItems,
@@ -34,35 +53,16 @@ const {
   clearCart,
   updateCustomerTransaction,
 } = require("../../../utils/createOrderHelpers");
-const PickAndCustomCart = require("../../../models/PickAndCustomCart");
-const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
+const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
-  formatToHours,
-  calculateAgentEarnings,
-} = require("../../../utils/agentAppHelpers");
+  sendSocketDataAndNotification,
+} = require("../../../utils/socketHelper");
+
 const {
   sendNotification,
   findRolesToNotify,
   sendSocketData,
 } = require("../../../socket/socket");
-const path = require("path");
-const csvWriter = require("csv-writer").createObjectCsvWriter;
-const fs = require("fs");
-const mongoose = require("mongoose");
-const puppeteer = require("puppeteer");
-const AgentAnnouncementLogs = require("../../../models/AgentAnnouncementLog");
-const ActivityLog = require("../../../models/ActivityLog");
-const Agent = require("../../../models/Agent");
-const Manager = require("../../../models/Manager");
-const ManagerRoles = require("../../../models/ManagerRoles");
-const {
-  sendSocketDataAndNotification,
-} = require("../../../utils/socketHelper");
-const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
-const Task = require("../../../models/Task");
-const moment = require("moment-timezone");
-const AgentPricing = require("../../../models/AgentPricing");
-const AgentSurge = require("../../../models/AgentSurge");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
   try {

@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { validationResult } = require("express-validator");
 const moment = require("moment-timezone");
+const ejs = require("ejs");
 
 const appError = require("../../../utils/appError");
 const {
@@ -16,7 +17,6 @@ const Agent = require("../../../models/Agent");
 const AccountLogs = require("../../../models/AccountLogs");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
-const ejs = require("ejs");
 const AgentAppCustomization = require("../../../models/AgentAppCustomization");
 const { sendSocketData } = require("../../../socket/socket");
 const AgentActivityLog = require("../../../models/AgentActivityLog");

@@ -1,20 +1,22 @@
 const { validationResult } = require("express-validator");
-const Product = require("../../../../models/Product");
-const appError = require("../../../../utils/appError");
-const {
-  uploadToFirebase,
-  deleteFromFirebase,
-} = require("../../../../utils/imageOperation");
-const Category = require("../../../../models/Category");
 const axios = require("axios");
 const { Readable } = require("stream");
 const csvParser = require("csv-parser");
 const path = require("path");
 const csvWriter = require("csv-writer").createObjectCsvWriter;
 const fs = require("fs");
+
+const Product = require("../../../../models/Product");
+const Category = require("../../../../models/Category");
 const BusinessCategory = require("../../../../models/BusinessCategory");
 const ActivityLog = require("../../../../models/ActivityLog");
 const Merchant = require("../../../../models/Merchant");
+
+const appError = require("../../../../utils/appError");
+const {
+  uploadToFirebase,
+  deleteFromFirebase,
+} = require("../../../../utils/imageOperation");
 
 // ------------------------------------------------------
 // ----------------For Merchant and Admin----------------

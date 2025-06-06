@@ -564,6 +564,6 @@ const findMerchantsWithoutDiscountForProducts = async () => {
   }
 };
 
-findMerchantsWithoutDiscountForProducts();
+// findMerchantsWithoutDiscountForProducts();
 
 module.exports = { prepareCSVOfAgentPayout };

@@ -1,19 +1,21 @@
-const appError = require("../../../../utils/appError");
 const { validationResult } = require("express-validator");
+
+const appError = require("../../../../utils/appError");
 const {
   deleteFromFirebase,
   uploadToFirebase,
 } = require("../../../../utils/imageOperation");
+
 const AlertNotification = require("../../../../models/AlertNotification");
 const MerchantNotificationLogs = require("../../../../models/MerchantNotificationLog");
+const CustomerNotificationLogs = require("../../../../models/CustomerNotificationLog");
+const AgentAnnouncementLogs = require("../../../../models/AgentAnnouncementLog");
+const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
+
 const {
   sendNotification,
   sendSocketData,
 } = require("../../../../socket/socket");
-const CustomerNotificationLogs = require("../../../../models/CustomerNotificationLog");
-const AgentNotificationLogs = require("../../../../models/AgentNotificationLog");
-const AgentAnnouncementLogs = require("../../../../models/AgentAnnouncementLog");
-const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
 
 const addAlertNotificationController = async (req, res, next) => {
   const errors = validationResult(req);

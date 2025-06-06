@@ -1,6 +1,8 @@
 const { validationResult } = require("express-validator");
-const appError = require("../../../utils/appError");
+
 const CustomerPricing = require("../../../models/CustomerPricing");
+
+const appError = require("../../../utils/appError");
 
 const addCustomerPricingController = async (req, res, next) => {
   const {

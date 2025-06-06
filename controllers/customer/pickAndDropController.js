@@ -431,11 +431,13 @@ const confirmPickAndDropController = async (req, res, next) => {
           cart.billDetail.discountedDeliveryCharge ||
           cart.billDetail.originalDeliveryCharge,
         discountedAmount: cart.billDetail.discountedAmount,
+        promoCodeUsed: cart.billDetail.promoCodeUsed,
         grandTotal:
           cart.billDetail.discountedGrandTotal ||
           cart.billDetail.originalGrandTotal,
         addedTip: cart.billDetail.addedTip,
         vehicleType: cart.billDetail.vehicleType,
+        surgePrice: cart.billDetail.surgePrice,
       };
 
       let walletTransaction = {
@@ -757,7 +759,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       deliveryCharge:
         cart.billDetail.discountedDeliveryCharge ||
         cart.billDetail.originalDeliveryCharge,
+      promoCodeUsed: cart.billDetail.promoCodeUsed,
       discountedAmount: cart.billDetail.discountedAmount,
+      surgePrice: cart.billDetail.surgePrice,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
         cart.billDetail.originalGrandTotal,

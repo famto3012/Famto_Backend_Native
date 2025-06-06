@@ -1,6 +1,8 @@
 const axios = require("axios");
-const appError = require("../../utils/appError");
+
 const Token = require("../../models/Token");
+
+const appError = require("../../utils/appError");
 
 const generateMapplsAuthToken = async () => {
   try {

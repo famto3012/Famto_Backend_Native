@@ -9,6 +9,8 @@ const fs = require("fs").promises;
 const AccountLogs = require("../../../models/AccountLogs");
 const Customer = require("../../../models/Customer");
 const Order = require("../../../models/Order");
+const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
+const CustomerWalletTransaction = require("../../../models/CustomerWalletTransaction");
 
 const appError = require("../../../utils/appError");
 const { formatDate, formatTime } = require("../../../utils/formatters");
@@ -16,8 +18,6 @@ const {
   uploadToFirebase,
   deleteFromFirebase,
 } = require("../../../utils/imageOperation");
-const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
-const CustomerWalletTransaction = require("../../../models/CustomerWalletTransaction");
 
 // TODO: Remove after panel V2
 const getAllCustomersController = async (req, res, next) => {
