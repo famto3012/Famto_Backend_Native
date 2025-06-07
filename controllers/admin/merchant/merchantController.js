@@ -86,7 +86,7 @@ const transformAvailabilityValues = (availability) => {
 
 //----------------------------
 // -------For Merchant--------
-//-----------------------------
+//----------------------------
 
 // Register
 const registerMerchantController = async (req, res, next) => {
@@ -1727,7 +1727,13 @@ const downloadMerchantSampleCSVController = async (req, res, next) => {
 // Download merchant CSV
 const downloadMerchantCSVController = async (req, res, next) => {
   try {
-    const { serviceable, geofence, businessCategory, name } = req.query;
+    const {
+      serviceable,
+      geofence,
+      businessCategory,
+      name,
+      subscriptionStatus,
+    } = req.query;
 
     // Build query object based on filters
     const filter = {};
@@ -1749,6 +1755,13 @@ const downloadMerchantCSVController = async (req, res, next) => {
           },
         },
       ];
+    }
+    if (subscriptionStatus && subscriptionStatus.toLowerCase() !== "all") {
+      if (subscriptionStatus.toLowerCase() === "active") {
+        filter["merchantDetail.pricing.0"] = { $exists: true };
+      } else if (subscriptionStatus.toLowerCase() === "expired") {
+        filter["merchantDetail.pricing"] = { $eq: [] };
+      }
     }
 
     // Fetch the data based on filter (get both approved and pending agents)
