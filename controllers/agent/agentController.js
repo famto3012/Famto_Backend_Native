@@ -51,6 +51,7 @@ const {
   verifyPayment,
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
+const AutoAllocation = require("../../models/AutoAllocation");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -2022,6 +2023,57 @@ const getAllNotificationsController = async (req, res, next) => {
   }
 };
 
+const getAllAgentTaskController = async (req, res, next) => {
+  try {
+    const agentId = req.userAuth;
+
+    // Set start and end of the day correctly
+    const startOfDay = new Date();
+    startOfDay.setDate(startOfDay.getDate() - 1);
+    startOfDay.setUTCHours(18, 30, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setUTCHours(18, 29, 59, 999);
+    const autoAllocation = await AutoAllocation.findOne();
+
+    // Retrieve notifications within the day for the given agent, sorted by date
+    const notifications = await AgentNotificationLogs.find({
+      agentId,
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      status: "Pending",
+    })
+      .populate("orderId", "orderDetail")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Format response
+    const formattedResponse = notifications.map((notification) => {
+      const order = notification?.orderId;
+      const deliveryAddress = order?.orderDetail?.deliveryAddress;
+
+      return {
+        orderId: order?._id || null,
+        merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
+        pickAddress: order?.orderDetail?.pickupAddress || null,
+        customerName: deliveryAddress?.fullName || null,
+        customerAddress: deliveryAddress || null,
+        agentId: agentId,
+        orderType: order?.orderDetail?.deliveryMode || null,
+        taskDate: formatDate(order?.orderDetail?.deliveryTime),
+        taskTime: formatTime(order?.orderDetail?.deliveryTime),
+        timer: autoAllocation?.expireTime || null,
+        createdAt: notification?.createdAt,
+      };
+    });
+
+    res.status(200).json({
+      message: "All task logs",
+      data: formattedResponse,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 // Get all announcements for agent
 const getAllAnnouncementsController = async (req, res, next) => {
   try {
@@ -2210,4 +2262,5 @@ module.exports = {
   getPocketBalanceForAgent,
   getTimeSlotsForAgent,
   chooseTimeSlot,
+  getAllAgentTaskController,
 };
