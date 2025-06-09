@@ -45,6 +45,7 @@ const {
   getPocketBalanceForAgent,
   getTimeSlotsForAgent,
   chooseTimeSlot,
+  getAllAgentTaskController,
 } = require("../../controllers/agent/agentController");
 const { upload } = require("../../utils/imageOperation");
 const isAuthenticated = require("../../middlewares/isAuthenticated");
@@ -306,6 +307,8 @@ agentRoute.get(
   isAuthenticated,
   getAllNotificationsController
 );
+
+agentRoute.get("/all-agent-task", isAuthenticated, getAllAgentTaskController);
 
 agentRoute.get(
   "/all-announcements",
