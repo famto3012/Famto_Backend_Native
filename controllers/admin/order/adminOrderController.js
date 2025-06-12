@@ -674,8 +674,6 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         : [orderFound.orderDetailStepper],
     };
 
-    console.log("Response:", formattedResponse);
-
     res.status(200).json({
       message: "Single order detail",
       data: formattedResponse,

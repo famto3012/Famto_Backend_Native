@@ -748,10 +748,9 @@ const calculateDeliveryChargesHelper = async ({
   let deliveryChargeForScheduledOrder = null;
   let taxAmount = null;
 
-  const itemTotal =
-    deliveryMode === "Home Delivery"
-      ? calculateItemTotal(items, scheduledDetails?.numOfDays)
-      : 0;
+  const itemTotal = ["Take Away", "Home Delivery"].includes(deliveryMode)
+    ? calculateItemTotal(items, scheduledDetails?.numOfDays)
+    : 0;
 
   if (deliveryMode === "Home Delivery") {
     const businessCategoryId = selectedBusinessCategory;

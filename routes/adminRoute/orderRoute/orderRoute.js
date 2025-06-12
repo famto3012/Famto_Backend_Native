@@ -19,6 +19,7 @@ const {
   fetchAllOrderOfMerchant,
   fetchAllScheduledOrdersOfMerchant,
   downloadCSVByMerchantController,
+  createOrderFromExternalMerchant,
 } = require("../../../controllers/admin/order/merchantOrderController");
 const {
   confirmOrderByAdminController,
@@ -41,6 +42,10 @@ const {
 const isAdmin = require("../../../middlewares/isAdmin");
 const { upload } = require("../../../utils/imageOperation");
 const isAdminOrMerchant = require("../../../middlewares/isAdminOrMerchant");
+const {
+  checkForMerchantApiKey,
+} = require("../../../middlewares/checkForMerchantApiKey");
+
 const orderRoute = express.Router();
 
 // -------------------------------------------------
@@ -144,6 +149,12 @@ orderRoute.post(
   isAuthenticated,
   isAdminOrMerchant,
   downloadOrderBillController
+);
+
+orderRoute.post(
+  "/create-external-order",
+  checkForMerchantApiKey,
+  createOrderFromExternalMerchant
 );
 
 orderRoute.put(
