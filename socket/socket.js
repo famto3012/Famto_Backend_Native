@@ -1185,6 +1185,7 @@ io.on("connection", async (socket) => {
         if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
 
         orderFound.detailAddedByAgent.distanceCoveredByAgent = distanceInKM;
+        orderFound.detailAddedByAgent.startToPickDistance = distanceInKM;
       }
 
       if (orderFound.orderDetail.deliveryMode === "Custom Order") {

@@ -424,6 +424,7 @@ const getMerchantData = async (req, res, next) => {
       fssaiNumber: merchantFound.merchantDetail.FSSAINumber || null,
       isFavourite,
       distanceWarning,
+      merchantImage: merchantFound.merchantDetail.merchantImageURL || null,
     };
 
     res.status(200).json(merchantData);
@@ -549,15 +550,15 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       if (!customer) return next(appError("Customer not found", 404));
     }
 
-    const foundGeofence = await geoLocation(latitude, longitude);
-    if (!foundGeofence) {
-      return next(appError("Geofence not found", 404));
-    }
+    // const foundGeofence = await geoLocation(latitude, longitude);
+    // if (!foundGeofence) {
+    //   return next(appError("Geofence not found", 404));
+    // }
 
     const baseCriteria = {
       isBlocked: false,
       isApproved: "Approved",
-      "merchantDetail.geofenceId": foundGeofence._id,
+      // "merchantDetail.geofenceId": foundGeofence._id,
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       "merchantDetail.location": { $exists: true, $ne: [] },
       "merchantDetail.pricing.0": { $exists: true },

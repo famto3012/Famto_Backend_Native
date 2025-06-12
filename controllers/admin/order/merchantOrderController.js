@@ -14,6 +14,9 @@ const Product = require("../../../models/Product");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
+const CustomerPricing = require("../../../models/CustomerPricing");
+const CustomerSurge = require("../../../models/CustomerSurge");
+const Tax = require("../../../models/Tax");
 
 const appError = require("../../../utils/appError");
 const { formatTime, formatDate } = require("../../../utils/formatters");
@@ -27,6 +30,8 @@ const {
 const { razorpayRefund } = require("../../../utils/razorpayPayment");
 const {
   reduceProductAvailableQuantity,
+  getDistanceFromPickupToDelivery,
+  calculateDeliveryCharges,
 } = require("../../../utils/customerAppHelpers");
 const {
   findOrCreateCustomer,
@@ -44,10 +49,12 @@ const {
   locationArraysEqual,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
-const { findRolesToNotify } = require("../../../socket/socket");
 const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
+const { geoLocation } = require("../../../utils/getGeoLocation");
+
+const { findRolesToNotify } = require("../../../socket/socket");
 
 // TODO: Remove after panel V2
 const getAllOrdersOfMerchantController = async (req, res, next) => {
@@ -2235,6 +2242,200 @@ const numberOfScheduledOrderNotViewedController = async (req, res, next) => {
   }
 };
 
+const createOrderFromExternalMerchant = async (req, res, next) => {
+  try {
+    const merchantId = req.merchantId;
+
+    const merchant = await Merchant.findById(merchantId);
+
+    if (!merchant) {
+      return next(appError("Merchant not found", 404));
+    }
+
+    const { fullName, phoneNumber, email, address, items } = req.body;
+
+    const geofence = await geoLocation(
+      address.coordinates[0],
+      address.coordinates[1],
+      next
+    );
+
+    if (!geofence) {
+      return next(appError("Customer is outside the geofence", 400));
+    }
+
+    const [customerPricing, surgePricing, customerTax] = await Promise.all([
+      CustomerPricing.findOne({
+        geofenceId: geofence._id,
+        status: true,
+      }),
+      CustomerSurge.findOne({
+        geofenceId: geofence._id,
+        status: true,
+      }),
+      Tax.findOne({
+        geofences: { $in: geofence._id },
+        status: true,
+      }),
+    ]);
+
+    if (!customerPricing) {
+      return next(appError("Customer pricing not found", 404));
+    }
+
+    let customer = await Customer.findOne({ phoneNumber });
+
+    if (!customer) {
+      await Customer.create({
+        phoneNumber,
+        email,
+        fullName,
+      });
+    }
+
+    const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      merchant.merchantDetail.location,
+      address.coordinates
+    );
+
+    const deliveryCharge = calculateDeliveryCharges(
+      distanceInKM,
+      customerPricing.baseFare,
+      customerPricing.baseDistance,
+      customerPricing.fareAfterBaseDistance
+    );
+
+    let surgeCharge = 0;
+    if (surgePricing) {
+      surgeCharge = calculateDeliveryCharges(
+        distanceInKM,
+        surgePricing.baseFare,
+        surgePricing.baseDistance,
+        surgePricing.fareAfterBaseDistance
+      );
+    }
+
+    const itemTotal = items.reduce((total, item) => {
+      return total + item.price;
+    }, 0);
+
+    let taxAmount = 0;
+    if (customerTax) {
+      const taxPercentage = customerTax.tax;
+
+      const tax =
+        (parseFloat(deliveryCharge + surgeCharge) * taxPercentage) / 100;
+
+      taxAmount = parseFloat(tax.toFixed(2));
+    }
+
+    const deliveryTime = new Date(
+      new Date().getTime() + Number(merchant?.merchantDetail?.deliveryTime) ||
+        60
+    );
+
+    const newOrder = await Order.create({
+      customerId: customer._id,
+      merchantId,
+      orderDetail: {
+        pickupLocation: merchant.merchantDetail.location,
+        pickAddress: {
+          fullName: merchant.merchantDetail.merchantName,
+          phoneNumber: merchant.phoneNumber,
+        },
+        deliveryLocation: address.coordinates,
+        deliveryAddress: address,
+        deliveryMode: "Pick and Drop",
+        deliveryOption: "On-demand",
+        distance: distanceInKM,
+        deliveryTime,
+      },
+      billDetail: {
+        deliveryChargePerDay: deliveryCharge,
+        deliveryCharge,
+        taxAmount,
+        grandTotal: itemTotal + deliveryCharge + surgeCharge + taxAmount,
+        itemTotal,
+        subTotal: itemTotal + deliveryCharge + surgeCharge,
+        surgePrice: surgeCharge,
+      },
+      items: items.map((item) => ({
+        price: item.price,
+        itemName: item.itemName,
+        quantity: item.quantity,
+      })),
+      orderDetailStepper: {
+        created: {
+          by: "External",
+          date: new Date(),
+        },
+      },
+      paymentMode: "Online-payment",
+      paymentStatus: "Completed",
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: newOrder._id,
+        deliveryTime: newOrder.orderDetail.deliveryTime,
+      },
+    });
+
+    const eventName = "newOrderCreated";
+
+    const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+    const socketData = {
+      orderId: newOrder?._id,
+      orderDetail: newOrder?.orderDetail,
+      billDetail: newOrder?.billDetail,
+      orderDetailStepper: newOrder?.orderDetailStepper?.created,
+      _id: newOrder?._id,
+      orderStatus: newOrder?.status,
+      merchantName: merchant.merchantDetail?.merchantName || "-",
+      customerName: fullName || "-",
+      deliveryMode: newOrder?.orderDetail?.deliveryMode,
+      orderDate: formatDate(newOrder?.createdAt),
+      orderTime: formatTime(newOrder?.createdAt),
+      deliveryDate: newOrder?.orderDetail?.deliveryTime
+        ? formatDate(newOrder?.orderDetail?.deliveryTime)
+        : "-",
+      deliveryTime: newOrder?.orderDetail?.deliveryTime
+        ? formatTime(newOrder?.orderDetail?.deliveryTime)
+        : "-",
+      paymentMethod: newOrder?.paymentMode,
+      deliveryOption: newOrder?.orderDetail?.deliveryOption,
+      amount: newOrder?.billDetail?.grandTotal,
+    };
+
+    const notificationData = {
+      fcm: {
+        ...data,
+        orderId: newOrder?._id,
+        customerId: newOrder?.customerId,
+      },
+    };
+
+    const userIds = {
+      admin: process.env.ADMIN_ID,
+      merchant: newOrder?.merchantId?._id,
+      customer: newOrder?.customerId,
+      driver: newOrder?.agentId,
+    };
+
+    await sendSocketDataAndNotification({
+      rolesToNotify,
+      userIds,
+      eventName,
+      notificationData,
+      socketData,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   getAllOrdersOfMerchantController,
   getAllScheduledOrdersOfMerchantController,
@@ -2257,4 +2458,5 @@ module.exports = {
   fetchAllOrderOfMerchant,
   fetchAllScheduledOrdersOfMerchant,
   downloadCSVByMerchantController,
+  createOrderFromExternalMerchant,
 };

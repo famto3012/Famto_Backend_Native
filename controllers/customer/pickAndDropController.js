@@ -301,9 +301,12 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
               deliveryCharges * cartFound.cartDetail.numOfDays;
           }
 
+          console.log({ deliveryCharges, surgeCharges });
+
           return {
             vehicleType,
             deliveryCharges: Math.round(calculatedDeliveryCharges),
+            surgeCharges,
             distance,
             duration,
           };
@@ -360,12 +363,10 @@ const updatePickAndDropItems = async (req, res, next) => {
 };
 
 // Add Items
-const addPickAndDropItemsController = async (req, res, next) => {
+const confirmPickAndDropVehicleType = async (req, res, next) => {
   try {
-    const { items, vehicleType, deliveryCharges } = req.body;
+    const { vehicleType, deliveryCharges, surgeCharges } = req.body;
     const customerId = req.userAuth;
-
-    if (items.length === 0) return next(appError("Add at-least one item", 400));
 
     // Find the cart for the customer
     const cart = await PickAndCustomCart.findOne({
@@ -373,23 +374,11 @@ const addPickAndDropItemsController = async (req, res, next) => {
       "cartDetail.deliveryMode": "Pick and Drop",
     });
 
+    if (cart.items.length === 0)
+      return next(appError("Add at-least one item", 400));
+
     // If cart doesn't exist, return an error
     if (!cart) return next(appError("Cart not found", 400));
-
-    // Clear existing items
-    cart.items = [];
-
-    // Add the new formatted items to the cart
-    const formattedItems = items.map((item) => ({
-      itemName: item.itemName,
-      length: item.length || null,
-      width: item.width || null,
-      height: item.height || null,
-      unit: item.unit,
-      weight: item.weight,
-    }));
-
-    cart.items.push(...formattedItems);
 
     const tax = await CustomerAppCustomization.findOne({}).select(
       "pickAndDropOrderCustomization"
@@ -407,10 +396,11 @@ const addPickAndDropItemsController = async (req, res, next) => {
 
     let updatedBill = {
       taxAmount,
-      originalDeliveryCharge: Math.round(deliveryCharges),
+      originalDeliveryCharge: Math.round(deliveryCharges - surgeCharges),
       vehicleType,
       originalGrandTotal: Math.round(deliveryCharges + taxAmount),
       taxAmount,
+      surgePrice: surgeCharges,
     };
 
     cart.billDetail = updatedBill;
@@ -441,16 +431,17 @@ const getPickAndDropBill = async (req, res, next) => {
 
     const billDetail = {
       deliveryCharge:
-        cart.billDetail.discountedDeliveryCharge ||
-        cart.billDetail.originalDeliveryCharge,
-      surgePrice: cart.billDetail.surgePrice,
-      addedTip: cart.billDetail.addedTip,
-      discountedAmount: cart.billDetail.discountedAmount,
-      promoCodeUsed: cart.billDetail.promoCodeUsed,
-      taxAmount: cart.billDetail.taxAmount,
-      grandTotal: cart.billDetail.discountedAmount
+        cart?.billDetail?.discountedDeliveryCharge ||
+        cart?.billDetail?.originalDeliveryCharge ||
+        null,
+      surgePrice: cart?.billDetail?.surgePrice || null,
+      addedTip: cart?.billDetail?.addedTip || null,
+      discountedAmount: cart?.billDetail?.discountedAmount || null,
+      promoCodeUsed: cart?.billDetail?.promoCodeUsed || null,
+      taxAmount: cart?.billDetail?.taxAmount || null,
+      grandTotal: cart?.billDetail?.discountedAmount
         ? cart.billDetail.discountedGrandTotal
-        : cart.billDetail.originalGrandTotal,
+        : cart?.billDetail?.originalGrandTotal,
     };
 
     res.status(200).json(billDetail);
@@ -1181,7 +1172,7 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
 module.exports = {
   addPickUpAddressController,
   getVehiclePricingDetailsController,
-  addPickAndDropItemsController,
+  confirmPickAndDropVehicleType,
   confirmPickAndDropController,
   verifyPickAndDropPaymentController,
   cancelPickBeforeOrderCreationController,

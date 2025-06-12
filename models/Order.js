@@ -280,6 +280,10 @@ const shopUpdatesSchema = mongoose.Schema(
 
 const detailAddedByAgentSchema = mongoose.Schema(
   {
+    startToPickDistance: {
+      type: Number,
+      default: null,
+    },
     agentEarning: {
       type: Number,
       default: null,

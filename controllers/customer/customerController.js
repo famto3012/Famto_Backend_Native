@@ -49,6 +49,7 @@ const {
 const { formatDate, formatTime } = require("../../utils/formatters");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
+const Task = require("../../models/Task");
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -821,6 +822,23 @@ const getSingleOrderDetailController = async (req, res, next) => {
 
     if (!orderFound) return next(appError("Order not found", 404));
 
+    let showBill = false;
+    if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+      const task = await Task.findOne({ orderId }).select("deliveryDetail");
+
+      if (!task) {
+        return next(appError("Task not found", 404));
+      }
+
+      if (
+        ["Started", "Completed", "Cancelled"].includes(
+          task.deliveryDetail.deliveryStatus
+        )
+      ) {
+        showBill = true;
+      }
+    }
+
     // Construct the response object
     const formattedResponse = {
       orderId: orderFound?._id,
@@ -846,18 +864,20 @@ const getSingleOrderDetailController = async (req, res, next) => {
       pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
       deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
       items: orderFound?.items || null,
-      billDetail: {
-        deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
-        taxAmount: orderFound?.billDetail?.taxAmount || null,
-        discountedAmount: orderFound?.billDetail?.discountedAmount || null,
-        grandTotal: orderFound?.billDetail?.grandTotal || null,
-        itemTotal: orderFound?.billDetail?.itemTotal || null,
-        addedTip: orderFound?.billDetail?.addedTip || null,
-        subTotal: orderFound?.billDetail?.subTotal || null,
-        surgePrice: orderFound?.billDetail?.surgePrice || null,
-        waitingCharge: orderFound?.billDetail?.waitingCharge || null,
-        vehicleType: orderFound?.billDetail?.vehicleType || null,
-      },
+      billDetail: showBill
+        ? {
+            deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
+            taxAmount: orderFound?.billDetail?.taxAmount || null,
+            discountedAmount: orderFound?.billDetail?.discountedAmount || null,
+            grandTotal: orderFound?.billDetail?.grandTotal || null,
+            itemTotal: orderFound?.billDetail?.itemTotal || null,
+            addedTip: orderFound?.billDetail?.addedTip || null,
+            subTotal: orderFound?.billDetail?.subTotal || null,
+            surgePrice: orderFound?.billDetail?.surgePrice || null,
+            waitingCharge: orderFound?.billDetail?.waitingCharge || null,
+            vehicleType: orderFound?.billDetail?.vehicleType || null,
+          }
+        : "Bill will be updated soon",
       orderDate: formatDate(orderFound?.createdAt),
       orderTime: formatTime(orderFound?.createdAt),
       paymentMode: orderFound?.paymentMode || null,

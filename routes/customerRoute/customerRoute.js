@@ -84,7 +84,7 @@ const {
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
-  addPickAndDropItemsController,
+  confirmPickAndDropVehicleType,
   // addTipAndApplyPromoCodeInPickAndDropController,
   confirmPickAndDropController,
   verifyPickAndDropPaymentController,
@@ -434,7 +434,7 @@ customerRoute.post(
 customerRoute.post(
   "/add-pick-and-drop-items",
   isAuthenticated,
-  addPickAndDropItemsController
+  confirmPickAndDropVehicleType
 );
 
 // customerRoute.post(

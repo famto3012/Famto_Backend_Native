@@ -81,12 +81,20 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         } else {
           totalEarning = totalDistance * agentPricing.baseDistanceFarePerKM;
 
-          if (
-            appDetail.orders >= agentPricing.minOrderNumber &&
-            appDetail.loginDuration >= agentPricing.minOrderNumber
-          ) {
-            totalEarning += agentPricing.baseFare;
-          }
+          // const minLoginDurationInMilli =
+          //   agentPricing.minLoginHours * 60 * 60 * 1000;
+          // if (
+          //   appDetail.orders >= agentPricing.minOrderNumber &&
+          //   appDetail.loginDuration >= minLoginDurationInMilli
+          // ) {
+          //   totalEarning += agentPricing.baseFare;
+          // }
+
+          const pricePerOrder =
+            agentPricing.baseFare / agentPricing.minOrderNumber;
+          const calculatedEarning = pricePerOrder * appDetail.orders;
+
+          totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
 
           if (appDetail.orders > agentPricing.minOrderNumber) {
             const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
@@ -319,8 +327,12 @@ const calculateAgentEarnings = async (agent, order) => {
     return 0;
   }
 
+  const halfDistanceFromStartToPick =
+    order?.detailAddedByAgent?.startToPickDistance / 2 ?? 0;
+
   const distanceForOrder = order?.detailAddedByAgent?.distanceCoveredByAgent
-    ? order.detailAddedByAgent.distanceCoveredByAgent
+    ? order.detailAddedByAgent.distanceCoveredByAgent -
+      halfDistanceFromStartToPick
     : order.orderDetail.distance;
 
   let orderSalary = distanceForOrder * agentPricing.baseDistanceFarePerKM;
