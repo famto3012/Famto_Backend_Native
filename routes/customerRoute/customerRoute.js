@@ -46,6 +46,7 @@ const {
   verifyCustomerAddressLocation,
   updateOrderTipController,
   applyPromoCode,
+  deleteCustomerAccount,
 } = require("../../controllers/customer/customerController");
 const {
   getAllBusinessCategoryController,
@@ -621,5 +622,7 @@ customerRoute.get(
   isAuthenticated,
   getMerchantTodayAvailability
 );
+
+customerRoute.delete("/delete-account", isAuthenticated, deleteCustomerAccount);
 
 module.exports = customerRoute;

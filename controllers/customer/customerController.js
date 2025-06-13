@@ -1967,6 +1967,36 @@ const searchProductAndMerchantController = async (req, res) => {
   }
 };
 
+const deleteCustomerAccount = async (req, res, next) => {
+  try {
+    const customerId = req.userAuth;
+
+    const result = await Customer.updateOne(
+      { _id: customerId },
+      {
+        $set: {
+          "customerDetails.homeAddress": null,
+          "customerDetails.workAddress": null,
+          "customerDetails.otherAddress": [],
+          "customerDetails.customerImageURL": null,
+          fullName: null,
+          email: null,
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0)
+      return next(appError("Customer not found", 404));
+
+    res.status(200).json({
+      success: true,
+      message: "Account deleted successfully",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   registerAndLoginController,
   setSelectedGeofence,
@@ -2006,4 +2036,5 @@ module.exports = {
   verifyCustomerAddressLocation,
   updateOrderTipController,
   applyPromoCode,
+  deleteCustomerAccount,
 };
