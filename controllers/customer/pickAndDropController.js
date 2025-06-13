@@ -13,6 +13,7 @@ const Tax = require("../../models/Tax");
 const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
+const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
 const {
