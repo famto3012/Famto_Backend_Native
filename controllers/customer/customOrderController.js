@@ -8,6 +8,7 @@ const CustomerAppCustomization = require("../../models/CustomerAppCustomization"
 const Tax = require("../../models/Tax");
 const PromoCode = require("../../models/PromoCode");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
+const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
 const {
