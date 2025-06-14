@@ -1272,14 +1272,14 @@ const getCustomerAppBannerController = async (req, res, next) => {
     }
 
     const allBanners = await AppBanner.find(matchCriteria).select(
-      "name imageUrl businessCategoryId"
+      "name imageUrl businessCategoryId merchantId"
     );
 
     const formattedResponse = await Promise.all(
       allBanners.map(async (banner) => {
-        const merchant = await Merchant.findById(banner.merchantId)
-          .select("merchantDetail.merchantName")
-          .lean();
+        const merchant = await Merchant.findById(banner.merchantId).select(
+          "merchantDetail.merchantName"
+        );
 
         return {
           name: banner.name,

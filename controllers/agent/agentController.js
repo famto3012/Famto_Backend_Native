@@ -16,6 +16,8 @@ const ManagerRoles = require("../../models/ManagerRoles");
 const Manager = require("../../models/Manager");
 const AgentActivityLog = require("../../models/AgentActivityLog");
 const AgentTransaction = require("../../models/AgentTransaction");
+const AutoAllocation = require("../../models/AutoAllocation");
+const AgentWorkHistory = require("../../models/AgentWorkHistory");
 
 const {
   sendSocketData,
@@ -51,7 +53,6 @@ const {
   verifyPayment,
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
-const AutoAllocation = require("../../models/AutoAllocation");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -940,44 +941,30 @@ const getHistoryOfAppDetailsController = async (req, res, next) => {
   try {
     const agentId = req.userAuth;
 
-    const agentFound = await Agent.findById(agentId)
-      .lean({ virtuals: true })
-      .exec();
+    const [agent, history] = await Promise.all([
+      Agent.findById(agentId).lean({ virtuals: true }).exec(),
+      AgentWorkHistory.find({ agentId }),
+    ]);
 
-    if (!agentFound) return next(appError("Agent not found", 404));
+    if (!agent) return next(appError("Agent not found", 404));
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const todayExists = agentFound.appDetailHistory.some(
-      (entry) => new Date(entry.date).toDateString() === today.toDateString()
-    );
-
-    if (!todayExists) {
-      agentFound.appDetailHistory.push({
-        date: today,
-        details: {
-          ...agentFound.appDetail,
-          orderDetail: agentFound.appDetail.orderDetail,
-        },
-      });
-    }
+    history.unshift(agent.appDetail);
 
     // Sort the appDetailHistory by date in descending order (latest date first)
-    const sortedAppDetailHistory = agentFound?.appDetailHistory?.sort(
-      (a, b) => new Date(b.date) - new Date(a.date)
+    const sortedAppDetailHistory = history?.sort(
+      (a, b) => new Date(b.workDate) - new Date(a.workDate)
     );
 
     const formattedResponse = sortedAppDetailHistory.map((history) => ({
-      date: formatDate(history.date),
+      date: formatDate(history.workDate),
       details: {
-        totalEarnings: (history.details.totalEarning || 0).toFixed(2),
-        orders: history.details.orders || 0,
-        cancelledOrders: history.details.cancelledOrders || 0,
-        totalDistance: `${(history.details.totalDistance || 0).toFixed(2)} km`,
-        loginHours: formatToHours(history.details.loginDuration) || "0:00 hr",
+        totalEarnings: (history.totalEarning || 0).toFixed(2),
+        orders: history.orders || 0,
+        cancelledOrders: history.cancelledOrders || 0,
+        totalDistance: `${(history.totalDistance || 0).toFixed(2)} km`,
+        loginHours: formatToHours(history.loginDuration) || "0:00 hr",
         orderDetail:
-          history.details.orderDetail.map((order) => ({
+          history?.orderDetail?.map((order) => ({
             orderId: order.orderId,
             deliveryMode: order.deliveryMode,
             customerName: order.customerName,
@@ -1797,8 +1784,6 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     const { orderId } = req.params;
     const agentId = req.userAuth;
 
-    console.log("data", { body: req.body });
-
     const orderFound = await Order.findOne({
       _id: orderId,
       "orderDetail.deliveryMode": "Custom Order",
@@ -1831,14 +1816,10 @@ const updateCustomOrderStatusController = async (req, res, next) => {
       location
     );
 
-    console.log("distanceInKM", distanceInKM);
-
     // Update order details
     const newDistance = distanceInKM || 0;
     const oldDistanceCoveredByAgent =
       orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
-
-    console.log("distance data", { newDistance, oldDistanceCoveredByAgent });
 
     orderFound.orderDetail.distance =
       (orderFound.orderDetail?.distance || 0) + newDistance;
