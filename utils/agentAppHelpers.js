@@ -409,7 +409,7 @@ const updateAgentDetails = async (
     deliveryMode: order?.orderDetail?.deliveryMode,
     customerName: order?.orderDetail?.deliveryAddress?.fullName,
     completedOn: new Date(),
-    grandTotal: order?.billDetail?.grandTotal,
+    grandTotal: order?.detailAddedByAgent?.agentEarning || 0,
   });
 
   const currentDay = moment.tz(new Date(), "Asia/Kolkata");

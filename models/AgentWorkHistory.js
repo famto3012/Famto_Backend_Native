@@ -62,6 +62,10 @@ const agentWorkHistorySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  distanceFromPickToDrop: {
+    type: Number,
+    default: 0,
+  },
   orderDetail: [orderDetailSchema],
   paymentSettled: {
     type: Boolean,
