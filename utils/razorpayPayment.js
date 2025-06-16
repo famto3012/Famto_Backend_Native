@@ -52,6 +52,8 @@ const razorpayRefund = async (paymentId, amount) => {
 
 const createRazorpayQrCode = async (amount) => {
   try {
+    const twoMinutesLater = Math.floor(Date.now() / 1000) + 120;
+
     const qrCode = await razorpay.qrCode.create({
       type: "upi_qr",
       usage: "single_use",
@@ -59,7 +61,7 @@ const createRazorpayQrCode = async (amount) => {
       payment_amount: amount * 100,
       description: "Amount to be paid",
       name: "FAMTO Delivery",
-      close_by: 1681615838,
+      close_by: twoMinutesLater,
     });
 
     return qrCode;
