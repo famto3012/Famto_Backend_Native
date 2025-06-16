@@ -152,7 +152,7 @@ const agentAppDetailSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
-    startToPickDistance: {
+    totalStartToPickDistance: {
       type: Number,
       default: 0,
     },
