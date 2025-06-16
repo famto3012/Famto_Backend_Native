@@ -152,6 +152,10 @@ const agentAppDetailSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    startToPickDistance: {
+      type: Number,
+      default: 0,
+    },
     cancelledOrders: {
       type: Number,
       default: 0,

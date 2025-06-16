@@ -1282,7 +1282,8 @@ const getOrderDetailController = async (req, res, next) => {
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        address: orderFound.orderDetail.deliveryAddress || "-",
+        dropAddress: orderFound.orderDetail.deliveryAddress || "-",
+        pickAddress: orderFound.orderDetail.pickupAddress || "-",
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",

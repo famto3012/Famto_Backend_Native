@@ -1,14 +1,16 @@
-const AgentNotificationLogs = require("../models/AgentNotificationLog");
-const AgentPricing = require("../models/AgentPricing");
-const AgentSurge = require("../models/AgentSurge");
-const Customer = require("../models/Customer");
-const CustomerPricing = require("../models/CustomerPricing");
-const CustomerTransaction = require("../models/CustomerTransactionDetail");
-const Referral = require("../models/Referral");
-const SubscriptionLog = require("../models/SubscriptionLog");
-const Task = require("../models/Task");
-const { calculateDeliveryCharges } = require("./customerAppHelpers");
 const moment = require("moment-timezone");
+
+const Task = require("../models/Task");
+const Referral = require("../models/Referral");
+const Customer = require("../models/Customer");
+const AgentSurge = require("../models/AgentSurge");
+const AgentPricing = require("../models/AgentPricing");
+const CustomerPricing = require("../models/CustomerPricing");
+const SubscriptionLog = require("../models/SubscriptionLog");
+const AgentNotificationLogs = require("../models/AgentNotificationLog");
+const CustomerTransaction = require("../models/CustomerTransactionDetail");
+
+const { calculateDeliveryCharges } = require("./customerAppHelpers");
 
 const formatToHours = (milliseconds) => {
   const totalMinutes = Math.floor(milliseconds / 60000);
@@ -55,6 +57,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         orders: 0,
         pendingOrders: 0,
         totalDistance: 0,
+        startToPickDistance: 0,
         cancelledOrders: 0,
         loginDuration: 0,
         orderDetail: [],
@@ -62,6 +65,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
 
       let totalEarning = appDetail?.totalEarning || 0;
       let totalDistance = appDetail?.totalDistance || 0;
+      let totalPickToDropDistance = appDetail?.startToPickDistance || 0;
 
       // Reset login duration before recalculating
       const loginStart = new Date(agent?.loginStartTime || currentTime);
@@ -79,7 +83,13 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             totalEarning = agentPricing.baseFare;
           }
         } else {
-          totalEarning = totalDistance * agentPricing.baseDistanceFarePerKM;
+          const fareForStartToPick =
+            totalPickToDropDistance * agentPricing.startToPickFarePerKM;
+          const fareForPickToDrop =
+            (totalDistance - totalPickToDropDistance) *
+            agentPricing.baseDistanceFarePerKM;
+
+          totalEarning = fareForStartToPick + fareForPickToDrop;
 
           // const minLoginDurationInMilli =
           //   agentPricing.minLoginHours * 60 * 60 * 1000;
@@ -327,21 +337,24 @@ const calculateAgentEarnings = async (agent, order) => {
     return 0;
   }
 
-  const halfDistanceFromStartToPick =
-    order?.detailAddedByAgent?.startToPickDistance / 2 ?? 0;
+  const distanceFromStartToPick =
+    order?.detailAddedByAgent?.startToPickDistance ?? 0;
 
   const distanceForOrder = order?.detailAddedByAgent?.distanceCoveredByAgent
-    ? order.detailAddedByAgent.distanceCoveredByAgent -
-      halfDistanceFromStartToPick
+    ? order.detailAddedByAgent.distanceCoveredByAgent - distanceFromStartToPick
     : order.orderDetail.distance;
 
-  let orderSalary = distanceForOrder * agentPricing.baseDistanceFarePerKM;
+  let orderSalary =
+    distanceFromStartToPick * agentPricing.startToPickFarePerKM +
+    distanceForOrder * agentPricing.baseDistanceFarePerKM;
 
   let surgePrice = 0;
 
   if (agentSurge) {
     surgePrice =
-      (distanceForOrder / agentSurge.baseDistance) * agentSurge.baseFare;
+      (order?.detailAddedByAgent?.distanceCoveredByAgent ??
+        order.orderDetail.distance / agentSurge.baseDistance) *
+      agentSurge.baseFare;
   }
 
   let totalPurchaseFare = 0;
@@ -401,7 +414,10 @@ const updateAgentDetails = async (
 
   agent.appDetail.totalEarning += parseFloat(calculatedSalary);
   agent.appDetail.totalDistance += parseFloat(
-    1 //order.detailAddedByAgent?.distanceCoveredByAgent.toFixed(2)
+    order.detailAddedByAgent?.distanceCoveredByAgent?.toFixed(2)
+  );
+  agent.appDetail.totalStartToPickDistance += parseFloat(
+    order?.detailAddedByAgent?.startToPickDistance?.toFixed(2)
   );
 
   agent.appDetail.orderDetail.push({
@@ -489,8 +505,6 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       });
     }
 
-    console.log("customerPricing", customerPricing);
-
     const {
       baseFare,
       baseDistance,
@@ -506,29 +520,19 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
       fareAfterBaseDistance
     );
 
-    console.log("deliveryCharge", deliveryCharge);
-
     const minutesWaitedAtPickup = Math.floor(
       (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
     );
-
-    console.log("minutesWaitedAtPickup", minutesWaitedAtPickup);
 
     if (minutesWaitedAtPickup > waitingTime) {
       const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
       calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
     }
 
-    console.log("Calculating");
-
     const totalTaskTime = new Date(now) - new Date(pickupStartAt);
-
-    console.log("totalTaskTime", totalTaskTime);
 
     // Convert the difference to minutes
     const diffInHours = Math.ceil(totalTaskTime / 3600000);
-
-    console.log("diffInHours", diffInHours);
 
     let calculatedPurchaseFare = 0;
 
@@ -540,8 +544,6 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
 
     const calculatedDeliveryFare =
       deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
-
-    console.log("calculatedDeliveryFare", calculatedDeliveryFare);
 
     order.billDetail.waitingCharges = calculatedDeliveryFare;
     order.billDetail.deliveryCharge = calculatedDeliveryFare;
@@ -559,7 +561,6 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
 
 module.exports = {
   formatToHours,
-  // moveAppDetailToHistoryAndResetForAllAgents,
   moveAppDetailToWorkHistoryAndResetForAllAgents,
   updateLoyaltyPoints,
   processReferralRewards,

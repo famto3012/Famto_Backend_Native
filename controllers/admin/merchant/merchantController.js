@@ -563,96 +563,96 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
   }
 };
 
-// Initiate Merchant sponsorship payment by merchant
-const sponsorshipPaymentByMerchantController = async (req, res, next) => {
-  const { sponsorshipStatus, currentPlan } = req.body;
+// // Initiate Merchant sponsorship payment by merchant
+// const sponsorshipPaymentByMerchantController = async (req, res, next) => {
+//   const { sponsorshipStatus, currentPlan } = req.body;
 
-  try {
-    const merchantId = req.userAuth;
+//   try {
+//     const merchantId = req.userAuth;
 
-    const merchantFound = await Merchant.findById(merchantId);
+//     const merchantFound = await Merchant.findById(merchantId);
 
-    if (!merchantFound) {
-      return next(appError("Merchant not found", 404));
-    }
+//     if (!merchantFound) {
+//       return next(appError("Merchant not found", 404));
+//     }
 
-    if (sponsorshipStatus) {
-      const planAmount = getPlanAmount(currentPlan);
-      const paymentResponse = await createRazorpayOrderId(planAmount);
+//     if (sponsorshipStatus) {
+//       const planAmount = getPlanAmount(currentPlan);
+//       const paymentResponse = await createRazorpayOrderId(planAmount);
 
-      if (paymentResponse.success) {
-        // Returning order details to the client for further processing
-        return res.status(200).json({
-          success: true,
-          orderId: paymentResponse.orderId,
-          amount: planAmount,
-          currentPlan,
-        });
-      } else {
-        return next(appError("Payment initialization failed", 400));
-      }
-    } else {
-      return res.status(400).json({ message: "Invalid sponsorship status" });
-    }
-  } catch (err) {
-    next(appError(err.messsage));
-  }
-};
+//       if (paymentResponse.success) {
+//         // Returning order details to the client for further processing
+//         return res.status(200).json({
+//           success: true,
+//           orderId: paymentResponse.orderId,
+//           amount: planAmount,
+//           currentPlan,
+//         });
+//       } else {
+//         return next(appError("Payment initialization failed", 400));
+//       }
+//     } else {
+//       return res.status(400).json({ message: "Invalid sponsorship status" });
+//     }
+//   } catch (err) {
+//     next(appError(err.messsage));
+//   }
+// };
 
-// Verify Merchant sponsorship payment by merchant
-const verifyPaymentByMerchantController = async (req, res, next) => {
-  const merchantId = req.userAuth;
-  const paymentDetails = req.body;
+// // Verify Merchant sponsorship payment by merchant
+// const verifyPaymentByMerchantController = async (req, res, next) => {
+//   const merchantId = req.userAuth;
+//   const paymentDetails = req.body;
 
-  try {
-    const merchantFound = await Merchant.findById(merchantId);
+//   try {
+//     const merchantFound = await Merchant.findById(merchantId);
 
-    if (!merchantFound) {
-      return next(appError("Merchant not found", 404));
-    }
+//     if (!merchantFound) {
+//       return next(appError("Merchant not found", 404));
+//     }
 
-    const isValidPayment = await verifyPayment(paymentDetails);
+//     const isValidPayment = await verifyPayment(paymentDetails);
 
-    if (isValidPayment) {
-      const { currentPlan } = paymentDetails;
-      let startDate = new Date();
+//     if (isValidPayment) {
+//       const { currentPlan } = paymentDetails;
+//       let startDate = new Date();
 
-      const existingSponsorships = merchantFound?.sponsorshipDetail;
+//       const existingSponsorships = merchantFound?.sponsorshipDetail;
 
-      // Check if there's an existing sponsorship that hasn't ended yet
-      if (existingSponsorships.length > 0) {
-        const lastSponsorship =
-          existingSponsorships[existingSponsorships.length - 1];
-        if (new Date(lastSponsorship.endDate) > new Date()) {
-          startDate = new Date(lastSponsorship.endDate);
-        }
-      }
+//       // Check if there's an existing sponsorship that hasn't ended yet
+//       if (existingSponsorships.length > 0) {
+//         const lastSponsorship =
+//           existingSponsorships[existingSponsorships.length - 1];
+//         if (new Date(lastSponsorship.endDate) > new Date()) {
+//           startDate = new Date(lastSponsorship.endDate);
+//         }
+//       }
 
-      const endDate = calculateEndDate(startDate, currentPlan);
+//       const endDate = calculateEndDate(startDate, currentPlan);
 
-      const newSponsorship = {
-        sponsorshipStatus: true,
-        currentPlan,
-        startDate,
-        endDate,
-        paymentDetails: JSON.stringify(paymentDetails),
-      };
+//       const newSponsorship = {
+//         sponsorshipStatus: true,
+//         currentPlan,
+//         startDate,
+//         endDate,
+//         paymentDetails: JSON.stringify(paymentDetails),
+//       };
 
-      merchantFound.sponsorshipDetail.push(newSponsorship);
+//       merchantFound.sponsorshipDetail.push(newSponsorship);
 
-      await merchantFound.save();
+//       await merchantFound.save();
 
-      return res.status(200).json({
-        success: true,
-        message: "Payment verified and sponsorship updated",
-      });
-    } else {
-      return next(appError("Payment verification failed", 400));
-    }
-  } catch (err) {
-    next(appError(err.message));
-  }
-};
+//       return res.status(200).json({
+//         success: true,
+//         message: "Payment verified and sponsorship updated",
+//       });
+//     } else {
+//       return next(appError("Payment verification failed", 400));
+//     }
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 //----------------------------
 // ------For Admin Panel------
@@ -850,6 +850,12 @@ const rejectRegistrationController = async (req, res, next) => {
       return next(appError("Merchant not found", 404));
     }
 
+    await Merchant.findByIdAndDelete(req.params.merchantId);
+
+    res.status(200).json({
+      message: "Declined merchant registration",
+    });
+
     // Send email with message
     const rejectionTemplatePath = path.join(
       __dirname,
@@ -877,12 +883,6 @@ const rejectRegistrationController = async (req, res, next) => {
       to: merchantFound.email,
       subject: "Registration rejection",
       html: htmlContent,
-    });
-
-    await Merchant.findByIdAndDelete(req.params.merchantId);
-
-    res.status(200).json({
-      message: "Declined merchant registration",
     });
   } catch (err) {
     next(appError(err.message));
@@ -2255,8 +2255,8 @@ module.exports = {
   editMerchantProfileController,
   changeMerchantStatusByMerchantController,
   updateMerchantDetailsByMerchantController,
-  sponsorshipPaymentByMerchantController,
-  verifyPaymentByMerchantController,
+  // sponsorshipPaymentByMerchantController,
+  // verifyPaymentByMerchantController,
   updateMerchantDetailsController,
   searchMerchantForOrderController,
   getRatingsAndReviewsByCustomerController,
