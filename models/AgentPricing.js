@@ -14,6 +14,10 @@ const agentPricingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    startToPickFarePerKM: {
+      type: Number,
+      required: true,
+    },
     waitingFare: {
       type: Number,
       default: null,

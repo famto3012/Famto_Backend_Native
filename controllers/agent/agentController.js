@@ -1,23 +1,23 @@
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 
-const Agent = require("../../models/Agent");
 const Task = require("../../models/Task");
+const Agent = require("../../models/Agent");
+const Order = require("../../models/Order");
+const Manager = require("../../models/Manager");
+const Customer = require("../../models/Customer");
+const FcmToken = require("../../models/fcmToken");
+const Merchant = require("../../models/Merchant");
 const LoyaltyPoint = require("../../models/LoyaltyPoint");
+const ManagerRoles = require("../../models/ManagerRoles");
+const AutoAllocation = require("../../models/AutoAllocation");
+const AgentActivityLog = require("../../models/AgentActivityLog");
+const AgentTransaction = require("../../models/AgentTransaction");
+const AgentWorkHistory = require("../../models/AgentWorkHistory");
 const NotificationSetting = require("../../models/NotificationSetting");
 const AgentNotificationLogs = require("../../models/AgentNotificationLog");
 const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
-const Customer = require("../../models/Customer");
-const Order = require("../../models/Order");
-const FcmToken = require("../../models/fcmToken");
-const Merchant = require("../../models/Merchant");
 const AgentAppCustomization = require("../../models/AgentAppCustomization");
-const ManagerRoles = require("../../models/ManagerRoles");
-const Manager = require("../../models/Manager");
-const AgentActivityLog = require("../../models/AgentActivityLog");
-const AgentTransaction = require("../../models/AgentTransaction");
-const AutoAllocation = require("../../models/AutoAllocation");
-const AgentWorkHistory = require("../../models/AgentWorkHistory");
 
 const {
   sendSocketData,

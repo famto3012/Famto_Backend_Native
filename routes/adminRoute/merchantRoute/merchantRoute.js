@@ -255,20 +255,20 @@ merchantRoute.post(
 );
 
 //Sponsorship payment
-merchantRoute.post(
-  "/admin/sponsorship-payment/:merchantId",
-  isAuthenticated,
-  isAdmin,
-  sponsorshipPaymentController
-);
+// merchantRoute.post(
+//   "/admin/sponsorship-payment/:merchantId",
+//   isAuthenticated,
+//   isAdmin,
+//   sponsorshipPaymentController
+// );
 
-//Verify sponsorship payment
-merchantRoute.post(
-  "/admin/verify-payment/:merchantId",
-  isAuthenticated,
-  isAdmin,
-  verifyPaymentController
-);
+// //Verify sponsorship payment
+// merchantRoute.post(
+//   "/admin/verify-payment/:merchantId",
+//   isAuthenticated,
+//   isAdmin,
+//   verifyPaymentController
+// );
 
 merchantRoute.put(
   "/admin/block-merchant/:merchantId",

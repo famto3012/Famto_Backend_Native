@@ -1,4 +1,5 @@
 const axios = require("axios");
+
 const Tax = require("../models/Tax");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
@@ -6,6 +7,8 @@ const Merchant = require("../models/Merchant");
 const Customer = require("../models/Customer");
 const Referral = require("../models/Referral");
 const FcmToken = require("../models/fcmToken");
+const CustomerCart = require("../models/CustomerCart");
+const LoyaltyPoint = require("../models/LoyaltyPoint");
 const ReferralCode = require("../models/ReferralCode");
 const CustomerSurge = require("../models/CustomerSurge");
 const ScheduledOrder = require("../models/ScheduledOrder");
@@ -15,11 +18,9 @@ const ScheduledPickAndCustom = require("../models/ScheduledPickAndCustom");
 const MerchantNotificationLogs = require("../models/MerchantNotificationLog");
 
 const appError = require("./appError");
-const LoyaltyPoint = require("../models/LoyaltyPoint");
-const CustomerCart = require("../models/CustomerCart");
+
 const { deleteFromFirebase, uploadToFirebase } = require("./imageOperation");
-const ManagerRoles = require("../models/ManagerRoles");
-const Manager = require("../models/Manager");
+
 const { formatDate, formatTime } = require("./formatters");
 
 // Helper function to sort merchants by sponsorship
@@ -36,6 +37,21 @@ const getDistanceFromPickupToDelivery = async (
   deliveryCoordinates,
   profile = "biking"
 ) => {
+  if (pickupCoordinates.length !== 2 || deliveryCoordinates.length !== 2) {
+    throw new Error("Invalid coordinates to find the distance");
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    const getRandomFloat = (min, max) => {
+      return Math.random() * (max - min) + min;
+    };
+
+    return {
+      distanceInKM: getRandomFloat(2, 10),
+      durationInMinutes: getRandomFloat(5.5, 30),
+    };
+  }
+
   const { data } = await axios.get(
     `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${pickupCoordinates[1]},${pickupCoordinates[0]};${deliveryCoordinates[1]},${deliveryCoordinates[0]}`
   );
@@ -53,8 +69,6 @@ const getDistanceFromPickupToDelivery = async (
 
     return { distanceInKM, durationInMinutes };
   }
-
-  // return { distanceInKM: 10, durationInMinutes: 15 };
 };
 
 const calculateDeliveryCharges = (

@@ -7,9 +7,9 @@ const nodemailer = require("nodemailer");
 const { validationResult } = require("express-validator");
 
 const Admin = require("../../models/Admin");
-const Merchant = require("../../models/Merchant");
-const Manager = require("../../models/Manager");
 const Agent = require("../../models/Agent");
+const Manager = require("../../models/Manager");
+const Merchant = require("../../models/Merchant");
 const Customer = require("../../models/Customer");
 
 const appError = require("../../utils/appError");
