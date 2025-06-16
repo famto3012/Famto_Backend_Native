@@ -65,7 +65,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
 
       let totalEarning = appDetail?.totalEarning || 0;
       let totalDistance = appDetail?.totalDistance || 0;
-      let totalPickToDropDistance = appDetail?.startToPickDistance || 0;
+      let totalStartToPickDistance = appDetail?.totalStartToPickDistance || 0;
 
       // Reset login duration before recalculating
       const loginStart = new Date(agent?.loginStartTime || currentTime);
@@ -84,9 +84,9 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           }
         } else {
           const fareForStartToPick =
-            totalPickToDropDistance * agentPricing.startToPickFarePerKM;
+            totalStartToPickDistance * agentPricing.startToPickFarePerKM;
           const fareForPickToDrop =
-            (totalDistance - totalPickToDropDistance) *
+            (totalDistance - totalStartToPickDistance) *
             agentPricing.baseDistanceFarePerKM;
 
           totalEarning = fareForStartToPick + fareForPickToDrop;
@@ -134,10 +134,11 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       historyDocuments.push({
         agentId: agent._id,
         workDate: lastDay,
-        totalEarning: totalEarning,
+        totalEarning: Number(totalEarning.toFixed(2)),
         orders: appDetail.orders,
         pendingOrders: appDetail.pendingOrders,
         totalDistance: appDetail.totalDistance,
+        totalDistanceFromPickToDrop: totalStartToPickDistance,
         cancelledOrders: appDetail.cancelledOrders,
         loginDuration: appDetail.loginDuration,
         paymentSettled: false,
