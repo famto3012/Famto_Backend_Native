@@ -228,13 +228,6 @@ const agentLoginController = async (req, res, next) => {
       });
     }
 
-    // Handling FCM token
-    await FcmToken.findOneAndUpdate(
-      { userId: agentFound._id },
-      { token: fcmToken },
-      { upsert: true, new: true }
-    );
-
     const refreshToken = generateToken(
       agentFound._id,
       agentFound.role,
@@ -248,7 +241,16 @@ const agentLoginController = async (req, res, next) => {
       "2hr"
     );
 
-    await agentFound.save();
+    agentFound.refreshToken = refreshToken;
+
+    await Promise.all([
+      FcmToken.findOneAndUpdate(
+        { userId: agentFound._id },
+        { token: fcmToken },
+        { upsert: true, new: true }
+      ),
+      agentFound.save(),
+    ]);
 
     res.status(200).json({
       message: "Agent Login successful",

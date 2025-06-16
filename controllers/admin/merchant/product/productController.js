@@ -519,6 +519,7 @@ const editVariantController = async (req, res, next) => {
         };
       });
     } else {
+      console.log("Here");
       const variantTypePresent = variant.variantTypes;
 
       variant.variantTypes = variantTypes.map((variant) => {
@@ -530,7 +531,7 @@ const editVariantController = async (req, res, next) => {
         );
 
         // If found, keep variant.price; otherwise, calculate dynamically
-        price = existingVariant
+        price = !existingVariant
           ? Math.round(variant.costPrice * (1 + increasedPercentage / 100))
           : variant.price;
 
@@ -539,6 +540,8 @@ const editVariantController = async (req, res, next) => {
           price,
         };
       });
+
+      console.log(variant.variantTypes);
     }
 
     // Save the updated product
@@ -559,7 +562,7 @@ const editVariantController = async (req, res, next) => {
       },
     });
   } catch (err) {
-    next(appError("Failed to edit variant", 500));
+    next(appError(err.message, 500));
   }
 };
 

@@ -41,7 +41,6 @@ const getDistanceFromPickupToDelivery = async (
     throw new Error("Invalid coordinates to find the distance");
   }
 
-  console.log("NODE_ENV is", process.env.NODE_ENV);
   if (process.env.NODE_ENV === "development") {
     const getRandomFloat = (min, max) => {
       const random = Math.random() * (max - min) + min;
