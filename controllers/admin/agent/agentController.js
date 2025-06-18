@@ -865,8 +865,12 @@ const filterAgentPayoutController = async (req, res, next) => {
     ]);
 
     const formattedResponse = histories?.map((history) => {
+      const cashInHand = history?.agentId?.workStructure?.cashInHand || 0;
+      const deduction = history?.deduction || 0;
+
       const calculatedEarning = (
-        history.totalEarning - history?.agentId?.workStructure?.cashInHand || 0
+        history.totalEarning -
+        (cashInHand + deduction)
       ).toFixed(2);
 
       return {
@@ -879,6 +883,8 @@ const filterAgentPayoutController = async (req, res, next) => {
         calculatedEarning,
         workDate: formatDate(history.workDate),
         totalEarning: history.totalEarning?.toFixed(2),
+        deduction: history.deduction?.toFixed(2) || "0.00",
+        totalSurge: history.totalSurge?.toFixed(2) || "0.00",
         orders: history.orders,
         pendingOrders: history.pendingOrders,
         totalDistance: history.totalDistance?.toFixed(2),
@@ -894,6 +900,34 @@ const filterAgentPayoutController = async (req, res, next) => {
       totalDocuments: totalCount,
       data: formattedResponse,
     });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+const updatePayoutDeduction = async (req, res, next) => {
+  try {
+    const { agentId, detailId } = req.params;
+    const { deductionAmount } = req.body;
+
+    const paymentDetail = await AgentWorkHistory.findOne({
+      _id: detailId,
+      agentId,
+    });
+
+    if (!paymentDetail) {
+      return next(appError("Payment detail not found", 404));
+    }
+
+    if (paymentDetail.paymentSettled) {
+      return next(appError("Payment already processed", 400));
+    }
+
+    paymentDetail.deduction = Number(deductionAmount);
+
+    await paymentDetail.save();
+
+    res.status(200).json({ success: true, message: "Deduction updated" });
   } catch (err) {
     next(appError(err.message));
   }
@@ -1148,8 +1182,12 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
         (agent) => String(agent._id) === String(history.agentId._id)
       );
 
+      const cashInHand = agentData?.workStructure?.cashInHand || 0;
+      const deduction = history?.deduction || 0;
+
       const calculatedEarning = (
-        history.totalEarning - (agentData?.workStructure?.cashInHand || 0)
+        history.totalEarning -
+        (cashInHand + deduction)
       ).toFixed(2);
 
       return {
@@ -1161,6 +1199,8 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
         calculatedEarning,
         workDate: formatDate(history.workDate),
         totalEarning: history.totalEarning?.toFixed(2),
+        deduction: history.deduction?.toFixed(2),
+        totalSurge: history.totalSurge?.toFixed(2),
         orders: history.orders,
         pendingOrders: history.pendingOrders,
         totalDistance: history.totalDistance?.toFixed(2),
@@ -1187,6 +1227,8 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
       { id: "loginHours", title: "Login Hours" },
       { id: "cashInHand", title: "Cash In Hand" },
       { id: "totalEarning", title: "Total Earnings" },
+      { id: "deduction", title: "Total Deductions" },
+      { id: "totalSurge", title: "Total Surge" },
       { id: "calculatedEarning", title: "Adjusted Payment" },
       { id: "paymentSettled", title: "Payment Settled" },
       { id: "accountHolderName", title: "Account Holder Name" },
@@ -1281,4 +1323,5 @@ module.exports = {
   downloadAgentCSVController,
   downloadAgentPayoutCSVController,
   updateVehicleDetailController,
+  updatePayoutDeduction,
 };

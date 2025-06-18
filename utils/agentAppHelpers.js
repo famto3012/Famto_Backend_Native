@@ -54,6 +54,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
     for (const agent of agents) {
       const appDetail = agent.appDetail || {
         totalEarning: 0,
+        totalSurge: 0,
+        deduction: 0,
         orders: 0,
         pendingOrders: 0,
         totalDistance: 0,
@@ -64,6 +66,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       };
 
       let totalEarning = appDetail?.totalEarning || 0;
+      let totalSurge = appDetail?.totalSurge || 0;
       let totalDistance = appDetail?.totalDistance || 0;
       let totalStartToPickDistance = appDetail?.totalStartToPickDistance || 0;
 
@@ -89,7 +92,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             (totalDistance - totalStartToPickDistance) *
             agentPricing.baseDistanceFarePerKM;
 
-          totalEarning = fareForStartToPick + fareForPickToDrop;
+          totalEarning = fareForStartToPick + fareForPickToDrop + totalSurge;
 
           // const minLoginDurationInMilli =
           //   agentPricing.minLoginHours * 60 * 60 * 1000;
@@ -135,6 +138,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         agentId: agent._id,
         workDate: lastDay,
         totalEarning: Number(totalEarning.toFixed(2)),
+        totalSurge: Number(totalSurge.toFixed(2)),
+        deduction: appDetail?.deduction ?? 0,
         orders: appDetail.orders,
         pendingOrders: appDetail.pendingOrders,
         totalDistance: appDetail.totalDistance,
@@ -149,6 +154,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       const update = {
         $set: {
           "appDetail.totalEarning": 0,
+          "appDetail.totalSurge": 0,
+          "appDetail.deduction": 0,
           "appDetail.orders": 0,
           "appDetail.pendingOrders": 0,
           "appDetail.totalDistance": 0,
@@ -375,10 +382,14 @@ const calculateAgentEarnings = async (agent, order) => {
     }
   }
 
-  const totalEarnings = orderSalary + totalPurchaseFare + surgePrice;
+  const totalEarnings = orderSalary;
+  const totalSurge = surgePrice + totalPurchaseFare;
 
   // Use Number to ensure it's a number with two decimal places
-  return Number(totalEarnings?.toFixed(2));
+  return {
+    calculatedSalary: Number(totalEarnings?.toFixed(2)),
+    calculatedSurge: Number(totalSurge?.toFixed(2)),
+  };
 };
 
 const updateOrderDetails = (order, calculatedSalary) => {
@@ -405,6 +416,7 @@ const updateAgentDetails = async (
   agent,
   order,
   calculatedSalary,
+  calculatedSurge,
   isOrderCompleted
 ) => {
   if (isOrderCompleted) {
@@ -420,6 +432,7 @@ const updateAgentDetails = async (
   agent.appDetail.totalStartToPickDistance += parseFloat(
     order?.detailAddedByAgent?.startToPickDistance?.toFixed(2)
   );
+  agent.appDetail.totalSurge += parseFloat(calculatedSurge);
 
   agent.appDetail.orderDetail.push({
     orderId: order._id,

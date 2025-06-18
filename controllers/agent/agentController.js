@@ -1504,7 +1504,7 @@ const completeOrderController = async (req, res, next) => {
     }
 
     // Calculate earnings for agent
-    const calculatedSalary = await calculateAgentEarnings(
+    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
       agentFound,
       orderFound
     );
@@ -1521,6 +1521,7 @@ const completeOrderController = async (req, res, next) => {
         agentFound,
         orderFound,
         calculatedSalary,
+        calculatedSurge,
         isOrderCompleted
       ),
     ]);

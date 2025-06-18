@@ -42,6 +42,14 @@ const agentWorkHistorySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  totalSurge: {
+    type: Number,
+    default: 0,
+  },
+  deduction: {
+    type: Number,
+    default: 0,
+  },
   orders: {
     type: Number,
     default: 0,
