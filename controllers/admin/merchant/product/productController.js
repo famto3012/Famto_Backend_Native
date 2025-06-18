@@ -464,14 +464,14 @@ const addVariantToProductController = async (req, res, next) => {
     // Add the new variant to the product's variants array
     product.variants.push(newVariant);
 
-    // Save the updated product
-    await product.save();
-
-    await ActivityLog.create({
-      userId: req.userAuth,
-      userType: req.userRole,
-      description: `Variants added to product (${product.productName}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
-    });
+    await Promise.all([
+      await product.save(),
+      await ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Variants added to product (${product.productName}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+      }),
+    ]);
 
     res.status(201).json({
       message: "Variant added successfully",
@@ -486,8 +486,6 @@ const editVariantController = async (req, res, next) => {
   try {
     const { productId, variantId } = req.params;
     const { variantName, variantTypes } = req.body;
-
-    console.log(req.body);
 
     const product = await Product.findById(productId);
     if (!product) return next(appError("Product not found", 404));
@@ -519,7 +517,6 @@ const editVariantController = async (req, res, next) => {
         };
       });
     } else {
-      console.log("Here");
       const variantTypePresent = variant.variantTypes;
 
       variant.variantTypes = variantTypes.map((variant) => {
@@ -540,19 +537,16 @@ const editVariantController = async (req, res, next) => {
           price,
         };
       });
-
-      console.log(variant.variantTypes);
     }
 
-    // Save the updated product
-    await product.save();
-
-    // Log the activity
-    await ActivityLog.create({
-      userId: req.userAuth,
-      userType: req.userRole,
-      description: `Variants of product (${product.productName}) were edited by ${req.userRole} (${req.userName} - ${req.userAuth})`,
-    });
+    await Promise.all([
+      product.save(),
+      ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Variants of product (${product.productName}) were edited by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+      }),
+    ]);
 
     res.status(200).json({
       message: "Variant updated successfully",
