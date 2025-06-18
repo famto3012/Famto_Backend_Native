@@ -882,6 +882,8 @@ const filterAgentPayoutController = async (req, res, next) => {
         orders: history.orders,
         pendingOrders: history.pendingOrders,
         totalDistance: history.totalDistance?.toFixed(2),
+        totalDistanceFromPickToDrop:
+          history?.totalDistanceFromPickToDrop?.toFixed(2) || "0.00",
         cancelledOrders: history.cancelledOrders,
         loginHours: formatToHours(history.loginDuration),
         paymentSettled: history.paymentSettled,
