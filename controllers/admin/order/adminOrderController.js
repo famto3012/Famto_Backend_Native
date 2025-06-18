@@ -22,6 +22,7 @@ const CustomerTransaction = require("../../../models/CustomerTransactionDetail")
 const Task = require("../../../models/Task");
 const AgentPricing = require("../../../models/AgentPricing");
 const AgentSurge = require("../../../models/AgentSurge");
+const AgentNotificationLogs = require("../../../models/AgentNotificationLog");
 
 const appError = require("../../../utils/appError");
 const { formatTime, formatDate } = require("../../../utils/formatters");
@@ -2405,13 +2406,23 @@ const markOrderAsCancelled = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
-    const order = await Order.findById(orderId);
+    const [order, task, notification] = await Promise.all([
+      Order.findById(orderId),
+      Task.findOne({ orderId }),
+      AgentNotificationLogs.findOne({ orderId, status: "Accepted" }),
+    ]);
 
     if (!order) return next(appError("Order not found", 404));
+    if (!task) return next(appError("Task not found", 404));
+    if (!notification) return next(appError("Notification not found", 404));
 
     order.status = "Cancelled";
+    task.taskStatus = "Cancelled";
+    task.pickupDetail.pickupStatus = "Cancelled";
+    task.deliveryDetail.deliveryStatus = "Cancelled";
+    notification.status = "Cancelled";
 
-    await order.save();
+    await Promise.all([order.save(), task.save(), notification.save()]);
 
     res.status(200).json({
       success: true,

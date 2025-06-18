@@ -183,75 +183,75 @@ app.use("/api/v1/token", tokenRoute);
 // =====================
 app.use("/api/v1/whatsapp", whatsappRoute);
 
-// Schedule the task to run four times daily for deleting expired plans of Merchants and customer
-cron.schedule("0 6,12,18,0 * * *", async () => {
-  await Promise.all([
-    deleteExpiredSponsorshipPlans(),
-    deleteExpiredSubscriptionPlans(),
-  ]);
-});
+// // Schedule the task to run four times daily for deleting expired plans of Merchants and customer
+// cron.schedule("0 6,12,18,0 * * *", async () => {
+//   await Promise.all([
+//     deleteExpiredSponsorshipPlans(),
+//     deleteExpiredSubscriptionPlans(),
+//   ]);
+// });
 
-// Mid night cron jobs
-cron.schedule("30 18 * * *", async () => {
-  const now = new Date();
+// // Mid night cron jobs
+// cron.schedule("30 18 * * *", async () => {
+//   const now = new Date();
 
-  await Promise.all([
-    moveAppDetailToWorkHistoryAndResetForAllAgents(),
-    preparePayoutForMerchant(),
-    updateOneDayLoyaltyPointEarning(),
-    fetchPerDayRevenue(now),
-    fetchMerchantDailyRevenue(now),
-    generateMapplsAuthToken(),
-    resetStatusManualToggleForAllMerchants(),
-    resetAllAgentTaskHelper(),
-    deleteOldLoyaltyPoints(),
-    deleteOldActivityLogs(),
-    removeOldNotifications(),
-    removeExpiredMerchantDiscounts(),
-    removeExpiredProductDiscount(),
-    removeExpiredPromoCode(),
-    deleteOldLogs(),
-  ]);
-});
+//   await Promise.all([
+//     moveAppDetailToWorkHistoryAndResetForAllAgents(),
+//     preparePayoutForMerchant(),
+//     updateOneDayLoyaltyPointEarning(),
+//     fetchPerDayRevenue(now),
+//     fetchMerchantDailyRevenue(now),
+//     generateMapplsAuthToken(),
+//     resetStatusManualToggleForAllMerchants(),
+//     resetAllAgentTaskHelper(),
+//     deleteOldLoyaltyPoints(),
+//     deleteOldActivityLogs(),
+//     removeOldNotifications(),
+//     removeExpiredMerchantDiscounts(),
+//     removeExpiredProductDiscount(),
+//     removeExpiredPromoCode(),
+//     deleteOldLogs(),
+//   ]);
+// });
 
-// Cron jobs for every minutes
-cron.schedule("* * * * *", async () => {
-  deleteExpiredConversationsAndMessages();
-  populateUserSocketMap();
+// // Cron jobs for every minutes
+// cron.schedule("* * * * *", async () => {
+//   deleteExpiredConversationsAndMessages();
+//   populateUserSocketMap();
 
-  const now = new Date();
+//   const now = new Date();
 
-  const fiveMinutesBefore = new Date(now.getTime() - 5 * 60 * 1000);
-  const fiveMinutesAfter = new Date(now.getTime() + 5 * 60 * 1000);
+//   const fiveMinutesBefore = new Date(now.getTime() - 5 * 60 * 1000);
+//   const fiveMinutesAfter = new Date(now.getTime() + 5 * 60 * 1000);
 
-  // Universal Order
-  const universalScheduledOrders = await ScheduledOrder.find({
-    status: "Pending",
-    startDate: { $lte: now },
-    endDate: { $gte: now },
-    time: { $gte: fiveMinutesBefore, $lte: fiveMinutesAfter },
-  });
+//   // Universal Order
+//   const universalScheduledOrders = await ScheduledOrder.find({
+//     status: "Pending",
+//     startDate: { $lte: now },
+//     endDate: { $gte: now },
+//     time: { $gte: fiveMinutesBefore, $lte: fiveMinutesAfter },
+//   });
 
-  if (universalScheduledOrders.length) {
-    for (const scheduledOrder of universalScheduledOrders) {
-      await createOrdersFromScheduled(scheduledOrder);
-    }
-  }
+//   if (universalScheduledOrders.length) {
+//     for (const scheduledOrder of universalScheduledOrders) {
+//       await createOrdersFromScheduled(scheduledOrder);
+//     }
+//   }
 
-  // Pick and Drop order
-  const pickAndDropScheduledOrders = await scheduledPickAndCustom.find({
-    status: "Pending",
-    startDate: { $lte: now },
-    endDate: { $gte: now },
-    time: { $gte: fiveMinutesBefore, $lte: fiveMinutesAfter },
-  });
+//   // Pick and Drop order
+//   const pickAndDropScheduledOrders = await scheduledPickAndCustom.find({
+//     status: "Pending",
+//     startDate: { $lte: now },
+//     endDate: { $gte: now },
+//     time: { $gte: fiveMinutesBefore, $lte: fiveMinutesAfter },
+//   });
 
-  if (pickAndDropScheduledOrders.length) {
-    for (const scheduledOrder of pickAndDropScheduledOrders) {
-      await createOrdersFromScheduledPickAndDrop(scheduledOrder);
-    }
-  }
-});
+//   if (pickAndDropScheduledOrders.length) {
+//     for (const scheduledOrder of pickAndDropScheduledOrders) {
+//       await createOrdersFromScheduledPickAndDrop(scheduledOrder);
+//     }
+//   }
+// });
 
 cron.schedule("*/5 * * * *", () => {
   Object.keys(distanceCache).forEach((key) => delete distanceCache[key]);

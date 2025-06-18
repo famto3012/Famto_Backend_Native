@@ -852,37 +852,48 @@ const rejectRegistrationController = async (req, res, next) => {
 
     await Merchant.findByIdAndDelete(req.params.merchantId);
 
+    // Respond to client immediately
     res.status(200).json({
       message: "Declined merchant registration",
     });
 
-    // Send email with message
-    const rejectionTemplatePath = path.join(
-      __dirname,
-      "../../../templates/rejectionTemplate.ejs"
-    );
+    // Start background task to send email (doesn't block the client response)
+    setImmediate(async () => {
+      try {
+        const rejectionTemplatePath = path.join(
+          __dirname,
+          "../../../templates/rejectionTemplate.ejs"
+        );
 
-    const htmlContent = await ejs.renderFile(rejectionTemplatePath, {
-      recipientName: merchantFound.fullName,
-      app: "merchant",
-      email: "contact@famto.in",
-    });
+        const htmlContent = await ejs.renderFile(rejectionTemplatePath, {
+          recipientName: merchantFound.fullName,
+          app: "merchant",
+          email: "contact@famto.in",
+        });
 
-    // Set up nodemailer transport
-    const transporter = createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USERNAME,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
+        const transporter = createTransport({
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          auth: {
+            user: process.env.EMAIL_USERNAME,
+            pass: process.env.EMAIL_PASSWORD,
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 5000,
+          socketTimeout: 10000,
+        });
 
-    await transporter.sendMail({
-      to: merchantFound.email,
-      subject: "Registration rejection",
-      html: htmlContent,
+        await transporter.sendMail({
+          to: merchantFound.email,
+          subject: "Registration Rejection",
+          html: htmlContent,
+        });
+
+        console.log(`Rejection email sent to ${merchantFound.email}`);
+      } catch (emailErr) {
+        console.error("Error sending rejection email:", emailErr.message);
+      }
     });
   } catch (err) {
     next(appError(err.message));
@@ -2236,11 +2247,13 @@ const fetchMerchantsAccordingToBusinessCategory = async (req, res, next) => {
     const allMerchants = await Merchant.find({
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       isApproved: "Approved",
-    });
+    }).sort({ "merchantDetail.merchantName": 1 });
 
     const formattedResponse = allMerchants?.map((merchant) => ({
       merchantId: merchant._id,
-      merchantName: merchant.merchantDetail.merchantName,
+      merchantName: `${merchant?.merchantDetail?.merchantName || "-"}-${
+        merchant?.merchantDetail?.displayAddress || "-"
+      }`,
     }));
 
     res.status(200).json(formattedResponse);
