@@ -2251,7 +2251,7 @@ const fetchMerchantsAccordingToBusinessCategory = async (req, res, next) => {
 
     const formattedResponse = allMerchants?.map((merchant) => ({
       merchantId: merchant._id,
-      merchantName: `${merchant?.merchantDetail?.merchantName || "-"}-${
+      merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${
         merchant?.merchantDetail?.displayAddress || "-"
       }`,
     }));

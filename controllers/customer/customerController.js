@@ -822,7 +822,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
 
     if (!orderFound) return next(appError("Order not found", 404));
 
-    let showBill = false;
+    let showBill = true;
     if (orderFound.orderDetail.deliveryMode === "Custom Order") {
       const task = await Task.findOne({ orderId }).select("deliveryDetail");
 
@@ -831,7 +831,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
       }
 
       if (
-        ["Started", "Completed", "Cancelled"].includes(
+        !["Started", "Completed", "Cancelled"].includes(
           task.deliveryDetail.deliveryStatus
         )
       ) {

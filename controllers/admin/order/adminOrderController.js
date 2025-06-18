@@ -2334,7 +2334,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       deliveryMode: orderFound.orderDetail.deliveryMode,
       customerName: orderFound.customerId.fullName || "-",
       completedOn: new Date(),
-      grandTotal: orderFound.billDetail.grandTotal || 0,
+      grandTotal: calculatedSalary,
     };
 
     const currentDay = moment.tz(new Date(), "Asia/Kolkata");

@@ -53,6 +53,7 @@ const {
   verifyPayment,
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
+const AgentPricing = require("../../models/AgentPricing");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -915,14 +916,22 @@ const getCurrentDayAppDetailController = async (req, res, next) => {
     const agentId = req.userAuth;
 
     const agentFound = await Agent.findById(agentId)
-      .select("appDetail ratingsByCustomers")
+      .select("appDetail ratingsByCustomers workStructure.salaryStructureId")
       .lean({ virtuals: true })
       .exec();
 
     if (!agentFound) return next(appError("Agent not found", 404));
 
+    const agentPricing = await AgentPricing.findById(
+      agentFound.workStructure.salaryStructureId
+    );
+
+    const pricePerOrder = agentPricing.baseFare / agentPricing.minOrderNumber;
+    const incentives = (agentFound?.appDetail?.orders || 0) * pricePerOrder;
+
     const formattedResponse = {
       totalEarning: agentFound?.appDetail?.totalEarning || 0,
+      incentives,
       orders: agentFound?.appDetail?.orders || 0,
       pendingOrders: agentFound?.appDetail?.pendingOrders || 0,
       totalDistance: agentFound?.appDetail?.totalDistance || 0.0,
