@@ -1895,10 +1895,8 @@ io.on("connection", async (socket) => {
         taskFound.deliveryDetail.deliveryStatus = "Cancelled";
 
         // Calculate earnings for agent
-        const calculatedSalary = await calculateAgentEarnings(
-          agentFound,
-          orderFound
-        );
+        const { calculatedSalary, calculatedSurge } =
+          await calculateAgentEarnings(agentFound, orderFound);
 
         const isOrderCompleted = false;
         // Update agent details
@@ -1906,6 +1904,7 @@ io.on("connection", async (socket) => {
           agentFound,
           orderFound,
           calculatedSalary,
+          calculatedSurge,
           isOrderCompleted
         );
 

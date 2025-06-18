@@ -2256,10 +2256,13 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
-    const orderFound = await Order.findOne({
-      _id: orderId,
-      "orderDetail.deliveryMode": { $ne: "Take Away" },
-    }).populate("customerId", "fullName");
+    const [orderFound, task] = await Promise.all([
+      Order.findOne({
+        _id: orderId,
+        "orderDetail.deliveryMode": { $ne: "Take Away" },
+      }).populate("customerId", "fullName"),
+      Task.findOne({ orderId }),
+    ]);
 
     if (orderFound.status === "Pending") {
       return next(appError("Order is not confirmed yet", 400));
@@ -2274,6 +2277,10 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       );
     }
 
+    if (!task) {
+      return next(appError("Task not found", 404));
+    }
+
     const agentFound = await Agent.findById(orderFound.agentId);
 
     if (!agentFound) {
@@ -2281,6 +2288,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     }
 
     let calculatedSalary = 0;
+    let calculatedSurge = 0;
 
     const [agentPricing, agentSurge] = await Promise.all([
       AgentPricing.findById(agentFound?.workStructure?.salaryStructureId),
@@ -2323,10 +2331,12 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
         }
       }
 
-      const totalEarnings = orderSalary + totalPurchaseFare + surgePrice;
+      const totalEarnings = orderSalary;
+      const totalSurge = totalPurchaseFare + surgePrice;
 
       // Use Number to ensure it's a number with two decimal places
       calculatedSalary = Number(totalEarnings?.toFixed(2));
+      calculatedSurge = Number(totalSurge?.toFixed(2));
     }
 
     const detail = {
@@ -2353,6 +2363,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       ? (agentFound.status = "Busy")
       : (agentFound.status = "Free");
     agentFound.appDetail.totalEarning += calculatedSalary;
+    agentFound.appDetail.totalSurge += calculatedSurge;
     agentFound.appDetail.totalDistance += orderFound?.orderDetail?.distance;
     agentFound.appDetail.orders += 1;
     agentFound.appDetail.orderDetail.push(detail);
@@ -2366,9 +2377,18 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     orderFound.detailAddedByAgent.distanceCoveredByAgent =
       orderFound?.orderDetail?.distance;
 
+    task.taskStatus = "Completed";
+    task.pickupDetail.pickupStatus = "Completed";
+    task.pickupDetail.startTime = new Date();
+    task.pickupDetail.completedTime = new Date();
+    task.deliveryDetail.deliveryStatus = "Completed";
+    task.deliveryDetail.startTime = new Date();
+    task.deliveryDetail.completedTime = new Date();
+
     await Promise.all([
       orderFound.save(),
       agentFound.save(),
+      task.save(),
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
