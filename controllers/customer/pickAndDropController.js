@@ -53,149 +53,167 @@ const initializePickAndDrop = async (req, res, next) => {
 };
 
 // Add pick and drop address
+// const addPickUpAddressController = async (req, res, next) => {
+//   try {
+//     const {
+//       pickUpAddressType,
+//       pickUpAddressOtherAddressId,
+//       deliveryAddressType,
+//       deliveryAddressOtherAddressId,
+//       newPickupAddress,
+//       newDeliveryAddress,
+//       instructionInPickup,
+//       instructionInDelivery,
+//       startDate,
+//       endDate,
+//       time,
+//       item,
+//     } = req.body;
+
+//     const customerId = req.userAuth;
+
+//     const customer = await Customer.findById(customerId);
+
+//     if (!customer) {
+//       return next(appError("Customer not found", 404));
+//     }
+
+//     const { pickupLocation, pickupAddress, deliveryLocation, deliveryAddress } =
+//       await processDeliveryDetailInApp(
+//         customer,
+//         pickUpAddressType,
+//         pickUpAddressOtherAddressId,
+//         newPickupAddress,
+//         deliveryAddressType,
+//         deliveryAddressOtherAddressId,
+//         newDeliveryAddress
+//       );
+
+//     let cartFound = await PickAndCustomCart.findOne({
+//       customerId,
+//       "cartDetail.deliveryMode": "Pick and Drop",
+//     });
+
+//     let voiceInstructionInPickupURL =
+//       cartFound?.cartDetail?.voiceInstructionInPickup || "";
+//     let voiceInstructionInDeliveryURL =
+//       cartFound?.cartDetail?.voiceInstructionInDelivery || "";
+
+//     if (req.files) {
+//       const { voiceInstructionInPickup, voiceInstructionInDelivery } =
+//         req.files;
+
+//       if (req.files.voiceInstructionInPickup) {
+//         if (voiceInstructionInPickupURL) {
+//           await deleteFromFirebase(voiceInstructionInPickupURL);
+//         }
+//         voiceInstructionInPickupURL = await uploadToFirebase(
+//           voiceInstructionInPickup[0],
+//           "VoiceInstructions"
+//         );
+//       }
+
+//       if (req.files.voiceInstructionInDelivery) {
+//         if (voiceInstructionInDeliveryURL) {
+//           await deleteFromFirebase(voiceInstructionInDeliveryURL);
+//         }
+//         voiceInstructionInDeliveryURL = await uploadToFirebase(
+//           voiceInstructionInDelivery[0],
+//           "VoiceInstructions"
+//         );
+//       }
+//     }
+
+//     let scheduled;
+//     if (startDate && endDate && time) {
+//       const ifScheduled = {
+//         startDate,
+//         endDate,
+//         time,
+//       };
+
+//       scheduled = processSchedule(ifScheduled);
+//     }
+
+//     let parsedItem = JSON.parse(item);
+
+//     const cartItems = [];
+
+//     if (parsedItem.itemName) {
+//       cartItems.push(parsedItem);
+//     }
+
+//     let updatedCartDetail = {
+//       pickupAddress: pickupAddress,
+//       pickupLocation: pickupLocation,
+//       deliveryAddress: deliveryAddress,
+//       deliveryLocation: deliveryLocation,
+//       deliveryMode: "Pick and Drop",
+//       deliveryOption: startDate && endDate && time ? "Scheduled" : "On-demand",
+//       instructionInPickup,
+//       instructionInDelivery,
+//       voiceInstructionInPickup: voiceInstructionInPickupURL,
+//       voiceInstructionInDelivery: voiceInstructionInDeliveryURL,
+//       startDate: scheduled?.startDate,
+//       endDate: scheduled?.endDate,
+//       time: scheduled?.time,
+//     };
+
+//     if (startDate && endDate && time) {
+//       const diffDays = scheduled.numOfDays;
+
+//       updatedCartDetail.numOfDays = diffDays;
+//     } else {
+//       updatedCartDetail.numOfDays = null;
+//     }
+
+//     // Calculate distance using MapMyIndia API
+//     const { distanceInKM, durationInMinutes } =
+//       await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
+
+//     updatedCartDetail.distance = parseFloat(distanceInKM);
+//     updatedCartDetail.duration = parseFloat(durationInMinutes);
+
+//     if (cartFound) {
+//       await PickAndCustomCart.findByIdAndUpdate(
+//         cartFound._id,
+//         {
+//           cartDetail: updatedCartDetail,
+//           items: cartItems,
+//         },
+//         {
+//           new: true,
+//         }
+//       );
+//     } else {
+//       cartFound = await PickAndCustomCart.create({
+//         customerId,
+//         cartDetail: updatedCartDetail,
+//         items: cartItems,
+//       });
+//     }
+
+//     res.status(200).json({
+//       cartId: cartFound._id,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const addPickUpAddressController = async (req, res, next) => {
   try {
-    const {
-      pickUpAddressType,
-      pickUpAddressOtherAddressId,
-      deliveryAddressType,
-      deliveryAddressOtherAddressId,
-      newPickupAddress,
-      newDeliveryAddress,
-      instructionInPickup,
-      instructionInDelivery,
-      startDate,
-      endDate,
-      time,
-      item,
-    } = req.body;
+    const { cartData } = req.body;
 
-    const customerId = req.userAuth;
-
-    const customer = await Customer.findById(customerId);
-
-    if (!customer) {
-      return next(appError("Customer not found", 404));
+    if (!cartData) {
+      return next(appError("Invalid cart data", 400));
     }
 
-    const { pickupLocation, pickupAddress, deliveryLocation, deliveryAddress } =
-      await processDeliveryDetailInApp(
-        customer,
-        pickUpAddressType,
-        pickUpAddressOtherAddressId,
-        newPickupAddress,
-        deliveryAddressType,
-        deliveryAddressOtherAddressId,
-        newDeliveryAddress
-      );
+    const parsedData = JSON.parse(cartData);
 
-    let cartFound = await PickAndCustomCart.findOne({
-      customerId,
-      "cartDetail.deliveryMode": "Pick and Drop",
-    });
+    console.log(parsedData);
 
-    let voiceInstructionInPickupURL =
-      cartFound?.cartDetail?.voiceInstructionInPickup || "";
-    let voiceInstructionInDeliveryURL =
-      cartFound?.cartDetail?.voiceInstructionInDelivery || "";
-
-    if (req.files) {
-      const { voiceInstructionInPickup, voiceInstructionInDelivery } =
-        req.files;
-
-      if (req.files.voiceInstructionInPickup) {
-        if (voiceInstructionInPickupURL) {
-          await deleteFromFirebase(voiceInstructionInPickupURL);
-        }
-        voiceInstructionInPickupURL = await uploadToFirebase(
-          voiceInstructionInPickup[0],
-          "VoiceInstructions"
-        );
-      }
-
-      if (req.files.voiceInstructionInDelivery) {
-        if (voiceInstructionInDeliveryURL) {
-          await deleteFromFirebase(voiceInstructionInDeliveryURL);
-        }
-        voiceInstructionInDeliveryURL = await uploadToFirebase(
-          voiceInstructionInDelivery[0],
-          "VoiceInstructions"
-        );
-      }
-    }
-
-    let scheduled;
-    if (startDate && endDate && time) {
-      const ifScheduled = {
-        startDate,
-        endDate,
-        time,
-      };
-
-      scheduled = processSchedule(ifScheduled);
-    }
-
-    let parsedItem = JSON.parse(item);
-
-    const cartItems = [];
-
-    if (parsedItem.itemName) {
-      cartItems.push(parsedItem);
-    }
-
-    let updatedCartDetail = {
-      pickupAddress: pickupAddress,
-      pickupLocation: pickupLocation,
-      deliveryAddress: deliveryAddress,
-      deliveryLocation: deliveryLocation,
-      deliveryMode: "Pick and Drop",
-      deliveryOption: startDate && endDate && time ? "Scheduled" : "On-demand",
-      instructionInPickup,
-      instructionInDelivery,
-      voiceInstructionInPickup: voiceInstructionInPickupURL,
-      voiceInstructionInDelivery: voiceInstructionInDeliveryURL,
-      startDate: scheduled?.startDate,
-      endDate: scheduled?.endDate,
-      time: scheduled?.time,
-    };
-
-    if (startDate && endDate && time) {
-      const diffDays = scheduled.numOfDays;
-
-      updatedCartDetail.numOfDays = diffDays;
-    } else {
-      updatedCartDetail.numOfDays = null;
-    }
-
-    // Calculate distance using MapMyIndia API
-    const { distanceInKM, durationInMinutes } =
-      await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
-
-    updatedCartDetail.distance = parseFloat(distanceInKM);
-    updatedCartDetail.duration = parseFloat(durationInMinutes);
-
-    if (cartFound) {
-      await PickAndCustomCart.findByIdAndUpdate(
-        cartFound._id,
-        {
-          cartDetail: updatedCartDetail,
-          items: cartItems,
-        },
-        {
-          new: true,
-        }
-      );
-    } else {
-      cartFound = await PickAndCustomCart.create({
-        customerId,
-        cartDetail: updatedCartDetail,
-        items: cartItems,
-      });
-    }
-
-    res.status(200).json({
-      cartId: cartFound._id,
-    });
+    res.status(200).json({ success: true });
   } catch (err) {
     next(appError(err.message));
   }
