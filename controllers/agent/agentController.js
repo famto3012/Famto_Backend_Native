@@ -974,7 +974,7 @@ const getHistoryOfAppDetailsController = async (req, res, next) => {
         cancelledOrders: history.cancelledOrders || 0,
         totalDistance: `${(history.totalDistance || 0).toFixed(2)} km`,
         totalSurge: Number(totalSurge?.toFixed(2)) || 0,
-        deduction: Number(deduction.toFixed(2)),
+        deduction: Number(deduction?.toFixed(2)) || 0,
         loginHours: formatToHours(history.loginDuration) || "0:00 hr",
         orderDetail:
           history?.orderDetail?.map((order) => ({
