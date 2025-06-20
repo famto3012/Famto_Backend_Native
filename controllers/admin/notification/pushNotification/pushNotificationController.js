@@ -19,6 +19,7 @@ const {
   sendNotification,
   sendSocketData,
 } = require("../../../../socket/socket");
+const { errorLogger } = require("../../../../middlewares/errorLogger");
 
 const addPushNotificationController = async (req, res, next) => {
   const errors = validationResult(req);
@@ -143,94 +144,195 @@ const fetchPushNotificationController = async (req, res, next) => {
   }
 };
 
+// const sendPushNotificationController = async (req, res, next) => {
+//   try {
+//     const { notificationId } = req.params;
+
+//     // Fetch the push notification by ID
+//     const pushNotification = await PushNotification.findById(notificationId);
+//     if (!pushNotification) {
+//       return res.status(404).json({ error: "Push Notification not found" });
+//     }
+
+//     let userIds = [];
+
+//     // Fetch and filter customers, merchants, and drivers based on their location
+//     if (pushNotification.customer) {
+//       const customers = await Customer.find({
+//         "customerDetails.geofenceId": pushNotification.geofenceId,
+//       });
+//       for (const customer of customers) {
+//         await CustomerNotificationLogs.create({
+//           customerId: customer._id,
+//           title: pushNotification.title,
+//           description: pushNotification.description,
+//           imageUrl: pushNotification.imageUrl,
+//         });
+//       }
+
+//       userIds = userIds.concat(customers.map((customer) => customer._id));
+//     }
+//     if (pushNotification.merchant) {
+//       const merchants = await Merchant.find({
+//         "merchantDetail.geofenceId": pushNotification.geofenceId,
+//       });
+//       for (const merchant of merchants) {
+//         await MerchantNotificationLogs.create({
+//           merchantId: merchant._id,
+//           title: pushNotification.title,
+//           description: pushNotification.description,
+//           imageUrl: pushNotification.imageUrl,
+//         });
+//       }
+//       userIds = userIds.concat(merchants.map((merchant) => merchant._id));
+//     }
+//     if (pushNotification.driver) {
+//       const drivers = await Agent.find({
+//         geofenceId: pushNotification.geofenceId,
+//       });
+//       for (const driver of drivers) {
+//         await AgentAnnouncementLogs.create({
+//           agentId: driver._id,
+//           title: pushNotification.title,
+//           description: pushNotification.description,
+//           imageUrl: pushNotification.imageUrl,
+//         });
+//       }
+//       userIds = userIds.concat(drivers.map((driver) => driver._id));
+//     }
+
+//     const data = {
+//       socket: {
+//         title: pushNotification.title,
+//         description: pushNotification.description,
+//         imageUrl: pushNotification.imageUrl,
+//         createdAt: pushNotification.createdAt,
+//       },
+//       fcm: {
+//         title: pushNotification.title,
+//         body: pushNotification.description,
+//         image: pushNotification.imageUrl,
+//       },
+//     };
+
+//     for (const userId of userIds) {
+//       await sendNotification(userId, "pushNotification", data);
+//       const event = "pushNotification";
+//       sendSocketData(userId, event, data.socket);
+//       sendSocketData(process.env.ADMIN_ID, event, data.socket);
+//     }
+
+//     await AdminNotificationLogs.create({
+//       title: pushNotification.title,
+//       description: pushNotification.description,
+//       imageUrl: pushNotification.imageUrl,
+//     });
+
+//     // Respond with the userIds
+//     res.status(200).json({
+//       message: "Push notification send successfully",
+//       data: userIds,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const sendPushNotificationController = async (req, res, next) => {
   try {
     const { notificationId } = req.params;
 
-    // Fetch the push notification by ID
     const pushNotification = await PushNotification.findById(notificationId);
     if (!pushNotification) {
       return res.status(404).json({ error: "Push Notification not found" });
     }
 
-    let userIds = [];
+    // Send response immediately
+    res.status(200).json({
+      success: true,
+      message: "Push notification processing started",
+    });
 
-    // Fetch and filter customers, merchants, and drivers based on their location
-    if (pushNotification.customer) {
-      const customers = await Customer.find({
-        "customerDetails.geofenceId": pushNotification.geofenceId,
-      });
-      for (const customer of customers) {
-        await CustomerNotificationLogs.create({
-          customerId: customer._id,
+    // Now process notifications in background
+    (async () => {
+      let userIds = [];
+
+      if (pushNotification.customer) {
+        const customers = await Customer.find({
+          "customerDetails.geofenceId": pushNotification.geofenceId,
+        });
+        for (const customer of customers) {
+          await CustomerNotificationLogs.create({
+            customerId: customer._id,
+            title: pushNotification.title,
+            description: pushNotification.description,
+            imageUrl: pushNotification.imageUrl,
+          });
+        }
+        userIds = userIds.concat(customers.map((customer) => customer._id));
+      }
+
+      if (pushNotification.merchant) {
+        const merchants = await Merchant.find({
+          "merchantDetail.geofenceId": pushNotification.geofenceId,
+        });
+        for (const merchant of merchants) {
+          await MerchantNotificationLogs.create({
+            merchantId: merchant._id,
+            title: pushNotification.title,
+            description: pushNotification.description,
+            imageUrl: pushNotification.imageUrl,
+          });
+        }
+        userIds = userIds.concat(merchants.map((merchant) => merchant._id));
+      }
+
+      if (pushNotification.driver) {
+        const drivers = await Agent.find({
+          geofenceId: pushNotification.geofenceId,
+        });
+        for (const driver of drivers) {
+          await AgentAnnouncementLogs.create({
+            agentId: driver._id,
+            title: pushNotification.title,
+            description: pushNotification.description,
+            imageUrl: pushNotification.imageUrl,
+          });
+        }
+        userIds = userIds.concat(drivers.map((driver) => driver._id));
+      }
+
+      const data = {
+        socket: {
           title: pushNotification.title,
           description: pushNotification.description,
           imageUrl: pushNotification.imageUrl,
-        });
+          createdAt: pushNotification.createdAt,
+        },
+        fcm: {
+          title: pushNotification.title,
+          body: pushNotification.description,
+          image: pushNotification.imageUrl,
+        },
+      };
+
+      for (const userId of userIds) {
+        await sendNotification(userId, "pushNotification", data);
+        const event = "pushNotification";
+        sendSocketData(userId, event, data.socket);
+        sendSocketData(process.env.ADMIN_ID, event, data.socket);
       }
 
-      userIds = userIds.concat(customers.map((customer) => customer._id));
-    }
-    if (pushNotification.merchant) {
-      const merchants = await Merchant.find({
-        "merchantDetail.geofenceId": pushNotification.geofenceId,
-      });
-      for (const merchant of merchants) {
-        await MerchantNotificationLogs.create({
-          merchantId: merchant._id,
-          title: pushNotification.title,
-          description: pushNotification.description,
-          imageUrl: pushNotification.imageUrl,
-        });
-      }
-      userIds = userIds.concat(merchants.map((merchant) => merchant._id));
-    }
-    if (pushNotification.driver) {
-      const drivers = await Agent.find({
-        geofenceId: pushNotification.geofenceId,
-      });
-      for (const driver of drivers) {
-        await AgentAnnouncementLogs.create({
-          agentId: driver._id,
-          title: pushNotification.title,
-          description: pushNotification.description,
-          imageUrl: pushNotification.imageUrl,
-        });
-      }
-      userIds = userIds.concat(drivers.map((driver) => driver._id));
-    }
-
-    const data = {
-      socket: {
+      await AdminNotificationLogs.create({
         title: pushNotification.title,
         description: pushNotification.description,
         imageUrl: pushNotification.imageUrl,
-        createdAt: pushNotification.createdAt,
-      },
-      fcm: {
-        title: pushNotification.title,
-        body: pushNotification.description,
-        image: pushNotification.imageUrl,
-      },
-    };
-
-    for (const userId of userIds) {
-      await sendNotification(userId, "pushNotification", data);
-      const event = "pushNotification";
-      sendSocketData(userId, event, data.socket);
-      sendSocketData(process.env.ADMIN_ID, event, data.socket);
-    }
-
-    await AdminNotificationLogs.create({
-      title: pushNotification.title,
-      description: pushNotification.description,
-      imageUrl: pushNotification.imageUrl,
-    });
-
-    // Respond with the userIds
-    res.status(200).json({
-      message: "Push notification send successfully",
-      data: userIds,
+      });
+    })().catch((err) => {
+      errorLogger(
+        `Error in sending push notifications: ${JSON.stringify(err)}`
+      );
+      console.error("Error in background notification processing:", err);
     });
   } catch (err) {
     next(appError(err.message));
