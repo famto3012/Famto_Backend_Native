@@ -60,9 +60,6 @@ const {
 } = require("./utils/customerAppHelpers");
 const { app, server, populateUserSocketMap } = require("./socket/socket.js");
 const ScheduledOrder = require("./models/ScheduledOrder.js");
-const {
-  resetAllAgentTaskHelper,
-} = require("./utils/resetAllAgentTaskHelper.js");
 const taskRoute = require("./routes/adminRoute/deliveryManagementRoute/taskRoute.js");
 const {
   moveAppDetailToWorkHistoryAndResetForAllAgents,
@@ -203,7 +200,6 @@ cron.schedule("30 18 * * *", async () => {
     fetchMerchantDailyRevenue(now),
     generateMapplsAuthToken(),
     resetStatusManualToggleForAllMerchants(),
-    resetAllAgentTaskHelper(),
     deleteOldLoyaltyPoints(),
     deleteOldActivityLogs(),
     removeOldNotifications(),

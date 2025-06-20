@@ -2302,15 +2302,20 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     if (agentPricing?.type.startsWith("Monthly")) {
       calculatedSalary = 0;
     } else {
-      const distanceForOrder = orderFound.orderDetail.distance;
+      const startToPickDistance =
+        orderFound?.detailAddedByAgent?.startToPickDistance;
 
-      let orderSalary = distanceForOrder * agentPricing.baseDistanceFarePerKM;
+      const totalOrderDistance = startToPickDistance
+        ? startToPickDistance + orderFound.orderDetail.distance
+        : orderFound.orderDetail.distance;
+
+      let orderSalary = totalOrderDistance * agentPricing.baseDistanceFarePerKM;
 
       let surgePrice = 0;
 
       if (agentSurge) {
         surgePrice =
-          (distanceForOrder / agentSurge.baseDistance) * agentSurge.baseFare;
+          (totalOrderDistance / agentSurge.baseDistance) * agentSurge.baseFare;
       }
 
       let totalPurchaseFare = 0;
@@ -2364,9 +2369,10 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       : (agentFound.status = "Free");
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalSurge += calculatedSurge;
-    agentFound.appDetail.totalDistance += orderFound?.orderDetail?.distance;
+    agentFound.appDetail.totalDistance += totalOrderDistance;
     agentFound.appDetail.orders += 1;
     agentFound.appDetail.orderDetail.push(detail);
+    agentFound.taskCompleted += 1;
 
     if (!orderFound.detailAddedByAgent) {
       orderFound.detailAddedByAgent = {};
@@ -2374,8 +2380,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
     orderFound.status = "Completed";
     orderFound.detailAddedByAgent.agentEarning = calculatedSalary;
-    orderFound.detailAddedByAgent.distanceCoveredByAgent =
-      orderFound?.orderDetail?.distance;
+    orderFound.detailAddedByAgent.distanceCoveredByAgent = totalOrderDistance;
 
     task.taskStatus = "Completed";
     task.pickupDetail.pickupStatus = "Completed";
@@ -2426,23 +2431,44 @@ const markOrderAsCancelled = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
-    const [order, task, notification] = await Promise.all([
+    const [order, task, notification, notificationCount] = await Promise.all([
       Order.findById(orderId),
       Task.findOne({ orderId }),
       AgentNotificationLogs.findOne({ orderId, status: "Accepted" }),
+      AgentNotificationLogs.countDocuments({ status: "Accepted" }),
     ]);
 
     if (!order) return next(appError("Order not found", 404));
     if (!task) return next(appError("Task not found", 404));
-    if (!notification) return next(appError("Notification not found", 404));
 
     order.status = "Cancelled";
     task.taskStatus = "Cancelled";
     task.pickupDetail.pickupStatus = "Cancelled";
     task.deliveryDetail.deliveryStatus = "Cancelled";
-    notification.status = "Cancelled";
 
-    await Promise.all([order.save(), task.save(), notification.save()]);
+    const promises = [order.save(), task.save()];
+
+    if (order?.agentId && !notificationCount) {
+      promises.push(
+        Agent.findByIdAndUpdate(
+          order.agentId,
+          { status: "Free" },
+          { new: true }
+        )
+      );
+    }
+
+    if (notification) {
+      promises.push(
+        AgentNotificationLogs.findOneAndUpdate(
+          { orderId },
+          { status: "Cancelled" },
+          { new: true }
+        )
+      );
+    }
+
+    await Promise.all(promises);
 
     res.status(200).json({
       success: true,

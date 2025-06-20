@@ -260,7 +260,7 @@ const editAgentByAdminController = async (req, res, next) => {
         fullName,
         phoneNumber,
         email,
-        geofenceId: geofenceId._id,
+        geofenceId: geofenceId,
         agentImageURL,
         workStructure: {
           ...workStructure,
@@ -772,6 +772,7 @@ const blockAgentController = async (req, res, next) => {
       orders: 0,
       pendingOrders: 0,
       totalDistance: 0,
+      totalStartToPickDistance: 0,
       cancelledOrders: 0,
       loginDuration: 0,
       orderDetail: [],

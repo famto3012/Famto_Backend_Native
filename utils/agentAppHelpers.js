@@ -11,6 +11,7 @@ const AgentNotificationLogs = require("../models/AgentNotificationLog");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
 
 const { calculateDeliveryCharges } = require("./customerAppHelpers");
+const { errorLogger } = require("../middlewares/errorLogger");
 
 const formatToHours = (milliseconds) => {
   const totalMinutes = Math.floor(milliseconds / 60000);
@@ -59,7 +60,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         orders: 0,
         pendingOrders: 0,
         totalDistance: 0,
-        startToPickDistance: 0,
+        totalStartToPickDistance: 0,
         cancelledOrders: 0,
         loginDuration: 0,
         orderDetail: [],
@@ -77,7 +78,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
 
       // Fetch agent pricing only once per agent
       const agentPricing = await AgentPricing.findById(
-        agent.workStructure.salaryStructureId
+        agent?.workStructure?.salaryStructureId
       ).lean();
 
       if (agentPricing) {
@@ -159,11 +160,13 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           "appDetail.orders": 0,
           "appDetail.pendingOrders": 0,
           "appDetail.totalDistance": 0,
+          "appDetail.totalStartToPickDistance": 0,
           "appDetail.cancelledOrders": 0,
           "appDetail.loginDuration": 0,
           "appDetail.orderDetail": [],
           loginStartTime:
             agent.status !== "Inactive" ? currentTime : agent.loginStartTime,
+          taskCompleted: 0,
         },
       };
 
@@ -189,8 +192,8 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
       "History documents inserted and agent data reset successfully."
     );
   } catch (err) {
-    console.log(
-      `Error moving appDetail to history for all agents: ${err.message}`
+    errorLogger(
+      `Error in moving agent app detail to work history: ${JSON.stringify(err)}`
     );
   }
 };
