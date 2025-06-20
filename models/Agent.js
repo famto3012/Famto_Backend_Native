@@ -170,7 +170,7 @@ const agentAppDetailSchema = mongoose.Schema(
     },
     loginDuration: {
       type: Number,
-      default: 0, // Store login duration in milliseconds
+      default: 0,
     },
     orderDetail: [orderDetailSchema],
     paymentSettled: {
@@ -256,21 +256,6 @@ const agentSchema = mongoose.Schema(
     workStructure: workStructureSchema,
     ratingsByCustomers: [ratingsByCustomerSchema],
     appDetail: agentAppDetailSchema,
-    appDetailHistory: [
-      {
-        _id: false,
-        detailId: {
-          type: mongoose.Schema.Types.ObjectId,
-          default: () => new mongoose.Types.ObjectId(),
-          required: true,
-        },
-        date: {
-          type: Date,
-          required: true,
-        },
-        details: agentAppDetailSchema,
-      },
-    ],
     refreshToken: {
       type: String,
       default: null,

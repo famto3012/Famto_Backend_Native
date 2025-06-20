@@ -1539,7 +1539,6 @@ const completeOrderController = async (req, res, next) => {
       agentFound.save(),
       Agent.findByIdAndUpdate(agentId, {
         $inc: { taskCompleted: 1 },
-        // $inc: { taskCompleted: 1, "appDetail.orders": 1 },
       }),
     ]);
 

@@ -20,6 +20,8 @@ const { formatDate } = require("./utils/formatters");
 const appError = require("./utils/appError");
 const Category = require("./models/Category");
 const ProductDiscount = require("./models/ProductDiscount");
+const AgentPricing = require("./models/AgentPricing");
+const ActivityLog = require("./models/ActivityLog");
 
 const migrateCustomerTransactions = async () => {
   try {
@@ -566,4 +568,190 @@ const findMerchantsWithoutDiscountForProducts = async () => {
 
 // findMerchantsWithoutDiscountForProducts();
 
-module.exports = { prepareCSVOfAgentPayout };
+const prepareAgentPayout = async () => {
+  try {
+    const date = "2025-06-19";
+
+    const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+    const startDate = formattedDay.startOf("day").toDate();
+    const endDate = formattedDay.endOf("day").toDate();
+
+    const orders = await Order.find({
+      createdAt: { $gte: startDate, $lte: endDate },
+    });
+
+    const response = orders.map((order) => ({
+      orderDistance: order.orderDetail.distance,
+      totalDistance: order?.detailAddedByAgent?.distanceCoveredByAgent ?? 0,
+      startToPick: order?.detailAddedByAgent?.startToPickDistance ?? 0,
+      agentId: order?.agentId || null,
+    }));
+
+    const calculateDistanceForAllAgents = (data) => {
+      const result = data.reduce((acc, curr) => {
+        if (!curr.agentId) return acc;
+
+        if (!acc[curr.agentId]) {
+          acc[curr.agentId] = {
+            agentId: curr.agentId,
+
+            totalDistance: 0,
+            totalStartToPickDistance: 0,
+            orders: 0,
+          };
+        }
+
+        acc[curr.agentId].totalDistance +=
+          Number(curr.totalDistance.toFixed(2)) || 0;
+        acc[curr.agentId].totalStartToPickDistance +=
+          Number(curr.startToPick.toFixed(2)) || 0;
+        acc[curr.agentId].orders += 1;
+
+        return acc;
+      }, {});
+
+      // convert object to array of objects
+      return Object.values(result);
+    };
+
+    let allAgentsResult = calculateDistanceForAllAgents(response);
+
+    // allAgentsResult = allAgentsResult.filter(
+    //   (agent) => agent.agentId === "A250623"
+    // );
+    // console.log(allAgentsResult);
+
+    const historyDocuments = [];
+
+    for (const agent of allAgentsResult) {
+      let totalDistance = Number(agent?.totalDistance?.toFixed(2)) || 0;
+      let totalStartToPickDistance =
+        Number(agent?.totalStartToPickDistance?.toFixed(2)) || 0;
+
+      const agentFound = await Agent.findById(agent.agentId);
+
+      // Fetch agent pricing only once per agent
+      const agentPricing = await AgentPricing.findById(
+        agentFound.workStructure.salaryStructureId
+      ).lean();
+
+      if (agentPricing) {
+        if (agentPricing?.type?.startsWith("Monthly")) {
+          if (agent.orders > 0) {
+            totalEarning = agentPricing.baseFare;
+          }
+        } else {
+          const fareForStartToPick =
+            totalStartToPickDistance * agentPricing.startToPickFarePerKM;
+          const fareForPickToDrop =
+            (totalDistance - totalStartToPickDistance) *
+            agentPricing.baseDistanceFarePerKM;
+
+          totalEarning = fareForStartToPick + fareForPickToDrop;
+
+          const pricePerOrder =
+            agentPricing.baseFare / agentPricing.minOrderNumber;
+          const calculatedEarning = pricePerOrder * agent.orders;
+
+          totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+
+          if (agent.orders > agentPricing.minOrderNumber) {
+            const extraOrders = agent.orders - agentPricing.minOrderNumber;
+            const earningForExtraOrders =
+              extraOrders * agentPricing.fareAfterMinOrderNumber;
+
+            totalEarning += earningForExtraOrders;
+          }
+        }
+      }
+
+      // Construct the work history document
+      historyDocuments.push({
+        agentId: agent.agentId,
+        workDate: startDate,
+        totalEarning: Number(totalEarning.toFixed(2)),
+        orders: agent.orders,
+        pendingOrders: 0,
+        totalDistance: totalDistance,
+        totalDistanceFromPickToDrop: totalStartToPickDistance,
+        cancelledOrders: 0,
+        loginDuration: 0,
+        paymentSettled: false,
+        orderDetail: [],
+      });
+    }
+
+    console.log(historyDocuments);
+
+    // if (historyDocuments.length > 0) {
+    //   await AgentWorkHistory.insertMany(historyDocuments);
+    // }
+
+    console.log("History updated successfully");
+  } catch (err) {
+    console.log(`Error in preparing agent payout: ${err}`);
+  }
+};
+
+// prepareAgentPayout();
+
+const prepareOrderDetailsInPayout = async () => {
+  try {
+    const agentId = "A25047";
+    const date = "2025-06-19";
+
+    const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+    const startDate = formattedDay.startOf("day").toDate();
+    const endDate = formattedDay.endOf("day").toDate();
+
+    const orders = await Order.find({
+      agentId,
+      createdAt: { $gte: startDate, $lte: endDate },
+    });
+
+    const orderDetailPromises = orders.map(async (order) => {
+      const task = await Task.findOne({ orderId: order._id });
+
+      let activity;
+      if (!task?.deliveryDetail?.completedTime) {
+        activity = await ActivityLog.findOne({
+          description: `Order (#${order._id}) is confirmed by Order Manager (Gopika S - 67ee1b60214cf3147f7d0624)`,
+        });
+      }
+
+      return {
+        orderId: order._id,
+        deliveryMode: order.orderDetail.deliveryMode,
+        customerName: order.orderDetail.deliveryAddress.fullName,
+        completedOn:
+          task?.deliveryDetail?.completedTime || activity.createdAt || null,
+        grandTotal: order?.detailAddedByAgent?.agentEarning ?? 0,
+      };
+    });
+
+    const orderDetail = await Promise.all(orderDetailPromises);
+
+    console.log(orderDetail);
+
+    // const workHistory = await AgentWorkHistory.findOneAndUpdate(
+    //   {
+    //     agentId,
+    //     workDate: { $gte: startDate, $lte: endDate },
+    //   },
+    //   {
+    //     $set: {
+    //       orderDetail,
+    //     },
+    //   },
+    //   { new: true, upsert: true }
+    // );
+
+    console.log(workHistory);
+  } catch (err) {
+    console.log(`Error in preparing order detail in payout: ${err}`);
+  }
+};
+
+// prepareOrderDetailsInPayout();
