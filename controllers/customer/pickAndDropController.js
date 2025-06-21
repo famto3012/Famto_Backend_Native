@@ -390,7 +390,7 @@ const confirmPickAndDropVehicleType = async (req, res, next) => {
     );
 
     let taxAmount = 0;
-    if (taxFound) {
+    if (taxFound && taxFound.status) {
       const calculatedTax = (deliveryCharges * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
     }
