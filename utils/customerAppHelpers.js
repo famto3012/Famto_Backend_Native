@@ -32,6 +32,26 @@ const sortMerchantsBySponsorship = (merchants) => {
   });
 };
 
+const filterCoordinatesFromData = (parsedData) => {
+  let coordinates = [];
+
+  parsedData.pickupDropDetails.forEach((detail) => {
+    // Get pickup coordinates
+    detail.pickups.forEach((pickup) => {
+      const [lat, lng] = pickup.pickupLocation;
+      coordinates.push({ lng, lat });
+    });
+
+    // Get drop coordinates
+    detail.drops.forEach((drop) => {
+      const [lat, lng] = drop.deliveryLocation;
+      coordinates.push({ lng, lat });
+    });
+  });
+
+  return coordinates;
+};
+
 const getDistanceFromPickupToDelivery = async (
   pickupCoordinates,
   deliveryCoordinates,
@@ -68,6 +88,52 @@ const getDistanceFromPickupToDelivery = async (
     const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
       2
     );
+    const durationInMinutes = Math.ceil(
+      data.results.durations[0][finalDuration] / 60
+    );
+
+    const distanceInKM = parseFloat(distance);
+
+    return { distanceInKM, durationInMinutes };
+  }
+};
+
+const getDistanceFromMultipleCoordinates = async (
+  coordinates,
+  profile = "biking"
+) => {
+  const joined = coordinates
+    .map((coord) => `${coord.lng},${coord.lat}`)
+    .join(";");
+
+  if (process.env.NODE_ENV === "development") {
+    const getRandomFloat = (min, max) => {
+      const random = Math.random() * (max - min) + min;
+      return Number(random.toFixed(2));
+    };
+
+    return {
+      distanceInKM: getRandomFloat(2, 10),
+      durationInMinutes: getRandomFloat(5.5, 30),
+    };
+  }
+
+  const { data } = await axios.get(
+    `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${joined}`
+  );
+
+  if (
+    data &&
+    data.results &&
+    data.results.distances &&
+    data.results.distances.length > 0
+  ) {
+    const finalDistance = data.results.distances[0]?.length - 1;
+    const finalDuration = data.results.distances[0]?.length - 1;
+    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
+      2
+    );
+
     const durationInMinutes = Math.ceil(
       data.results.durations[0][finalDuration] / 60
     );
@@ -1083,4 +1149,6 @@ module.exports = {
   applyPromoCodeDiscount,
   populateCartDetails,
   deductPromoCodeDiscount,
+  getDistanceFromMultipleCoordinates,
+  filterCoordinatesFromData,
 };

@@ -19,6 +19,8 @@ const appError = require("../../utils/appError");
 const {
   getDistanceFromPickupToDelivery,
   calculateDeliveryCharges,
+  getDistanceFromMultipleCoordinates,
+  filterCoordinatesFromData,
 } = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
@@ -211,7 +213,19 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const parsedData = JSON.parse(cartData);
 
-    console.dir(parsedData, { depth: null });
+    const customer = await Customer.findById(req.userAuth);
+
+    if (!customer) return next(appError("Customer not found", 404));
+
+    const coordinates = filterCoordinatesFromData(parsedData);
+
+    console.log(coordinates);
+
+    const { distanceInKM } = await getDistanceFromMultipleCoordinates(
+      coordinates
+    );
+
+    console.log({ distanceInKM });
 
     res.status(200).json({ success: true });
   } catch (err) {
