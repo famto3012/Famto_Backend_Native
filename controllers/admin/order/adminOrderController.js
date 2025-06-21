@@ -2289,6 +2289,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
     let calculatedSalary = 0;
     let calculatedSurge = 0;
+    let totalOrderDistance = 0;
 
     const [agentPricing, agentSurge] = await Promise.all([
       AgentPricing.findById(agentFound?.workStructure?.salaryStructureId),
@@ -2305,7 +2306,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       const startToPickDistance =
         orderFound?.detailAddedByAgent?.startToPickDistance;
 
-      const totalOrderDistance = startToPickDistance
+      totalOrderDistance = startToPickDistance
         ? startToPickDistance + orderFound.orderDetail.distance
         : orderFound.orderDetail.distance;
 
