@@ -219,15 +219,19 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const coordinates = filterCoordinatesFromData(parsedData);
 
-    console.log(coordinates);
-
     const { distanceInKM } = await getDistanceFromMultipleCoordinates(
       coordinates
     );
 
-    console.log({ distanceInKM });
+    const newCart = await PickAndCustomCart.create({
+      customerId: customer._id,
+      deliveryMode: "Pick and Drop",
+      deliveryOption: "On-demand",
+      pickupDropDetails: [...parsedData.pickupDropDetails],
+      distance: distanceInKM,
+    });
 
-    res.status(200).json({ success: true });
+    res.status(200).json({ newCart });
   } catch (err) {
     next(appError(err.message));
   }

@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 // Item Schema (remains same mostly)
 const cartItemSchema = mongoose.Schema(
   {
-    itemId: { type: mongoose.Schema.Types.ObjectId },
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId(),
+    },
     itemName: { type: String, required: true },
     length: { type: Number, default: null },
     width: { type: Number, default: null },
@@ -101,7 +104,6 @@ const pickAndCustomCartSchema = mongoose.Schema(
     billDetail: billSchema,
 
     distance: { type: Number, default: 0 },
-    duration: { type: Number, default: 0 },
 
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
