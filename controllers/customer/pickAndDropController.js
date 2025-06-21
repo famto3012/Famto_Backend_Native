@@ -38,7 +38,6 @@ const {
 } = require("../../utils/createOrderHelpers");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
-// Initialize cart
 const initializePickAndDrop = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
@@ -53,155 +52,6 @@ const initializePickAndDrop = async (req, res, next) => {
     next(appError(err.message));
   }
 };
-
-// Add pick and drop address
-// const addPickUpAddressController = async (req, res, next) => {
-//   try {
-//     const {
-//       pickUpAddressType,
-//       pickUpAddressOtherAddressId,
-//       deliveryAddressType,
-//       deliveryAddressOtherAddressId,
-//       newPickupAddress,
-//       newDeliveryAddress,
-//       instructionInPickup,
-//       instructionInDelivery,
-//       startDate,
-//       endDate,
-//       time,
-//       item,
-//     } = req.body;
-
-//     const customerId = req.userAuth;
-
-//     const customer = await Customer.findById(customerId);
-
-//     if (!customer) {
-//       return next(appError("Customer not found", 404));
-//     }
-
-//     const { pickupLocation, pickupAddress, deliveryLocation, deliveryAddress } =
-//       await processDeliveryDetailInApp(
-//         customer,
-//         pickUpAddressType,
-//         pickUpAddressOtherAddressId,
-//         newPickupAddress,
-//         deliveryAddressType,
-//         deliveryAddressOtherAddressId,
-//         newDeliveryAddress
-//       );
-
-//     let cartFound = await PickAndCustomCart.findOne({
-//       customerId,
-//       "cartDetail.deliveryMode": "Pick and Drop",
-//     });
-
-//     let voiceInstructionInPickupURL =
-//       cartFound?.cartDetail?.voiceInstructionInPickup || "";
-//     let voiceInstructionInDeliveryURL =
-//       cartFound?.cartDetail?.voiceInstructionInDelivery || "";
-
-//     if (req.files) {
-//       const { voiceInstructionInPickup, voiceInstructionInDelivery } =
-//         req.files;
-
-//       if (req.files.voiceInstructionInPickup) {
-//         if (voiceInstructionInPickupURL) {
-//           await deleteFromFirebase(voiceInstructionInPickupURL);
-//         }
-//         voiceInstructionInPickupURL = await uploadToFirebase(
-//           voiceInstructionInPickup[0],
-//           "VoiceInstructions"
-//         );
-//       }
-
-//       if (req.files.voiceInstructionInDelivery) {
-//         if (voiceInstructionInDeliveryURL) {
-//           await deleteFromFirebase(voiceInstructionInDeliveryURL);
-//         }
-//         voiceInstructionInDeliveryURL = await uploadToFirebase(
-//           voiceInstructionInDelivery[0],
-//           "VoiceInstructions"
-//         );
-//       }
-//     }
-
-//     let scheduled;
-//     if (startDate && endDate && time) {
-//       const ifScheduled = {
-//         startDate,
-//         endDate,
-//         time,
-//       };
-
-//       scheduled = processSchedule(ifScheduled);
-//     }
-
-//     let parsedItem = JSON.parse(item);
-
-//     const cartItems = [];
-
-//     if (parsedItem.itemName) {
-//       cartItems.push(parsedItem);
-//     }
-
-//     let updatedCartDetail = {
-//       pickupAddress: pickupAddress,
-//       pickupLocation: pickupLocation,
-//       deliveryAddress: deliveryAddress,
-//       deliveryLocation: deliveryLocation,
-//       deliveryMode: "Pick and Drop",
-//       deliveryOption: startDate && endDate && time ? "Scheduled" : "On-demand",
-//       instructionInPickup,
-//       instructionInDelivery,
-//       voiceInstructionInPickup: voiceInstructionInPickupURL,
-//       voiceInstructionInDelivery: voiceInstructionInDeliveryURL,
-//       startDate: scheduled?.startDate,
-//       endDate: scheduled?.endDate,
-//       time: scheduled?.time,
-//     };
-
-//     if (startDate && endDate && time) {
-//       const diffDays = scheduled.numOfDays;
-
-//       updatedCartDetail.numOfDays = diffDays;
-//     } else {
-//       updatedCartDetail.numOfDays = null;
-//     }
-
-//     // Calculate distance using MapMyIndia API
-//     const { distanceInKM, durationInMinutes } =
-//       await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
-
-//     updatedCartDetail.distance = parseFloat(distanceInKM);
-//     updatedCartDetail.duration = parseFloat(durationInMinutes);
-
-//     if (cartFound) {
-//       await PickAndCustomCart.findByIdAndUpdate(
-//         cartFound._id,
-//         {
-//           cartDetail: updatedCartDetail,
-//           items: cartItems,
-//         },
-//         {
-//           new: true,
-//         }
-//       );
-//     } else {
-//       cartFound = await PickAndCustomCart.create({
-//         customerId,
-//         cartDetail: updatedCartDetail,
-//         items: cartItems,
-//       });
-//     }
-
-//     res.status(200).json({
-//       cartId: cartFound._id,
-//     });
-//   } catch (err) {
-//     next(appError(err.message));
-//   }
-// };
 
 const addPickUpAddressController = async (req, res, next) => {
   try {
@@ -219,7 +69,7 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const coordinates = filterCoordinatesFromData(parsedData);
 
-    const { distanceInKM } = await getDistanceFromMultipleCoordinates(
+    const { distanceInKM, duration } = await getDistanceFromMultipleCoordinates(
       coordinates
     );
 
@@ -229,6 +79,7 @@ const addPickUpAddressController = async (req, res, next) => {
       deliveryOption: "On-demand",
       pickupDropDetails: [...parsedData.pickupDropDetails],
       distance: distanceInKM,
+      duration,
     });
 
     res.status(200).json({ newCart });
@@ -237,7 +88,30 @@ const addPickUpAddressController = async (req, res, next) => {
   }
 };
 
-// Get vehicle charges
+const getPickAndDropItems = async (req, res, next) => {
+  try {
+    const { cartId } = req.query;
+
+    const cart = await PickAndCustomCart.findById(cartId);
+
+    if (!cart) return next(appError("Cart not found", 404));
+
+    let items = [];
+
+    cart.pickupDropDetails.forEach((pickupDrop) => {
+      pickupDrop.pickups.forEach((pickup) => {
+        pickup.items.forEach((pickupItem) => {
+          items.push(pickupItem);
+        });
+      });
+    });
+
+    res.status(200).json(items);
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 const getVehiclePricingDetailsController = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
@@ -251,15 +125,27 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
     const cartFound = await PickAndCustomCart.findOne({
       _id: cartId,
       customerId,
-      "cartDetail.deliveryMode": "Pick and Drop",
+      deliveryMode: "Pick and Drop",
     });
 
     if (!cartFound) return next(appError("Customer cart not found", 404));
 
-    const totalItemWeight = cartFound.items.reduce((total, item) => {
-      const weight = item?.weight || 0;
-      return total + weight;
-    }, 0);
+    const totalItemWeight = cartFound.pickupDropDetails.reduce(
+      (total, pickupDrop) => {
+        const pickupWeight = pickupDrop.pickups.reduce(
+          (pickupTotal, pickup) => {
+            const itemsWeight = pickup.items.reduce((itemsTotal, item) => {
+              const weight = (item.weight || 1) * (item.quantity || 1);
+              return itemsTotal + weight;
+            }, 0);
+            return pickupTotal + itemsWeight;
+          },
+          0
+        );
+        return total + pickupWeight;
+      },
+      0
+    );
 
     const agents = await Agent.find({}).select("vehicleDetail");
     const vehicleTypes = agents.flatMap((agent) =>
@@ -286,7 +172,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     let surgeCharges;
 
-    const { distance, duration } = cartFound.cartDetail;
+    const { distance, duration } = cartFound;
 
     if (customerSurge) {
       let surgeBaseFare = customerSurge.baseFare;
@@ -359,47 +245,6 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
   }
 };
 
-const updatePickAndDropItems = async (req, res, next) => {
-  try {
-    const customerId = req.userAuth;
-
-    if (!customerId) {
-      return next(appError("Unauthorized: customer ID missing", 401));
-    }
-
-    const { items } = req.body;
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return next(appError("Invalid or empty items array", 400));
-    }
-
-    const updatedCart = await PickAndCustomCart.findOneAndUpdate(
-      {
-        customerId,
-        "cartDetail.deliveryMode": "Pick and Drop",
-      },
-      {
-        $set: {
-          items,
-        },
-      },
-      {
-        new: true,
-        upsert: false,
-      }
-    );
-
-    if (!updatedCart) {
-      return next(appError("Pick and Drop cart not found", 404));
-    }
-
-    res.status(200).json({ success: true, updatedCart });
-  } catch (err) {
-    next(appError(err.message || "Internal Server Error"));
-  }
-};
-
-// Add Items
 const confirmPickAndDropVehicleType = async (req, res, next) => {
   try {
     const { vehicleType, deliveryCharges, surgeCharges } = req.body;
@@ -1215,5 +1060,5 @@ module.exports = {
   cancelPickBeforeOrderCreationController,
   initializePickAndDrop,
   getPickAndDropBill,
-  updatePickAndDropItems,
+  getPickAndDropItems,
 };

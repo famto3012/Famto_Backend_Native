@@ -104,6 +104,7 @@ const pickAndCustomCartSchema = mongoose.Schema(
     billDetail: billSchema,
 
     distance: { type: Number, default: 0 },
+    duration: { type: Number, default: 0 },
 
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
