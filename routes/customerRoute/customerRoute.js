@@ -405,7 +405,7 @@ customerRoute.delete(
 );
 
 customerRoute.post(
-  "/add-pick-and-drop-address",
+  "/add-address-and-items",
   upload.fields([
     { name: "voiceInstructionInPickup", maxCount: 1 },
     { name: "voiceInstructionInDelivery", maxCount: 1 },

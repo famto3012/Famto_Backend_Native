@@ -63,8 +63,14 @@ const getDistanceFromPickupToDelivery = async (
     data.results.distances &&
     data.results.distances.length > 0
   ) {
-    const distance = (data.results.distances[0][1] / 1000).toFixed(2);
-    const durationInMinutes = Math.ceil(data.results.durations[0][1] / 60);
+    const finalDistance = data.results.distances[0]?.length - 1;
+    const finalDuration = data.results.distances[0]?.length - 1;
+    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
+      2
+    );
+    const durationInMinutes = Math.ceil(
+      data.results.durations[0][finalDuration] / 60
+    );
 
     const distanceInKM = parseFloat(distance);
 

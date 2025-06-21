@@ -211,7 +211,7 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const parsedData = JSON.parse(cartData);
 
-    console.log(parsedData);
+    console.dir(parsedData, { depth: null });
 
     res.status(200).json({ success: true });
   } catch (err) {
