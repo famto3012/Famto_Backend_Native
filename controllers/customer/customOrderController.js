@@ -599,6 +599,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       success: true,
       orderId,
       createdAt: tempOrder.createdAt,
+      deliveryMode: tempOrder.orderDetail.deliveryMode,
     });
 
     // After 60 seconds, create the order if it is not cancelled

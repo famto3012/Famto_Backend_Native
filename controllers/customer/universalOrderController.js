@@ -1782,7 +1782,10 @@ const orderPaymentController = async (req, res, next) => {
 
         res.status(200).json({
           success: true,
-          data: newOrder,
+          orderId: newOrder._id,
+          createdAt: newOrder.createdAt,
+          merchantName: merchant.merchantDetail.merchantName,
+          deliveryMode: newOrder.orderDetail.deliveryMode,
         });
 
         // Send notifications to each role dynamically
@@ -1842,6 +1845,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
+          deliveryMode: tempOrder.orderDetail.deliveryMode,
         });
 
         // After 60 seconds, create the order if not canceled
@@ -2015,6 +2019,7 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
+        deliveryMode: tempOrder.orderDetail.deliveryMode,
       });
 
       // After 60 seconds, create the order if not canceled
@@ -2378,6 +2383,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId: newOrder._id,
         createdAt: null,
         merchantName: null,
+        deliveryMode: newOrder.orderDetail.deliveryMode,
       });
 
       await sendSocketDataAndNotification({
@@ -2431,6 +2437,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
+        deliveryMode: tempOrder.orderDetail.deliveryMode,
       });
 
       // After 60 seconds, create the order if not canceled

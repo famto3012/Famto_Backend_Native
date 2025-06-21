@@ -604,6 +604,7 @@ const confirmPickAndDropController = async (req, res, next) => {
           success: true,
           orderId: newOrder._id,
           createdAt: null,
+          deliveryMode: newOrder.orderDetail.deliveryMode,
         });
 
         await sendSocketDataAndNotification({
@@ -655,6 +656,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         success: true,
         orderId,
         createdAt: tempOrder.createdAt,
+        deliveryMode: tempOrder.orderDetail.deliveryMode,
       });
 
       setTimeout(async () => {
@@ -919,6 +921,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         success: true,
         orderId: newOrder._id,
         createdAt: null,
+        deliveryMode: newOrder.orderDetail.deliveryMode,
       });
 
       await sendSocketDataAndNotification({
@@ -968,6 +971,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       success: true,
       orderId,
       createdAt: tempOrder.createdAt,
+      deliveryMode: tempOrder.orderDetail.deliveryMode,
     });
 
     setTimeout(async () => {
