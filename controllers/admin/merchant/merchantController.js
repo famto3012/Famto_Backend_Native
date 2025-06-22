@@ -681,10 +681,20 @@ const fetchAllMerchantsController = async (req, res, next) => {
     const matchCriteria = { isBlocked: false };
 
     if (name) {
-      matchCriteria["merchantDetail.merchantName"] = {
-        $regex: name.trim(),
-        $options: "i",
-      };
+      matchCriteria.$or = [
+        {
+          "merchantDetail.merchantName": {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
+        {
+          phoneNumber: {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
+      ];
     }
 
     if (serviceable && serviceable.toLowerCase() !== "all") {

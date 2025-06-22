@@ -235,11 +235,21 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }
 
-    if (query && query.trim !== "") {
-      matchCriteria.fullName = {
-        $regex: query.trim(),
-        $options: "i",
-      };
+    if (query && query.trim() !== "") {
+      matchCriteria.$or = [
+        {
+          fullName: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
+        {
+          phoneNumber: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
+      ];
     }
 
     const [result, totalCount] = await Promise.all([

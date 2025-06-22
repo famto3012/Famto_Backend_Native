@@ -658,7 +658,20 @@ const filterAgentsController = async (req, res, next) => {
     }
 
     if (name) {
-      filterCriteria.fullName = { $regex: name.trim(), $options: "i" };
+      filterCriteria.$or = [
+        {
+          fullName: {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
+        {
+          phoneNumber: {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
+      ];
     }
 
     const results = await Agent.find(
@@ -847,6 +860,7 @@ const filterAgentPayoutController = async (req, res, next) => {
     const historyFilter = {
       agentId: { $in: agentIds },
       ...dateFilter,
+      orders: { $gt: 0 },
     };
 
     if (status !== undefined) {
