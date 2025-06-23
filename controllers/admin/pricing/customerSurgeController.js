@@ -81,17 +81,15 @@ const getAllCustomerSurgeController = async (req, res, next) => {
 
 const getSingleCustomerSurgeController = async (req, res, next) => {
   try {
-    const customerSurgeFound = await CustomerSurge.findById(
-      req.params.customerSurgeId
-    ).populate("geofenceId", "name");
+    const surge = await CustomerSurge.findById(req.params.customerSurgeId);
 
-    if (!customerSurgeFound) {
+    if (!surge) {
       return next(appError("Customer surge not found", 404));
     }
 
     res.status(200).json({
       message: "Single customer surge",
-      data: customerSurgeFound,
+      data: surge,
     });
   } catch (err) {
     next(appError(err.message));
@@ -99,15 +97,6 @@ const getSingleCustomerSurgeController = async (req, res, next) => {
 };
 
 const editCustomerSurgeController = async (req, res, next) => {
-  const {
-    ruleName,
-    baseFare,
-    baseDistance,
-    waitingFare,
-    waitingTime,
-    geofenceId,
-  } = req.body;
-
   const errors = validationResult(req);
 
   let formattedErrors = {};
@@ -126,6 +115,15 @@ const editCustomerSurgeController = async (req, res, next) => {
     if (!customerSurgeFound) {
       return next(appError("Merchant surge not found", 404));
     }
+
+    const {
+      ruleName,
+      baseFare,
+      baseDistance,
+      waitingFare,
+      waitingTime,
+      geofenceId,
+    } = req.body;
 
     const normalizedRuleName = ruleName
       .trim()

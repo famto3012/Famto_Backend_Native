@@ -36,6 +36,8 @@ const {
 } = require("../../utils/createOrderHelpers");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
+const { findRolesToNotify } = require("../../socket/socket");
+
 // Initialize cart
 const initializePickAndDrop = async (req, res, next) => {
   try {

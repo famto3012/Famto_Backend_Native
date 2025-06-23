@@ -5,15 +5,6 @@ const AgentSurge = require("../../../models/AgentSurge");
 const appError = require("../../../utils/appError");
 
 const addAgentSurgeController = async (req, res, next) => {
-  const {
-    ruleName,
-    baseFare,
-    baseDistance,
-    waitingFare,
-    waitingTime,
-    geofenceId,
-  } = req.body;
-
   const errors = validationResult(req);
 
   let formattedErrors = {};
@@ -25,6 +16,15 @@ const addAgentSurgeController = async (req, res, next) => {
   }
 
   try {
+    const {
+      ruleName,
+      baseFare,
+      baseDistance,
+      waitingFare,
+      waitingTime,
+      geofenceId,
+    } = req.body;
+
     const normalizedRuleName = ruleName
       .trim()
       .replace(/\s+/g, " ")
@@ -65,14 +65,11 @@ const addAgentSurgeController = async (req, res, next) => {
 
 const getAllAgentSurgeController = async (req, res, next) => {
   try {
-    const allAgentSurges = await AgentSurge.find({}).populate(
-      "geofenceId",
-      "name"
-    );
+    const allSurge = await AgentSurge.find({}).populate("geofenceId", "name");
 
     res.status(200).json({
       message: "All customer surge",
-      data: allAgentSurges,
+      data: allSurge,
     });
   } catch (err) {
     next(appError(err.message));
@@ -81,17 +78,15 @@ const getAllAgentSurgeController = async (req, res, next) => {
 
 const getSingleAgentSurgeController = async (req, res, next) => {
   try {
-    const agentSurgeFound = await AgentSurge.findById(
-      req.params.agentSurgeId
-    ).populate("geofenceId", "name");
+    const surge = await AgentSurge.findById(req.params.agentSurgeId);
 
-    if (!agentSurgeFound) {
+    if (!surge) {
       return next(appError("Agent surge not found", 404));
     }
 
     res.status(200).json({
       message: "Single customer surge",
-      data: agentSurgeFound,
+      data: surge,
     });
   } catch (err) {
     next(appError(err.message));

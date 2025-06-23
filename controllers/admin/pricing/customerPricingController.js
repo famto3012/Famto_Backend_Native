@@ -114,17 +114,17 @@ const getAllCustomerPricingController = async (req, res, next) => {
 
 const getSingleCustomerPricingController = async (req, res, next) => {
   try {
-    const customerPricingFound = await CustomerPricing.findById(
+    const pricing = await CustomerPricing.findById(
       req.params.customerPricingId
-    ).populate("geofenceId", "name");
+    ).lean();
 
-    if (!customerPricingFound) {
+    if (!pricing) {
       return next(appError("Customer pricing not found", 404));
     }
 
     res.status(200).json({
       message: "Single customer pricing",
-      data: customerPricingFound,
+      data: pricing,
     });
   } catch (err) {
     next(appError(err.message));
@@ -132,23 +132,6 @@ const getSingleCustomerPricingController = async (req, res, next) => {
 };
 
 const editCustomerPricingController = async (req, res, next) => {
-  const {
-    deliveryMode,
-    ruleName,
-    baseFare,
-    baseDistance,
-    fareAfterBaseDistance,
-    baseWeightUpto,
-    fareAfterBaseWeight,
-    purchaseFarePerHour,
-    waitingFare,
-    waitingTime,
-    geofenceId,
-    vehicleType,
-    businessCategoryId,
-    merchants,
-  } = req.body;
-
   const errors = validationResult(req);
 
   let formattedErrors = {};
@@ -169,6 +152,23 @@ const editCustomerPricingController = async (req, res, next) => {
     if (!customerPricingFound) {
       return next(appError("Customer pricing not found", 404));
     }
+
+    const {
+      deliveryMode,
+      ruleName,
+      baseFare,
+      baseDistance,
+      fareAfterBaseDistance,
+      baseWeightUpto,
+      fareAfterBaseWeight,
+      purchaseFarePerHour,
+      waitingFare,
+      waitingTime,
+      geofenceId,
+      vehicleType,
+      businessCategoryId,
+      merchants,
+    } = req.body;
 
     const normalizedRuleName = ruleName
       .trim()
@@ -191,7 +191,10 @@ const editCustomerPricingController = async (req, res, next) => {
       merchants: { $in: merchants },
     });
 
-    if (existingMerchant) {
+    if (
+      existingMerchant &&
+      ["Take Away", "Home Delivery"].includes(existingMerchant.deliveryMode)
+    ) {
       const duplicateMerchants = existingMerchant.merchants.filter((merchant) =>
         merchants.includes(merchant)
       );

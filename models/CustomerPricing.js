@@ -47,11 +47,13 @@ const customerPricingSchema = new mongoose.Schema({
     type: Number,
     default: null,
   },
-  geofenceId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Geofence",
-    required: true,
-  },
+  geofenceId: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Geofence",
+      required: true,
+    },
+  ],
   status: {
     type: Boolean,
     default: true,

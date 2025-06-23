@@ -5,22 +5,6 @@ const AgentPricing = require("../../../models/AgentPricing");
 const appError = require("../../../utils/appError");
 
 const addAgentPricingController = async (req, res, next) => {
-  const {
-    ruleName,
-    baseFare,
-    baseDistanceFarePerKM,
-    startToPickFarePerKM,
-    waitingFare,
-    waitingTime,
-    purchaseFarePerHour,
-    minLoginHours,
-    minOrderNumber,
-    fareAfterMinLoginHours,
-    fareAfterMinOrderNumber,
-    geofenceId,
-    type,
-  } = req.body;
-
   const errors = validationResult(req);
 
   let formattedErrors = {};
@@ -32,6 +16,22 @@ const addAgentPricingController = async (req, res, next) => {
   }
 
   try {
+    const {
+      ruleName,
+      baseFare,
+      baseDistanceFarePerKM,
+      startToPickFarePerKM,
+      waitingFare,
+      waitingTime,
+      purchaseFarePerHour,
+      minLoginHours,
+      minOrderNumber,
+      fareAfterMinLoginHours,
+      fareAfterMinOrderNumber,
+      geofenceId,
+      type,
+    } = req.body;
+
     const normalizedRuleName = ruleName
       .trim()
       .replace(/\s+/g, " ")
@@ -79,14 +79,11 @@ const addAgentPricingController = async (req, res, next) => {
 
 const getAllAgentPricingController = async (req, res, next) => {
   try {
-    const allAgentPricings = await AgentPricing.find({}).populate(
-      "geofenceId",
-      "name"
-    );
+    const pricing = await AgentPricing.find({}).populate("geofenceId", "name");
 
     res.status(200).json({
       message: "All agent pricings",
-      data: allAgentPricings,
+      data: pricing,
     });
   } catch (err) {
     next(appError(err.message));
@@ -95,17 +92,15 @@ const getAllAgentPricingController = async (req, res, next) => {
 
 const getSingleAgentPricingController = async (req, res, next) => {
   try {
-    const agentPricingFound = await AgentPricing.findById(
-      req.params.agentPricingId
-    ).populate("geofenceId", "name");
+    const pricing = await AgentPricing.findById(req.params.agentPricingId);
 
-    if (!agentPricingFound) {
+    if (!pricing) {
       return next(appError("Agent pricing not found", 404));
     }
 
     res.status(200).json({
       message: "Single agent pricing",
-      data: agentPricingFound,
+      data: pricing,
     });
   } catch (err) {
     next(appError(err.message));

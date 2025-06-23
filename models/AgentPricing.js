@@ -50,11 +50,13 @@ const agentPricingSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    geofenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Geofence",
-      required: true,
-    },
+    geofenceId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Geofence",
+        required: true,
+      },
+    ],
     type: {
       type: String,
       enum: [
