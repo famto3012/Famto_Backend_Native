@@ -1179,6 +1179,7 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
     const historyFilter = {
       agentId: { $in: agentIds },
       ...dateFilter,
+      orders: { $gt: 0 },
     };
 
     if (status !== undefined) {

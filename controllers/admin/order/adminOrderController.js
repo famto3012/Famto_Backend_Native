@@ -2365,7 +2365,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       createdAt: 1,
     });
 
-    agentTasks.length > 0
+    agentTasks.length > 1
       ? (agentFound.status = "Busy")
       : (agentFound.status = "Free");
     agentFound.appDetail.totalEarning += calculatedSalary;
