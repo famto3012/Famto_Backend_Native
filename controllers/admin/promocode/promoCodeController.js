@@ -143,7 +143,7 @@ const editPromoCodeController = async (req, res, next) => {
 
 const getAllPromoCodesController = async (req, res, next) => {
   try {
-    const promoCodes = await PromoCode.find({});
+    const promoCodes = await PromoCode.find({}).populate("geofenceId", "name");
 
     const formattedResponse = promoCodes?.map((promoCode) => ({
       promoCodeId: promoCode._id,
@@ -156,7 +156,7 @@ const getAllPromoCodesController = async (req, res, next) => {
       minOrderAmount: promoCode.minOrderAmount || null,
       fromDate: formatDate(promoCode.fromDate),
       toDate: formatDate(promoCode.toDate),
-      description: promoCode.description || null,
+      geofences: promoCode?.geofenceId?.map((geofence) => geofence.name) || [],
       applicationMode: promoCode.applicationMode || null,
       appliedOn: promoCode.appliedOn || null,
       noOfUserUsed: promoCode.noOfUserUsed || 0,
@@ -191,7 +191,7 @@ const getSinglePromoCodeController = async (req, res, next) => {
       appliedOn: promoCode.appliedOn || null,
       applicationMode: promoCode.applicationMode || null,
       merchantId: promoCode.merchantId || [],
-      geofenceId: promoCode.geofenceId || null,
+      geofenceId: promoCode.geofenceId || [],
       imageUrl: promoCode.imageUrl || null,
       status: promoCode.status || null,
       noOfUserUsed: promoCode.noOfUserUsed || null,

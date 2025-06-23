@@ -15,11 +15,13 @@ const bannerSchema = new mongoose.Schema(
       ref: "Merchant",
       required: true,
     },
-    geofenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Geofence",
-      required: true,
-    },
+    geofenceId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Geofence",
+        required: true,
+      },
+    ],
     status: {
       type: Boolean,
       default: true,
