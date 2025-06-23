@@ -123,7 +123,7 @@ const getAllBannersController = async (req, res, next) => {
         name: banner?.name || "-",
         imageUrl: banner?.imageUrl || "-",
         merchantId: banner?.merchantId || "-",
-        geofenceId: banner?.geofenceId?.name || "-",
+        geofenceId: banner?.geofenceId?.map((geofence) => geofence.name) || [],
         status: banner?.status || null,
       };
     });

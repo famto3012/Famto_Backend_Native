@@ -54,11 +54,13 @@ const promoCodeSchema = new mongoose.Schema(
         ref: "Merchant",
       },
     ],
-    geofenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Geofence",
-      required: true,
-    },
+    geofenceId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Geofence",
+        required: true,
+      },
+    ],
     imageUrl: {
       type: String,
       required: true,

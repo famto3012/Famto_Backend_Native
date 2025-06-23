@@ -15,11 +15,13 @@ const appBannerSchema = new mongoose.Schema(
       ref: "Merchant",
       required: true,
     },
-    geofenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Geofence",
-      required: true,
-    },
+    geofenceId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Geofence",
+        required: true,
+      },
+    ],
     businessCategoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "BusinessCategory",
