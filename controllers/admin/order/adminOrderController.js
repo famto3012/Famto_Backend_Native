@@ -142,25 +142,25 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
         merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
         customerName:
           order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName ||
+          order?.pickupDropDetails[0]?.drops[0]?.deliveryAddress?.fullName ||
           null,
         assignedAgent: order?.agentId?.fullName || "Unassigned",
-        deliveryMode: order?.orderDetail?.deliveryMode || null,
+        deliveryMode: order?.deliveryMode || null,
         orderDate: formatDate(order?.createdAt) || null,
         orderTime: formatTime(order?.createdAt) || null,
-        deliveryDate: order?.orderDetail?.deliveryTime
-          ? formatDate(order.orderDetail.deliveryTime)
+        deliveryDate: order?.deliveryTime
+          ? formatDate(order.deliveryTime)
           : "-",
-        deliveryTime: order?.orderDetail?.deliveryTime
-          ? formatTime(order.orderDetail.deliveryTime)
+        deliveryTime: order?.deliveryTime
+          ? formatTime(order.deliveryTime)
           : "-",
         paymentMethod:
           order?.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
             : order?.paymentMode,
-        deliveryOption: order?.orderDetail?.deliveryOption || null,
+        deliveryOption: order?.deliveryOption || null,
         amount: order.billDetail.grandTotal,
-        isReady: order?.orderDetail?.isReady,
+        isReady: order?.isReady,
       };
     });
 
@@ -224,30 +224,29 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
     }
 
     if (startDate && endDate) {
-      startDate = new Date(startDate);
-      startDate.setHours(0, 0, 0, 0);
+      const start = moment.tz(startDate, "Asia/Kolkata");
+      const end = moment.tz(endDate, "Asia/Kolkata");
 
-      endDate = new Date(endDate);
-      endDate.setHours(23, 59, 59, 999);
+      startDate = start.startOf("day").toDate();
+      endDate = end.endOf("day").toDate();
 
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
     }
 
-    // Aggregation pipeline to merge and filter both collections
     const results = await ScheduledOrder.aggregate([
       {
         $match: filterCriteria,
       },
       {
         $unionWith: {
-          coll: "scheduledpickandcustoms", // Name of the second collection
+          coll: "scheduledpickandcustoms",
           pipeline: [{ $match: filterCriteria }],
         },
       },
-      // Populate merchantId if available
+
       {
         $lookup: {
-          from: "merchants", // Collection name for merchants
+          from: "merchants",
           localField: "merchantId",
           foreignField: "_id",
           as: "merchantData",
@@ -256,13 +255,13 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
       {
         $unwind: {
           path: "$merchantData",
-          preserveNullAndEmptyArrays: true, // Keep documents without a merchantId
+          preserveNullAndEmptyArrays: true,
         },
       },
-      // Populate customerId
+
       {
         $lookup: {
-          from: "customers", // Collection name for customers
+          from: "customers",
           localField: "customerId",
           foreignField: "_id",
           as: "customerData",
@@ -271,7 +270,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
       {
         $unwind: {
           path: "$customerData",
-          preserveNullAndEmptyArrays: true, // Keep documents without a customerId
+          preserveNullAndEmptyArrays: true,
         },
       },
       {
@@ -330,8 +329,8 @@ const confirmOrderByAdminController = async (req, res, next) => {
     if (!orderFound) return next(appError("Order not found", 404));
 
     const stepperData = {
-      by: "Admin",
-      userId: process.env.ADMIN_ID,
+      by: req.userRole,
+      userId: req.userAuth,
       date: new Date(),
     };
 
@@ -342,15 +341,14 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderFound?.merchantId?.merchantDetail?.pricing[0]?.modelType;
 
     if (orderFound?.merchantId && modelType === "Commission") {
-      console.log("Here");
       const { payableAmountToFamto, payableAmountToMerchant } =
         await orderCommissionLogHelper(orderFound);
-      console.log("Here 2");
 
       let updatedCommission = {
         merchantEarnings: payableAmountToMerchant,
         famtoEarnings: payableAmountToFamto,
       };
+
       orderFound.commissionDetail = updatedCommission;
     }
 
@@ -382,6 +380,10 @@ const confirmOrderByAdminController = async (req, res, next) => {
         description: `Order (#${orderId}) is confirmed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
     ]);
+
+    res.status(200).json({
+      message: `Order with ID: ${orderFound._id} is confirmed`,
+    });
 
     const eventName = "orderAccepted";
 
@@ -417,10 +419,6 @@ const confirmOrderByAdminController = async (req, res, next) => {
       userIds,
       notificationData,
       socketData,
-    });
-
-    res.status(200).json({
-      message: `Order with ID: ${orderFound._id} is confirmed`,
     });
   } catch (err) {
     next(appError(err.message));

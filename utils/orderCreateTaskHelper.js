@@ -1,46 +1,56 @@
-const appError = require("./appError");
-const Task = require("../models/Task");
 const turf = require("@turf/turf");
-const AutoAllocation = require("../models/AutoAllocation");
+
+const Task = require("../models/Task");
 const Order = require("../models/Order");
 const Agent = require("../models/Agent");
-const AgentPricing = require("../models/AgentPricing");
 const Merchant = require("../models/Merchant");
+const FcmToken = require("../models/fcmToken");
+const AgentPricing = require("../models/AgentPricing");
+const AutoAllocation = require("../models/AutoAllocation");
+const BusinessCategory = require("../models/BusinessCategory");
+
 const {
-  io,
   sendNotification,
   getUserLocationFromSocket,
 } = require("../socket/socket");
-const BusinessCategory = require("../models/BusinessCategory");
-const FcmToken = require("../models/fcmToken");
 
 const orderCreateTaskHelper = async (orderId) => {
   try {
-    const order = await Order.findById(orderId);
-    let task = await Task.find({ orderId });
+    const [order, task] = await Promise.all([
+      Order.findById(orderId),
+      Task.exists({ orderId }),
+    ]);
 
-    if (order) {
-      if (task.length === 0) {
-        let pickupDetail = {
-          pickupLocation: order?.orderDetail?.pickupLocation,
-          pickupAddress: order?.orderDetail?.pickupAddress,
-        };
-        let deliveryDetail = {
-          deliveryLocation: order.orderDetail.deliveryLocation,
-          deliveryAddress: order.orderDetail.deliveryAddress,
-        };
-        await Task.create({
-          orderId,
-          deliveryMode: order.orderDetail.deliveryMode,
-          pickupDetail,
-          deliveryDetail,
-        });
-      }
+    if (!order) {
+      throw new Error("Order not found");
     }
 
-    task = await Task.find({ orderId });
+    if (task) return true;
 
-    const autoAllocation = await AutoAllocation.findOne();
+    let pickups = order.pickupDropDetails[0].pickups.map((pick) => ({
+      status: "Pending",
+      location: pick.pickupLocation,
+      address: pick.pickupAddress,
+    }));
+
+    let drops = order.pickupDropDetails[0].drops.map((drop) => ({
+      status: "Pending",
+      location: drop.deliveryLocation,
+      address: drop.deliveryAddress,
+    }));
+
+    await Task.create({
+      orderId,
+      deliveryMode: order.deliveryMode,
+      pickupDropDetails: [
+        {
+          pickups,
+          drops,
+        },
+      ],
+    });
+
+    // const autoAllocation = await AutoAllocation.findOne();
 
     // if (autoAllocation.isActive) {
     //   if (autoAllocation.autoAllocationType === "All") {

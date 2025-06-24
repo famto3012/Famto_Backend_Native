@@ -421,7 +421,7 @@ customerRoute.get(
 );
 
 customerRoute.post(
-  "/add-pick-and-drop-items",
+  "/confirm-pick-and-drop-vehicle",
   isAuthenticated,
   confirmPickAndDropVehicleType
 );

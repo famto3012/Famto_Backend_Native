@@ -60,11 +60,9 @@ const pickupDropSchema = mongoose.Schema(
 const billSchema = mongoose.Schema(
   {
     deliveryChargePerDay: { type: Number, default: null },
-    originalDeliveryCharge: { type: Number, required: true },
-    discountedDeliveryCharge: { type: Number, default: null },
+    deliveryCharge: { type: Number, required: true },
     discountedAmount: { type: Number, default: null },
-    originalGrandTotal: { type: Number, default: null },
-    discountedGrandTotal: { type: Number, default: null },
+    grandTotal: { type: Number, default: null },
     itemTotal: { type: Number, default: 0 },
     addedTip: { type: Number, default: null },
     subTotal: { type: Number, default: null },
@@ -79,8 +77,9 @@ const billSchema = mongoose.Schema(
 
 const tempOrderSchema = new mongoose.Schema(
   {
-    customerId: { type: String, required: true },
-    merchantId: { type: String, default: null },
+    orderId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    customerId: { type: String, ref: "Customer", required: true },
+    merchantId: { type: String, ref: "Merchant", default: null },
     deliveryMode: {
       type: String,
       enum: ["Take Away", "Home Delivery", "Pick and Drop", "Custom Order"],
@@ -95,6 +94,7 @@ const tempOrderSchema = new mongoose.Schema(
     billDetail: billSchema,
     distance: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
+    deliveryTime: { type: Date, required: true },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },

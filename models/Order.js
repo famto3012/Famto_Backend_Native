@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const DatabaseCounter = require("./DatabaseCounter");
 
-// Reuse your cartItemSchema
 const cartItemSchema = mongoose.Schema(
   {
     itemId: {
@@ -17,6 +16,8 @@ const cartItemSchema = mongoose.Schema(
     numOfUnits: { type: Number, default: null },
     quantity: { type: Number, default: null },
     itemImageURL: { type: String, default: null },
+    price: { type: Number, default: null },
+    variantTypeName: { type: String, default: null },
   },
   { _id: false }
 );
@@ -38,7 +39,6 @@ const pickupDropSchema = mongoose.Schema(
         items: [cartItemSchema],
       },
     ],
-
     drops: [
       {
         deliveryLocation: { type: [Number], default: null },
@@ -61,11 +61,9 @@ const pickupDropSchema = mongoose.Schema(
 const billSchema = mongoose.Schema(
   {
     deliveryChargePerDay: { type: Number, default: null },
-    originalDeliveryCharge: { type: Number, required: true },
-    discountedDeliveryCharge: { type: Number, default: null },
+    deliveryCharge: { type: Number, required: true },
     discountedAmount: { type: Number, default: null },
-    originalGrandTotal: { type: Number, default: null },
-    discountedGrandTotal: { type: Number, default: null },
+    grandTotal: { type: Number, default: null },
     itemTotal: { type: Number, default: 0 },
     addedTip: { type: Number, default: null },
     subTotal: { type: Number, default: null },
@@ -78,11 +76,171 @@ const billSchema = mongoose.Schema(
   { _id: false }
 );
 
+const orderRatingSchema = mongoose.Schema(
+  {
+    ratingToDeliveryAgent: {
+      review: {
+        type: String,
+        default: null,
+      },
+      rating: {
+        type: Number,
+        min: 1,
+        max: 5,
+      },
+    },
+    ratingByDeliveryAgent: {
+      review: {
+        type: String,
+        default: null,
+      },
+      rating: {
+        type: Number,
+        min: 1,
+        max: 5,
+      },
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const commissionDetailSchema = mongoose.Schema(
+  {
+    merchantEarnings: {
+      type: Number,
+      required: true,
+    },
+    famtoEarnings: {
+      type: Number,
+      required: true,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const shopUpdatesSchema = mongoose.Schema(
+  {
+    location: {
+      type: [Number],
+      required: true,
+    },
+    status: {
+      type: String,
+      required: true,
+    },
+    description: {
+      type: String,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const detailAddedByAgentSchema = mongoose.Schema(
+  {
+    startToPickDistance: {
+      type: Number,
+      default: null,
+    },
+    agentEarning: {
+      type: Number,
+      default: null,
+    },
+    notes: {
+      type: String,
+      default: null,
+    },
+    signatureImageURL: {
+      type: String,
+      default: null,
+    },
+    imageURL: {
+      type: String,
+      default: null,
+    },
+    distanceCoveredByAgent: {
+      type: Number,
+      default: null,
+    },
+    shopUpdates: [shopUpdatesSchema],
+  },
+  {
+    _id: false,
+  }
+);
+
+const stepperSchema = mongoose.Schema(
+  {
+    by: { type: String, default: null },
+    userId: { type: String, default: null },
+    date: { type: Date, default: null },
+    detailURL: { type: String, default: null },
+    location: { type: [Number], default: null },
+  },
+  {
+    _id: false,
+  }
+);
+
+const orderDetailStepperSchema = mongoose.Schema(
+  {
+    created: stepperSchema,
+    accepted: stepperSchema,
+    assigned: stepperSchema,
+    pickupStarted: stepperSchema,
+    reachedPickupLocation: stepperSchema,
+    deliveryStarted: stepperSchema,
+    reachedDeliveryLocation: stepperSchema,
+    noteAdded: stepperSchema,
+    signatureAdded: stepperSchema,
+    imageAdded: stepperSchema,
+    completed: stepperSchema,
+    cancelled: stepperSchema,
+  },
+  {
+    _id: false,
+  }
+);
+
+const purchasedItemsSchema = mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    price: {
+      type: Number,
+      default: null,
+    },
+    costPrice: {
+      type: Number,
+      default: null,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const orderSchema = mongoose.Schema(
   {
     _id: { type: String },
     customerId: { type: String, ref: "Customer", required: true },
-    merchantId: { type: String, ref: "Merchant" },
+    merchantId: { type: String, ref: "Merchant", default: null },
     scheduledOrderId: { type: String, ref: "ScheduledOrder", default: null },
     agentId: { type: String, ref: "Agent", default: null },
     deliveryMode: {
@@ -99,6 +257,7 @@ const orderSchema = mongoose.Schema(
     billDetail: billSchema,
     distance: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
+    deliveryTime: { type: Date, default: 0 },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },
@@ -128,6 +287,12 @@ const orderSchema = mongoose.Schema(
     },
     cancellationReason: { type: String, default: null },
     cancellationDescription: { type: String, default: null },
+    detailAddedByAgent: detailAddedByAgentSchema,
+    orderDetailStepper: orderDetailStepperSchema,
+    purchasedItems: [purchasedItemsSchema],
+    orderRating: orderRatingSchema,
+    commissionDetail: commissionDetailSchema,
+    isReady: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -1,70 +1,35 @@
 const mongoose = require("mongoose");
 
-const pickupSchema = new mongoose.Schema({
-  pickupStatus: {
+const detailSchema = new mongoose.Schema({
+  status: {
     type: String,
     enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
     default: "Pending",
   },
-  pickupLocation: {
-    type: [Number],
-  },
-  pickupAddress: {
+  location: { type: [Number] },
+  address: {
     fullName: String,
     phoneNumber: String,
     flat: String,
     area: String,
     landmark: String,
   },
-  startTime: {
-    type: Date,
-    default: null,
-  },
-  completedTime: {
-    type: Date,
-    default: null,
-  },
+  startTime: { type: Date, default: null },
+  completedTime: { type: Date, default: null },
 });
 
-const deliverySchema = new mongoose.Schema({
-  deliveryStatus: {
-    type: String,
-    enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
-    default: "Pending",
+const multiPickupDropSchema = new mongoose.Schema(
+  {
+    pickups: [detailSchema],
+    drops: [detailSchema],
   },
-  deliveryLocation: {
-    type: [Number],
-    required: true,
-  },
-  deliveryAddress: {
-    fullName: String,
-    phoneNumber: String,
-    flat: String,
-    area: String,
-    landmark: String,
-  },
-  startTime: {
-    type: Date,
-    default: null,
-  },
-  completedTime: {
-    type: Date,
-    default: null,
-  },
-});
+  { _id: false }
+);
 
 const taskSchema = new mongoose.Schema(
   {
-    orderId: {
-      type: String,
-      ref: "Order",
-      required: true,
-    },
-    agentId: {
-      type: String,
-      ref: "Agent",
-      default: null,
-    },
+    orderId: { type: String, ref: "Order", required: true },
+    agentId: { type: String, ref: "Agent", default: null },
     taskStatus: {
       type: String,
       enum: ["Assigned", "Unassigned", "Completed", "Cancelled"],
@@ -75,12 +40,9 @@ const taskSchema = new mongoose.Schema(
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
-    pickupDetail: pickupSchema,
-    deliveryDetail: deliverySchema,
+    pickupDropDetails: [multiPickupDropSchema],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 const Task = mongoose.model("Task", taskSchema);
