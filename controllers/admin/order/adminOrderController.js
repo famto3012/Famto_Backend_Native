@@ -2146,7 +2146,7 @@ const createOrderByAdminController = async (req, res, next) => {
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: orderDetails.purchasedItems,
       "orderDetailStepper.created": {
-        by: "Admin",
+        by: `${req.userRole} - ${req.userName}`,
         date: new Date(),
       },
     };
