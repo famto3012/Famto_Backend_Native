@@ -1,24 +1,123 @@
 const mongoose = require("mongoose");
 
+// Reuse same cartItemSchema from PickAndCustomCart
+const cartItemSchema = mongoose.Schema(
+  {
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId(),
+    },
+    itemName: { type: String, required: true },
+    length: { type: Number, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    unit: { type: String, default: null },
+    weight: { type: Number, default: null },
+    numOfUnits: { type: Number, default: null },
+    quantity: { type: Number, default: null },
+    itemImageURL: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const pickupDropSchema = mongoose.Schema(
+  {
+    pickups: [
+      {
+        pickupLocation: { type: [Number], default: null },
+        pickupAddress: {
+          fullName: String,
+          phoneNumber: String,
+          flat: String,
+          area: String,
+          landmark: String,
+        },
+        instructionInPickup: { type: String, default: null },
+        voiceInstructionInPickup: { type: String, default: null },
+        items: [cartItemSchema],
+      },
+    ],
+
+    drops: [
+      {
+        deliveryLocation: { type: [Number], default: null },
+        deliveryAddress: {
+          fullName: String,
+          phoneNumber: String,
+          flat: String,
+          area: String,
+          landmark: String,
+        },
+        instructionInDelivery: { type: String, default: null },
+        voiceInstructionInDelivery: { type: String, default: null },
+        items: [cartItemSchema],
+      },
+    ],
+  },
+  { _id: false }
+);
+
+const billSchema = mongoose.Schema(
+  {
+    deliveryChargePerDay: { type: Number, default: null },
+    originalDeliveryCharge: { type: Number, required: true },
+    discountedDeliveryCharge: { type: Number, default: null },
+    discountedAmount: { type: Number, default: null },
+    originalGrandTotal: { type: Number, default: null },
+    discountedGrandTotal: { type: Number, default: null },
+    itemTotal: { type: Number, default: 0 },
+    addedTip: { type: Number, default: null },
+    subTotal: { type: Number, default: null },
+    vehicleType: { type: String, default: null },
+    surgePrice: { type: Number, default: null },
+    taxAmount: { type: Number, default: null },
+    promoCodeUsed: { type: String, default: null },
+    promoCodeDiscount: { type: Number, default: null },
+  },
+  { _id: false }
+);
+
 const tempOrderSchema = new mongoose.Schema(
   {
-    orderId: mongoose.Schema.Types.ObjectId,
-    customerId: String,
-    merchantId: String,
-    items: Array,
-    orderDetail: Object,
-    billDetail: Object,
-    totalAmount: Number,
-    status: String,
-    paymentMode: String,
-    paymentStatus: String,
-    paymentId: String,
-    purchasedItems: Object,
+    customerId: { type: String, required: true },
+    merchantId: { type: String, default: null },
+    deliveryMode: {
+      type: String,
+      enum: ["Take Away", "Home Delivery", "Pick and Drop", "Custom Order"],
+      required: true,
+    },
+    deliveryOption: {
+      type: String,
+      enum: ["On-demand", "Scheduled"],
+      required: true,
+    },
+    pickupDropDetails: [pickupDropSchema],
+    billDetail: billSchema,
+    distance: { type: Number, default: 0 },
+    duration: { type: Number, default: 0 },
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    time: { type: Date, default: null },
+    numOfDays: { type: Number, default: null },
+    voiceInstructionToDeliveryAgent: { type: String, default: null },
+    totalAmount: { type: Number, default: 0 },
+    status: { type: String, default: "Pending" },
+    paymentMode: {
+      type: String,
+      enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
+      default: null,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["Pending", "Completed", "Failed"],
+      default: "Pending",
+    },
+    paymentId: { type: String, default: null },
   },
   { timestamps: true }
 );
 
-// Auto-delete orders after 60 seconds
+// Auto-delete after 60 seconds
 tempOrderSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 });
 
 const TemporaryOrder = mongoose.model("TemporaryOrder", tempOrderSchema);

@@ -17,7 +17,6 @@ const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
 const {
-  getDistanceFromPickupToDelivery,
   calculateDeliveryCharges,
   getDistanceFromMultipleCoordinates,
   filterCoordinatesFromData,
@@ -28,14 +27,7 @@ const {
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
-const {
-  deleteFromFirebase,
-  uploadToFirebase,
-} = require("../../utils/imageOperation");
-const {
-  processSchedule,
-  processDeliveryDetailInApp,
-} = require("../../utils/createOrderHelpers");
+
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const initializePickAndDrop = async (req, res, next) => {
@@ -73,14 +65,21 @@ const addPickUpAddressController = async (req, res, next) => {
       coordinates
     );
 
-    const newCart = await PickAndCustomCart.create({
-      customerId: customer._id,
-      deliveryMode: "Pick and Drop",
-      deliveryOption: "On-demand",
-      pickupDropDetails: [...parsedData.pickupDropDetails],
-      distance: distanceInKM,
-      duration,
-    });
+    const newCart = await PickAndCustomCart.findOneAndUpdate(
+      { customerId: customer._id, deliveryMode: "Pick and Drop" },
+      {
+        customerId: customer._id,
+        deliveryMode: "Pick and Drop",
+        deliveryOption: "On-demand",
+        pickupDropDetails: [...parsedData.pickupDropDetails],
+        distance: distanceInKM,
+        duration,
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    );
 
     res.status(200).json({ newCart });
   } catch (err) {
@@ -170,7 +169,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
       status: true,
     });
 
-    let surgeCharges;
+    let surgeCharges = 0;
 
     const { distance, duration } = cartFound;
 
@@ -503,16 +502,16 @@ const confirmPickAndDropController = async (req, res, next) => {
 
       // Store order details temporarily in the database
       const tempOrder = await TemporaryOrder.create({
-        orderId,
         customerId,
-        items: cart.items,
-        orderDetail: {
-          ...cart.cartDetail,
-          deliveryTime,
-        },
+        deliveryMode: "Pick and Drop",
+        deliveryOption: cart.deliveryOption,
+        pickupDropDetails: cart.pickupDropDetails,
         billDetail: orderBill,
-        totalAmount: orderAmount,
-        status: "Pending",
+        distance: cart.distance,
+        startDate: cart.startDate,
+        endDate: cart.endDate,
+        time: cart.time,
+        numOfDays: cart.numOfDays,
         paymentMode: "Famto-cash",
         paymentStatus: "Completed",
       });
