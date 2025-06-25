@@ -630,8 +630,6 @@ const confirmPickAndDropController = async (req, res, next) => {
             amount: newOrder.billDetail.grandTotal,
           };
 
-          console.log(socketData);
-
           const userIds = {
             admin: process.env.ADMIN_ID,
             merchant: newOrder?.merchantId?._id,
@@ -647,7 +645,7 @@ const confirmPickAndDropController = async (req, res, next) => {
             socketData,
           });
         }
-      }, 5000);
+      }, 60000);
     } else if (paymentMode === "Online-payment") {
       const { success, orderId, error } = await createRazorpayOrderId(
         orderAmount
@@ -701,6 +699,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         cart.billDetail.originalDeliveryCharge,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       discountedAmount: cart.billDetail.discountedAmount,
+
       surgePrice: cart.billDetail.surgePrice,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
