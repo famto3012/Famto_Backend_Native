@@ -616,24 +616,48 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           : null,
 
       vehicleType: orderFound?.billDetail?.vehicleType || "-",
-      deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-      deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+      deliveryMode: orderFound.deliveryMode || "-",
+      deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.createdAt)} | ${formatTime(
         orderFound.createdAt
       )}`,
-      deliveryTime: `${formatDate(
-        orderFound.orderDetail.deliveryTime
-      )} | ${formatTime(orderFound.orderDetail.deliveryTime)}`,
+      deliveryTime: `${formatDate(orderFound.deliveryTime)} | ${formatTime(
+        orderFound.deliveryTime
+      )}`,
       customerDetail: {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.orderDetail.deliveryAddress.fullName ||
+          orderFound.pickupDropDetails[0].pickups[0]?.pickupAddress.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        dropAddress: orderFound.orderDetail.deliveryAddress || "-",
-        pickAddress: orderFound.orderDetail.pickupAddress || "-",
+        pickAddress:
+          orderFound.pickupDropDetails[0].pickups?.map((address) => ({
+            fullName: address.pickupAddress.fullName,
+            phoneNumber: address.pickupAddress.phoneNumber,
+            flat: address.pickupAddress.flat,
+            area: address.pickupAddress.area,
+            landmark: address.pickupAddress.landmark,
+          })) || [],
+        dropAddress:
+          orderFound.pickupDropDetails[0].drops?.map((address) => ({
+            fullName: address.deliveryAddress.fullName,
+            phoneNumber: address.deliveryAddress.phoneNumber,
+            flat: address.deliveryAddress.flat,
+            area: address.deliveryAddress.area,
+            landmark: address.deliveryAddress.landmark,
+          })) || [],
+        pickInstructions:
+          orderFound.pickupDropDetails[0].pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.pickupDropDetails[0].drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDelivery || null,
+            voiceInstruction: instruction?.voiceInstructionInDelivery || null,
+          })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
@@ -664,10 +688,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         timeTaken: formatToHours(orderFound?.orderDetail?.timeTaken) || "-",
         delayedBy: formatToHours(orderFound?.orderDetail?.delayedBy) || "-",
       },
-      items: orderFound.items || null,
       billDetail: orderFound.billDetail || null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
       agentLocation: orderFound?.agentId?.location || null,
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper
@@ -675,7 +696,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
     };
 
     res.status(200).json({
-      message: "Single order detail",
+      success: true,
       data: formattedResponse,
     });
   } catch (err) {
