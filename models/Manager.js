@@ -23,11 +23,12 @@ const managerSchema = mongoose.Schema(
       ref: "ManagerRoles",
       required: true,
     },
-    geofenceId: {
+    geofenceId:[{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Geofence",
       required: true,
     },
+  ],
     resetPasswordToken: {
       type: String,
     },

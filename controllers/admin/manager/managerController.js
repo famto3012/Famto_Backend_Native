@@ -34,7 +34,7 @@ const addManagerController = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newManager = await Manager.create({
+    let newManager = await Manager.create({
       name,
       email: normalizedEmail,
       phoneNumber,
@@ -46,6 +46,7 @@ const addManagerController = async (req, res, next) => {
     if (!newManager) {
       return next(appError("Error in creating new manager"));
     }
+    await newManager.populate("geofenceId", "name");
 
     res.status(201).json({ message: "Manager created successfully" });
   } catch (err) {
@@ -161,7 +162,8 @@ const fetchAllManagersController = async (req, res, next) => {
       email: manager?.email,
       role: manager?.role?.roleName,
       phone: manager?.phoneNumber,
-      geofence: manager?.geofenceId?.name,
+      // geofence: manager?.geofenceId?.name,
+      geofence: manager?.geofenceId?.map((geofence) => geofence.name) || [],
     }));
 
     res.status(200).json(formattedResponse);
