@@ -33,28 +33,17 @@ const addShopController = async (req, res, next) => {
 
     if (!customer) return next(appError("Customer not found", 404));
 
-    let updatedCartDetail;
     let pickupLocation;
     let deliveryLocation;
     let distance;
     let duration;
 
-    //? If buyFromAnyWhere is true, set pickupLocation to null
     if (buyFromAnyWhere) {
       pickupLocation = [];
       deliveryLocation = customer.customerDetails.location;
 
       distance = 0;
       duration = 0;
-
-      updatedCartDetail = {
-        pickupLocation,
-        deliveryLocation,
-        deliveryMode: "Custom Order",
-        deliveryOption: "On-demand",
-        distance,
-        duration,
-      };
     } else {
       pickupLocation = [latitude, longitude];
       deliveryLocation = customer.customerDetails.location;
@@ -64,28 +53,37 @@ const addShopController = async (req, res, next) => {
 
       distance = distanceInKM;
       duration = durationInMinutes;
-
-      updatedCartDetail = {
-        pickupLocation,
-        pickupAddress: {
-          fullName: shopName,
-          area: place,
-        },
-        deliveryLocation,
-        deliveryMode: "Custom Order",
-        deliveryOption: "On-demand",
-        distance,
-        duration,
-      };
     }
+
+    const pickups = {
+      pickupLocation,
+      pickupAddress: {
+        fullName: shopName,
+        area: place,
+      },
+    };
+
+    const drops = {
+      deliveryLocation,
+    };
 
     const cart = await PickAndCustomCart.findOneAndUpdate(
       {
         customerId,
-        "cartDetail.deliveryMode": "Custom Order",
+        deliveryMode: "Custom Order",
       },
       {
-        $set: { cartDetail: updatedCartDetail },
+        $set: {
+          deliveryMode: "Custom Order",
+          deliveryOption: "On-demand",
+          pickupDropDetails: [
+            {
+              pickups,
+              drops,
+            },
+          ],
+          distance,
+        },
         $setOnInsert: { customerId },
       },
       { new: true, upsert: true }
@@ -109,18 +107,18 @@ const getCustomOrderItems = async (req, res, next) => {
 
     const cart = await PickAndCustomCart.findById(cartId);
 
-    if (!cart) {
-      return next(appError("Cart not found", 404));
-    }
+    if (!cart) return next(appError("Cart not found", 404));
 
-    const formattedResponse = cart.items?.map((item) => ({
-      itemId: item.itemId,
-      itemName: item.itemName,
-      unit: item.unit,
-      numOfUnits: item.numOfUnits,
-      quantity: item.quantity,
-      itemImageURL: item.itemImageURL,
-    }));
+    const formattedResponse = cart.pickupDropDetails[0]?.drops[0]?.items?.map(
+      (item) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        unit: item.unit,
+        numOfUnits: item.numOfUnits,
+        quantity: item.quantity,
+        itemImageURL: item.itemImageURL,
+      })
+    );
 
     res.status(200).json(formattedResponse);
   } catch (err) {
@@ -136,12 +134,10 @@ const addItemsToCartController = async (req, res, next) => {
 
     const cart = await PickAndCustomCart.findOne({
       customerId,
-      "cartDetail.deliveryMode": "Custom Order",
+      deliveryMode: "Custom Order",
     });
 
-    if (!cart) {
-      return next(appError("Cart not found", 404));
-    }
+    if (!cart) return next(appError("Cart not found", 404));
 
     let itemImageURL;
 
@@ -161,7 +157,7 @@ const addItemsToCartController = async (req, res, next) => {
       itemImageURL,
     };
 
-    cart.items.push(updatedItems);
+    cart.pickupDropDetails[0]?.drops[0]?.items.push(updatedItems);
 
     await cart.save();
 
@@ -169,7 +165,7 @@ const addItemsToCartController = async (req, res, next) => {
       cartId: cart._id,
       customerId: cart.customerId,
       cartDetail: cart.cartDetail,
-      items: cart.items?.map((item) => ({
+      items: cart.pickupDropDetails[0]?.drops[0]?.items?.map((item) => ({
         itemId: item.itemId,
         itemName: item.itemName,
         quantity: item.quantity,
@@ -189,12 +185,20 @@ const getSingleItemController = async (req, res, next) => {
 
     const cart = await PickAndCustomCart.findOne({
       customerId: req.userAuth,
-      "cartDetail.deliveryMode": "Custom Order",
+      deliveryMode: "Custom Order",
     });
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const item = cart.items?.find((item) => item.itemId.toString() === itemId);
+    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const items = dropDetail[0]?.items;
+
+    if (!Array.isArray(items)) {
+      return next(appError("Invalid cart structure", 500));
+    }
+
+    const item = items?.find((item) => item.itemId.toString() === itemId);
+
     if (!item) return next(appError("Item not found", 404));
 
     const formattedResponse = {
@@ -220,25 +224,30 @@ const editItemInCartController = async (req, res, next) => {
 
     const cart = await PickAndCustomCart.findOne({
       customerId,
-      "cartDetail.deliveryMode": "Custom Order",
+      deliveryMode: "Custom Order",
     });
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const itemIndex = cart.items.findIndex(
+    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const items = dropDetail[0]?.items;
+
+    if (!Array.isArray(items)) {
+      return next(appError("Invalid cart structure", 500));
+    }
+
+    const itemIndex = items.findIndex(
       (item) => item.itemId.toString() === itemId
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
 
-    let itemImageURL = cart.items[itemIndex].itemImageURL;
+    let itemImageURL = items[itemIndex].itemImageURL;
 
     if (req.file) {
-      // If there's a new image, delete the old one and upload the new image
-      if (cart.items[itemIndex].itemImageURL) {
-        await deleteFromFirebase(cart.items[itemIndex].itemImageURL);
+      if (itemImageURL) {
+        await deleteFromFirebase(itemImageURL);
       }
-
       itemImageURL = await uploadToFirebase(
         req.file,
         "Custom-order-item-Image"
@@ -246,8 +255,8 @@ const editItemInCartController = async (req, res, next) => {
     }
 
     // Update the item details
-    cart.items[itemIndex] = {
-      itemId: cart.items[itemIndex].itemId,
+    items[itemIndex] = {
+      itemId: items[itemIndex].itemId,
       itemName,
       quantity,
       unit,
@@ -257,7 +266,7 @@ const editItemInCartController = async (req, res, next) => {
 
     await cart.save();
 
-    const formattedItems = cart.items?.map((item) => ({
+    const formattedItems = items?.map((item) => ({
       itemId: item.itemId,
       itemName: item.itemName,
       quantity: item.quantity,
@@ -279,23 +288,30 @@ const deleteItemInCartController = async (req, res, next) => {
 
     const cart = await PickAndCustomCart.findOne({
       customerId,
-      "cartDetail.deliveryMode": "Custom Order",
+      deliveryMode: "Custom Order",
     });
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const itemIndex = cart.items.findIndex(
+    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const items = dropDetail[0]?.items;
+
+    if (!Array.isArray(items)) {
+      return next(appError("Invalid cart structure", 500));
+    }
+
+    const itemIndex = items?.findIndex(
       (item) => item.itemId.toString() === itemId
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
 
-    let itemImageURL = cart.items[itemIndex].itemImageURL;
+    let itemImageURL = items[itemIndex].itemImageURL;
 
     if (itemImageURL) await deleteFromFirebase(itemImageURL);
 
     // Remove the item from the cart
-    cart.items.splice(itemIndex, 1);
+    items.splice(itemIndex, 1);
 
     // Save the updated cart
     await cart.save();
@@ -325,7 +341,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       Customer.findById(customerId),
       PickAndCustomCart.findOne({
         customerId,
-        "cartDetail.deliveryMode": "Custom Order",
+        deliveryMode: "Custom Order",
       }),
     ]);
 
@@ -379,13 +395,16 @@ const addDeliveryAddressController = async (req, res, next) => {
 
     let distance = 0;
     let duration = 0;
+    let pickupLocation = [];
+    let deliveryLocation = [];
 
     const havePickupLocation =
-      cartFound?.cartDetail?.pickupLocation?.length === 2;
+      cartFound?.pickupDropDetails[0]?.pickups[0]?.pickupLocation?.length === 2;
 
     if (havePickupLocation) {
-      const pickupLocation = cartFound.cartDetail.pickupLocation;
-      const deliveryLocation = deliveryCoordinates;
+      pickupLocation =
+        cartFound?.pickupDropDetails[0]?.pickups[0]?.pickupLocation;
+      deliveryLocation = deliveryCoordinates;
 
       const { distanceInKM, durationInMinutes } =
         await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
@@ -408,17 +427,24 @@ const addDeliveryAddressController = async (req, res, next) => {
       );
     }
 
-    let updatedCartDetail = {
-      pickupLocation: cartFound?.cartDetail?.pickupLocation || [],
-      pickupAddress: cartFound.cartDetail.pickupAddress,
-      deliveryAddress: deliveryAddress._doc,
-      deliveryLocation: deliveryCoordinates,
-      deliveryMode: cartFound.cartDetail.deliveryMode,
+    let detail = {
+      deliveryOption: "On-demand",
+      pickupDropDetails: [
+        {
+          pickups: [...cartFound?.pickupDropDetails[0]?.pickups],
+          drops: [
+            {
+              deliveryLocation,
+              deliveryAddress,
+              instructionInDelivery,
+              voiceInstructionInDelivery: voiceInstructionToAgentURL,
+              items: [...cartFound?.pickupDropDetails[0]?.drops[0].items],
+            },
+          ],
+        },
+      ],
       distance,
       duration,
-      instructionInDelivery,
-      voiceInstructionToDeliveryAgent: voiceInstructionToAgentURL,
-      deliveryOption: "On-demand",
     };
 
     let updatedDeliveryCharges = 0;
@@ -428,7 +454,7 @@ const addDeliveryAddressController = async (req, res, next) => {
     if (distance && distance > 0) {
       const { deliveryCharges, surgeCharges } = await getDeliveryAndSurgeCharge(
         cartFound.customerId,
-        cartFound.cartDetail.deliveryMode,
+        cartFound.deliveryMode,
         distance
       );
 
@@ -443,7 +469,7 @@ const addDeliveryAddressController = async (req, res, next) => {
     }
 
     let taxAmount = 0;
-    if (taxFound) {
+    if (taxFound && taxFound.status) {
       const calculatedTax = (updatedDeliveryCharges * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
     }
@@ -468,8 +494,7 @@ const addDeliveryAddressController = async (req, res, next) => {
     await PickAndCustomCart.findByIdAndUpdate(
       cartFound._id,
       {
-        cartDetail: updatedCartDetail,
-        items: cartFound.items,
+        ...detail,
         billDetail: updatedBillDetail,
       },
       { new: true }
@@ -493,7 +518,8 @@ const getCustomCartBill = async (req, res, next) => {
       return next(appError("Cart not found", 404));
     }
 
-    const havePickupLocation = cart?.cartDetail?.pickupLocation?.length === 2;
+    const havePickupLocation =
+      cart?.pickupDropDetails[0]?.pickups[0]?.pickupLocation?.length === 2;
 
     const billDetail = {
       deliveryCharge: havePickupLocation
@@ -532,7 +558,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       PickAndCustomCart.findOne({
         _id: mongoose.Types.ObjectId.createFromHexString(cartId),
         customerId,
-        "cartDetail.deliveryMode": "Custom Order",
+        deliveryMode: "Custom Order",
       }),
     ]);
 
@@ -563,15 +589,27 @@ const confirmCustomOrderController = async (req, res, next) => {
     // Generate a unique order ID
     const orderId = new mongoose.Types.ObjectId();
 
+    const deliveryTime = new Date();
+    deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
+
     // Store order details temporarily in the database
     const tempOrder = await TemporaryOrder.create({
       orderId,
       customerId,
-      items: cart.items,
-      orderDetail: cart.cartDetail,
+      deliveryMode: "Custom Order",
+      deliveryOption: cart.deliveryOption,
+      pickupDropDetails: cart.pickupDropDetails,
       billDetail: orderBill,
-      totalAmount: orderAmount,
-      status: "Pending",
+      distance: cart.distance,
+      deliveryTime,
+      startDate: cart.startDate,
+      endDate: cart.endDate,
+      time: cart.time,
+      numOfDays: cart.numOfDays,
+      totalAmount:
+        cart?.billDetail?.discountedGrandTotal ||
+        cart?.billDetail?.originalGrandTotal ||
+        0,
       paymentMode: "Cash-on-delivery",
       paymentStatus: "Pending",
     });
@@ -606,22 +644,30 @@ const confirmCustomOrderController = async (req, res, next) => {
       const storedOrderData = await TemporaryOrder.findOne({ orderId });
 
       if (storedOrderData) {
-        const deliveryTime = new Date();
-        deliveryTime.setHours(deliveryTime.getHours() + 1);
-
         const newOrder = await Order.create({
           customerId: storedOrderData.customerId,
-          items: storedOrderData.items,
-          orderDetail: { ...storedOrderData.orderDetail, deliveryTime },
+          deliveryMode: storedOrderData.deliveryMode,
+          deliveryOption: storedOrderData.deliveryOption,
+          pickupDropDetails: storedOrderData.pickupDropDetails,
           billDetail: storedOrderData.billDetail,
-          totalAmount: storedOrderData.totalAmount,
+          distance: storedOrderData.distance,
+          deliveryTime: storedOrderData.deliveryTime,
+          startDate: storedOrderData.startDate,
+          endDate: storedOrderData.endDate,
+          time: storedOrderData.time,
+          numOfDays: storedOrderData.numOfDays,
           status: storedOrderData.status,
           paymentMode: storedOrderData.paymentMode,
           paymentStatus: storedOrderData.paymentStatus,
-          "orderDetailStepper.created": {
-            by: storedOrderData.orderDetail.deliveryAddress.fullName,
-            userId: storedOrderData.customerId,
-            date: new Date(),
+          orderDetailStepper: {
+            created: {
+              by: "Customer",
+              userId: req.userAuth,
+              date: new Date(),
+              location:
+                storedOrderData?.pickupDropDetails[0]?.drops[0]
+                  ?.deliveryLocation || [],
+            },
           },
         });
 
@@ -659,29 +705,28 @@ const confirmCustomOrderController = async (req, res, next) => {
           ...data,
 
           orderId: newOrder._id,
-          orderDetail: newOrder.orderDetail,
           billDetail: newOrder.billDetail,
 
           //? Data for displaying detail in all orders table
           _id: newOrder._id,
           orderStatus: newOrder.status,
-          merchantName:
-            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+          merchantName: "-",
           customerName:
-            newOrder?.orderDetail?.deliveryAddress?.fullName ||
+            newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+              ?.fullName ||
             newOrder?.customerId?.fullName ||
             "-",
-          deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          deliveryMode: newOrder?.deliveryMode,
           orderDate: formatDate(newOrder.createdAt),
           orderTime: formatTime(newOrder.createdAt),
-          deliveryDate: newOrder?.orderDetail?.deliveryTime
-            ? formatDate(newOrder.orderDetail.deliveryTime)
+          deliveryDate: newOrder?.deliveryTime
+            ? formatDate(newOrder?.deliveryTime)
             : "-",
-          deliveryTime: newOrder?.orderDetail?.deliveryTime
-            ? formatTime(newOrder.orderDetail.deliveryTime)
+          deliveryTime: newOrder?.deliveryTime
+            ? formatTime(newOrder.deliveryTime)
             : "-",
           paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.orderDetail.deliveryOption,
+          deliveryOption: newOrder.deliveryOption,
           amount: newOrder.billDetail.grandTotal,
         };
 
@@ -732,7 +777,7 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
 
     if (orderFound.paymentMode === "Famto-cash") {
       const orderAmount = orderFound.billDetail.grandTotal;
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
