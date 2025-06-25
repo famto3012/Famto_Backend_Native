@@ -86,7 +86,7 @@ const {
   deleteOldActivityLogs,
 } = require("./controllers/admin/activityLogs/activityLogController.js");
 const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
-const { deleteOldLogs } = require("./libs/automatic.js");
+const { deleteOldLogs, deleteOldTasks } = require("./libs/automatic.js");
 const {
   distanceCache,
 } = require("./controllers/customer/universalOrderController.js");
@@ -207,6 +207,7 @@ cron.schedule("30 18 * * *", async () => {
     removeExpiredProductDiscount(),
     removeExpiredPromoCode(),
     deleteOldLogs(),
+    deleteOldTasks()
   ]);
 });
 

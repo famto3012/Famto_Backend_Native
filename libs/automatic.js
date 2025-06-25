@@ -4,6 +4,9 @@ const AgentAppCustomization = require("../models/AgentAppCustomization");
 const Merchant = require("../models/Merchant");
 const fs = require("fs");
 const path = require("path");
+const { errorLogger } = require("../middlewares/errorLogger");
+const moment = require("moment-timezone");
+const Task = require("../models/Task");
 
 const automaticStatusOfflineForAgent = async () => {
   const nowUTC = new Date();
@@ -238,9 +241,24 @@ const removeOldNotifications = async () => {
   }
 };
 
+const deleteOldTasks = async () => {
+  try {
+    const date = new Date();
+    const formattedDay = moment.tz(date, "Asia/Kolkata");
+
+    const twoDaysAgo = formattedDay.subtract(2, "days").startOf("day");
+    const tasks = await Task.deleteMany({ createdAt: { $lte: twoDaysAgo } });
+    console.log(`Old Tasks deleted Succesfully`);
+  } catch (error) {
+    console.log(`Error in delete old tasks ${error}`);
+    errorLogger(`Error in delete old tasks ${JSON.stringify(error)}`);
+  }
+};
+
 module.exports = {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
   deleteOldLogs,
   removeOldNotifications,
+  deleteOldTasks,
 };
