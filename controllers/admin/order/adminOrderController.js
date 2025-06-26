@@ -2452,7 +2452,15 @@ const markOrderAsCancelled = async (req, res, next) => {
     task.pickupDetail.pickupStatus = "Cancelled";
     task.deliveryDetail.deliveryStatus = "Cancelled";
 
-    const promises = [order.save(), task.save()];
+    const promises = [
+      order.save(),
+      task.save(),
+      ActivityLog.create({
+        userId: req.userAuth,
+        userType: req.userRole,
+        description: `Order (#${orderId}) is marked as cancelled by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+      }),
+    ];
 
     if (order?.agentId && !notificationCount) {
       promises.push(
