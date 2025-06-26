@@ -362,10 +362,13 @@ const calculateAgentEarnings = async (agent, order) => {
   let surgePrice = 0;
 
   if (agentSurge) {
-    surgePrice =
-      (order?.detailAddedByAgent?.distanceCoveredByAgent ??
-        order.orderDetail.distance / agentSurge.baseDistance) *
-      agentSurge.baseFare;
+    const distance =
+      order?.detailAddedByAgent?.distanceCoveredByAgent ??
+      order.orderDetail.distance;
+
+    const criteria = Math.ceil(distance / agentSurge.baseDistance);
+
+    surgePrice = criteria * agentSurge.baseFare;
   }
 
   let totalPurchaseFare = 0;

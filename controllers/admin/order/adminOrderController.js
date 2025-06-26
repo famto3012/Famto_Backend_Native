@@ -2315,8 +2315,13 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       let surgePrice = 0;
 
       if (agentSurge) {
-        surgePrice =
-          (totalOrderDistance / agentSurge.baseDistance) * agentSurge.baseFare;
+        const distance =
+          orderFound?.detailAddedByAgent?.distanceCoveredByAgent ??
+          orderFound.orderDetail.distance;
+
+        const criteria = Math.ceil(distance / agentSurge.baseDistance);
+
+        surgePrice = criteria * agentSurge.baseFare;
       }
 
       let totalPurchaseFare = 0;
