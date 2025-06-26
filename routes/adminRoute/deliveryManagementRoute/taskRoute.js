@@ -8,6 +8,7 @@ const {
   getAgentsAccordingToGeofenceController,
   getTasksController,
   getAgentsController,
+  batchOrder,
 } = require("../../../controllers/admin/deliveryManagement/taskController");
 
 taskRoute.get(
@@ -29,5 +30,7 @@ taskRoute.post(
 taskRoute.get("/task-filter", isAdmin, isAuthenticated, getTasksController);
 
 taskRoute.get("/agent-filter", isAdmin, isAuthenticated, getAgentsController);
+
+taskRoute.get("/batch-order", isAdmin, isAuthenticated, batchOrder);
 
 module.exports = taskRoute;

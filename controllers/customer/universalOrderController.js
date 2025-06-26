@@ -1675,6 +1675,31 @@ const orderPaymentController = async (req, res, next) => {
       type: "Debit",
     };
 
+    const pickupDropDetails = [
+      {
+        pickups: [
+          {
+            pickupLocation: cart.cartDetail.pickupLocation,
+            pickupAddress: cart.cartDetail.pickupAddress,
+            instructionInPickup: cart.cartDetail.instructionToMerchant,
+            voiceInstructionInPickup:
+              cart.cartDetail.voiceInstructionToMerchant,
+            items: [],
+          },
+        ],
+        drops: [
+          {
+            deliveryLocation: cart.cartDetail.deliveryLocation,
+            deliveryAddress: cart.cartDetail.deliveryAddress,
+            instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
+            voiceInstructionInDelivery:
+              cart.cartDetail.voiceInstructionToDeliveryAgent,
+            items: cart.items,
+          },
+        ],
+      },
+    ];
+
     let newOrder;
     if (paymentMode === "Famto-cash") {
       if (customer.customerDetails.walletBalance < orderAmount) {
@@ -1804,14 +1829,17 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           customerId,
           merchantId: cart.merchantId,
-          items: formattedItems,
-          orderDetail: {
-            ...cart.cartDetail,
-            deliveryTime,
-          },
+          deliveryMode: cart.cartDetail.deliveryMode,
+          deliveryOption: cart.cartDetail.deliveryOption,
+          pickupDropDetails,
           billDetail: orderBill,
+          distance: cart.cartDetail.distance,
+          deliveryTime,
+          startDate: cart.cartDetail.startDate,
+          endDate: cart.cartDetail.endDate,
+          time: cart.cartDetail.time,
+          numOfDays: cart.cartDetail.numOfDays,
           totalAmount: orderAmount,
-          status: "Pending",
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
           purchasedItems,
@@ -1852,22 +1880,24 @@ const orderPaymentController = async (req, res, next) => {
             let newOrderCreated = await Order.create({
               customerId: storedOrderData.customerId,
               merchantId: storedOrderData.merchantId,
-              items: storedOrderData.items,
-              orderDetail: storedOrderData.orderDetail,
+              pickupDropDetails: storedOrderData.pickupDropDetails,
               billDetail: storedOrderData.billDetail,
+              distance: storedOrderData.distance,
+              deliveryTime: storedOrderData.deliveryTime,
+              startDate: storedOrderData.startDate,
+              endDate: storedOrderData.endDate,
+              time: storedOrderData.time,
+              numOfDays: storedOrderData.numOfDays,
               totalAmount: storedOrderData.totalAmount,
               status: storedOrderData.status,
               paymentMode: storedOrderData.paymentMode,
               paymentStatus: storedOrderData.paymentStatus,
-              purchasedItems: storedOrderData.purchasedItems,
               "orderDetailStepper.created": {
-                by:
-                  storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                  customer?.fullName ||
-                  "-",
+                by: "Customer",
                 userId: storedOrderData.customerId,
                 date: new Date(),
               },
+              purchasedItems: storedOrderData.purchasedItems,
             });
 
             if (!newOrderCreated)
@@ -1921,7 +1951,6 @@ const orderPaymentController = async (req, res, next) => {
               ...data,
 
               orderId: newOrder._id,
-              orderDetail: newOrder.orderDetail,
               billDetail: newOrder.billDetail,
               orderDetailStepper: newOrder.orderDetailStepper.created,
 
@@ -1931,20 +1960,21 @@ const orderPaymentController = async (req, res, next) => {
               merchantName:
                 newOrder?.merchantId?.merchantDetail?.merchantName || "-",
               customerName:
-                newOrder?.orderDetail?.deliveryAddress?.fullName ||
+                newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+                  ?.fullName ||
                 newOrder?.customerId?.fullName ||
                 "-",
-              deliveryMode: newOrder?.orderDetail?.deliveryMode,
+              deliveryMode: newOrder?.deliveryMode,
               orderDate: formatDate(newOrder.createdAt),
               orderTime: formatTime(newOrder.createdAt),
-              deliveryDate: newOrder?.orderDetail?.deliveryTime
-                ? formatDate(newOrder.orderDetail.deliveryTime)
+              deliveryDate: newOrder?.deliveryTime
+                ? formatDate(newOrder.deliveryTime)
                 : "-",
-              deliveryTime: newOrder?.orderDetail?.deliveryTime
-                ? formatTime(newOrder.orderDetail.deliveryTime)
+              deliveryTime: newOrder?.deliveryTime
+                ? formatTime(newOrder.deliveryTime)
                 : "-",
               paymentMethod: newOrder.paymentMode,
-              deliveryOption: newOrder.orderDetail.deliveryOption,
+              deliveryOption: newOrder.deliveryOption,
               amount: newOrder.billDetail.grandTotal,
             };
 
@@ -1982,14 +2012,17 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         customerId,
         merchantId: cart.merchantId,
-        items: formattedItems,
-        orderDetail: {
-          ...cart.cartDetail,
-          deliveryTime,
-        },
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickupDropDetails,
         billDetail: orderBill,
+        distance: cart.cartDetail.distance,
+        deliveryTime,
+        startDate: cart.cartDetail.startDate,
+        endDate: cart.cartDetail.endDate,
+        time: cart.cartDetail.time,
+        numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
-        status: "Pending",
         paymentMode: "Cash-on-delivery",
         paymentStatus: "Pending",
         purchasedItems,
@@ -2023,25 +2056,26 @@ const orderPaymentController = async (req, res, next) => {
 
         if (storedOrderData) {
           let newOrderCreated = await Order.create({
-            customerId: storedOrderData?.customerId,
-            merchantId: storedOrderData?.merchantId,
-            items: storedOrderData?.items,
-            orderDetail: storedOrderData?.orderDetail,
-            billDetail: storedOrderData?.billDetail,
-            totalAmount: storedOrderData?.totalAmount,
-            status: storedOrderData?.status,
-            paymentMode: storedOrderData?.paymentMode,
-            paymentStatus: storedOrderData?.paymentStatus,
-            paymentId: storedOrderData.paymentId,
-            purchasedItems: storedOrderData?.purchasedItems,
+            customerId: storedOrderData.customerId,
+            merchantId: storedOrderData.merchantId,
+            pickupDropDetails: storedOrderData.pickupDropDetails,
+            billDetail: storedOrderData.billDetail,
+            distance: storedOrderData.distance,
+            deliveryTime: storedOrderData.deliveryTime,
+            startDate: storedOrderData.startDate,
+            endDate: storedOrderData.endDate,
+            time: storedOrderData.time,
+            numOfDays: storedOrderData.numOfDays,
+            totalAmount: storedOrderData.totalAmount,
+            status: storedOrderData.status,
+            paymentMode: storedOrderData.paymentMode,
+            paymentStatus: storedOrderData.paymentStatus,
             "orderDetailStepper.created": {
-              by:
-                storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                customer.fullName ||
-                "-",
-              userId: storedOrderData?.customerId,
+              by: "Customer",
+              userId: storedOrderData.customerId,
               date: new Date(),
             },
+            purchasedItems: storedOrderData.purchasedItems,
           });
 
           if (!newOrderCreated) {
@@ -2088,7 +2122,6 @@ const orderPaymentController = async (req, res, next) => {
             ...data,
 
             orderId: newOrder._id,
-            orderDetail: newOrder.orderDetail,
             billDetail: newOrder.billDetail,
             orderDetailStepper: newOrder.orderDetailStepper.created,
 
@@ -2098,20 +2131,21 @@ const orderPaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.orderDetail?.deliveryAddress?.fullName ||
+              newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+                ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
-            deliveryMode: newOrder?.orderDetail?.deliveryMode,
+            deliveryMode: newOrder?.deliveryMode,
             orderDate: formatDate(newOrder.createdAt),
             orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.orderDetail?.deliveryTime
-              ? formatDate(newOrder.orderDetail.deliveryTime)
+            deliveryDate: newOrder?.deliveryTime
+              ? formatDate(newOrder.deliveryTime)
               : "-",
-            deliveryTime: newOrder?.orderDetail?.deliveryTime
-              ? formatTime(newOrder.orderDetail.deliveryTime)
+            deliveryTime: newOrder?.deliveryTime
+              ? formatTime(newOrder.deliveryTime)
               : "-",
             paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.orderDetail.deliveryOption,
+            deliveryOption: newOrder.deliveryOption,
             amount: newOrder.billDetail.grandTotal,
           };
 
@@ -2278,6 +2312,31 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       10
     );
 
+    const pickupDropDetails = [
+      {
+        pickups: [
+          {
+            pickupLocation: cart.cartDetail.pickupLocation,
+            pickupAddress: cart.cartDetail.pickupAddress,
+            instructionInPickup: cart.cartDetail.instructionToMerchant,
+            voiceInstructionInPickup:
+              cart.cartDetail.voiceInstructionToMerchant,
+            items: [],
+          },
+        ],
+        drops: [
+          {
+            deliveryLocation: cart.cartDetail.deliveryLocation,
+            deliveryAddress: cart.cartDetail.deliveryAddress,
+            instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
+            voiceInstructionInDelivery:
+              cart.cartDetail.voiceInstructionToDeliveryAgent,
+            items: cart.items,
+          },
+        ],
+      },
+    ];
+
     const deliveryTime = new Date();
     deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
 
@@ -2398,17 +2457,19 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId,
         customerId,
         merchantId: cart.merchantId,
-        items: formattedItems,
-        orderDetail: {
-          ...cart.cartDetail,
-          deliveryTime,
-        },
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickupDropDetails,
         billDetail: orderBill,
+        distance: cart.cartDetail.distance,
+        deliveryTime,
+        startDate: cart.cartDetail.startDate,
+        endDate: cart.cartDetail.endDate,
+        time: cart.cartDetail.time,
+        numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
-        status: "Pending",
-        paymentMode: "Online-payment",
-        paymentStatus: "Completed",
-        paymentId: paymentDetails.razorpay_payment_id,
+        paymentMode: "Cash-on-delivery",
+        paymentStatus: "Pending",
         purchasedItems,
       });
 
@@ -2446,24 +2507,25 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
           let newOrderCreated = await Order.create({
             customerId: storedOrderData.customerId,
-            merchantId: storedOrderData?.merchantId,
-            items: storedOrderData.items,
-            orderDetail: storedOrderData.orderDetail,
+            merchantId: storedOrderData.merchantId,
+            pickupDropDetails: storedOrderData.pickupDropDetails,
             billDetail: storedOrderData.billDetail,
+            distance: storedOrderData.distance,
+            deliveryTime: storedOrderData.deliveryTime,
+            startDate: storedOrderData.startDate,
+            endDate: storedOrderData.endDate,
+            time: storedOrderData.time,
+            numOfDays: storedOrderData.numOfDays,
             totalAmount: storedOrderData.totalAmount,
             status: storedOrderData.status,
             paymentMode: storedOrderData.paymentMode,
             paymentStatus: storedOrderData.paymentStatus,
-            paymentId: storedOrderData.paymentId,
-            purchasedItems: storedOrderData.purchasedItems,
             "orderDetailStepper.created": {
-              by:
-                storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                customer?.fullName ||
-                "-",
+              by: "Customer",
               userId: storedOrderData.customerId,
               date: new Date(),
             },
+            purchasedItems: storedOrderData.purchasedItems,
           });
 
           if (!newOrderCreated) {
@@ -2511,7 +2573,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             ...data,
 
             orderId: newOrder._id,
-            orderDetail: newOrder.orderDetail,
             billDetail: newOrder.billDetail,
             orderDetailStepper: newOrder.orderDetailStepper.created,
 
@@ -2521,20 +2582,21 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.orderDetail?.deliveryAddress?.fullName ||
+              newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+                ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
-            deliveryMode: newOrder?.orderDetail?.deliveryMode,
+            deliveryMode: newOrder?.deliveryMode,
             orderDate: formatDate(newOrder.createdAt),
             orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.orderDetail?.deliveryTime
-              ? formatDate(newOrder.orderDetail.deliveryTime)
+            deliveryDate: newOrder?.deliveryTime
+              ? formatDate(newOrder.deliveryTime)
               : "-",
-            deliveryTime: newOrder?.orderDetail?.deliveryTime
-              ? formatTime(newOrder.orderDetail.deliveryTime)
+            deliveryTime: newOrder?.deliveryTime
+              ? formatTime(newOrder.deliveryTime)
               : "-",
             paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.orderDetail.deliveryOption,
+            deliveryOption: newOrder.deliveryOption,
             amount: newOrder.billDetail.grandTotal,
           };
 

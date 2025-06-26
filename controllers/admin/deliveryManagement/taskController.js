@@ -337,10 +337,25 @@ const getAgentsController = async (req, res, next) => {
   }
 };
 
+const batchOrder = async (req, res, next) => {
+  try {
+    const { taskIds } = req.body;
+
+    const tasks = await Task.find({ _id: { $in: taskIds } });
+
+    console.log(tasks);
+
+    res.status(200).json({ success: true });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   getTaskByIdController,
   assignAgentToTaskController,
   getAgentsAccordingToGeofenceController,
   getTasksController,
   getAgentsController,
+  batchOrder,
 };
