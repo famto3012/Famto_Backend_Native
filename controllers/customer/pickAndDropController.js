@@ -27,8 +27,12 @@ const {
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
-
+const {
+  uploadToFirebase,
+  deleteFromFirebase,
+} = require("../../utils/imageOperation");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
+
 const { findRolesToNotify } = require("../../socket/socket");
 
 const initializePickAndDrop = async (req, res, next) => {
@@ -66,13 +70,52 @@ const addPickUpAddressController = async (req, res, next) => {
       coordinates
     );
 
+    const pickupDropDetails = parsedData.pickupDropDetails;
+
+    const files = req.files;
+
+    for (const file of files) {
+      const matchPickup = file.fieldname.match(/^pickupVoice(\d+)$/);
+      const matchDrop = file.fieldname.match(/^dropVoice(\d+)$/);
+
+      if (matchPickup) {
+        const index = parseInt(matchPickup[1]);
+        const pickup = pickupDropDetails[0]?.pickups?.[index];
+
+        if (pickup) {
+          const existingUrl = pickup.voiceInstructionInPickup;
+          if (existingUrl) {
+            await deleteFromFirebase(existingUrl);
+          }
+
+          const url = await uploadToFirebase(file, "VoiceInstructions");
+          pickup.voiceInstructionInPickup = url;
+        }
+      }
+
+      if (matchDrop) {
+        const index = parseInt(matchDrop[1]);
+        const drop = pickupDropDetails[0]?.drops?.[index];
+
+        if (drop) {
+          const existingUrl = drop.voiceInstructionInDelivery;
+          if (existingUrl) {
+            await deleteFromFirebase(existingUrl);
+          }
+
+          const url = await uploadToFirebase(file, "VoiceInstructions");
+          drop.voiceInstructionInDelivery = url;
+        }
+      }
+    }
+
     const newCart = await PickAndCustomCart.findOneAndUpdate(
       { customerId: customer._id, deliveryMode: "Pick and Drop" },
       {
         customerId: customer._id,
         deliveryMode: "Pick and Drop",
         deliveryOption: "On-demand",
-        pickupDropDetails: [...parsedData.pickupDropDetails],
+        pickupDropDetails,
         distance: distanceInKM,
         duration,
       },

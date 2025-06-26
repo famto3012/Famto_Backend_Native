@@ -398,10 +398,7 @@ customerRoute.delete(
 
 customerRoute.post(
   "/add-address-and-items",
-  upload.fields([
-    { name: "voiceInstructionInPickup", maxCount: 1 },
-    { name: "voiceInstructionInDelivery", maxCount: 1 },
-  ]),
+  upload.any(),
   isAuthenticated,
   addPickUpAddressController
 );
