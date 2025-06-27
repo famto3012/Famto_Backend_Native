@@ -13,24 +13,24 @@ const {
 
 taskRoute.get(
   "/agents-in-geofence",
-  isAdmin,
   isAuthenticated,
+  isAdmin,
   getAgentsAccordingToGeofenceController
 );
 
-taskRoute.get("/task/:taskId", isAdmin, isAuthenticated, getTaskByIdController);
+taskRoute.get("/task/:taskId", isAuthenticated, isAdmin, getTaskByIdController);
 
 taskRoute.post(
   "/assign-task/:taskId",
-  isAdmin,
   isAuthenticated,
+  isAdmin,
   assignAgentToTaskController
 );
 
-taskRoute.get("/task-filter", isAdmin, isAuthenticated, getTasksController);
+taskRoute.get("/task-filter", isAuthenticated, isAdmin, getTasksController);
 
-taskRoute.get("/agent-filter", isAdmin, isAuthenticated, getAgentsController);
+taskRoute.get("/agent-filter", isAuthenticated, isAdmin, getAgentsController);
 
-taskRoute.get("/batch-order", isAdmin, isAuthenticated, batchOrder);
+taskRoute.post("/batch-order", isAuthenticated, isAdmin, batchOrder);
 
 module.exports = taskRoute;

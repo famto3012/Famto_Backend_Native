@@ -1,22 +1,27 @@
 const mongoose = require("mongoose");
 
-const detailSchema = new mongoose.Schema({
-  status: {
-    type: String,
-    enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
-    default: "Pending",
+const detailSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
+      default: "Pending",
+    },
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    startTime: { type: Date, default: null },
+    completedTime: { type: Date, default: null },
   },
-  location: { type: [Number] },
-  address: {
-    fullName: String,
-    phoneNumber: String,
-    flat: String,
-    area: String,
-    landmark: String,
-  },
-  startTime: { type: Date, default: null },
-  completedTime: { type: Date, default: null },
-});
+  {
+    _id: false,
+  }
+);
 
 const multiPickupDropSchema = new mongoose.Schema(
   {

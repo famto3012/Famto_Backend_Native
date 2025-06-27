@@ -1,27 +1,22 @@
 const mongoose = require("mongoose");
 
-const detailSchema = new mongoose.Schema({
-  status: {
-    type: String,
-    enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
-    default: "Pending",
-  },
-  location: { type: [Number] },
-  address: {
-    fullName: String,
-    phoneNumber: String,
-    flat: String,
-    area: String,
-    landmark: String,
-  },
-  startTime: { type: Date, default: null },
-  completedTime: { type: Date, default: null },
-});
-
-const multiPickupDropSchema = new mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    pickups: [detailSchema],
-    drops: [detailSchema],
+    status: {
+      type: String,
+      enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
+      default: "Pending",
+    },
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    startTime: { type: Date, default: null },
+    completedTime: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -39,7 +34,14 @@ const batchOrderSchema = new mongoose.Schema(
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
-    pickupDropDetails: [
+    pickupAddress: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    dropDetails: [
       {
         orderId: { type: String, ref: "Order", required: true },
         taskId: {
@@ -47,7 +49,7 @@ const batchOrderSchema = new mongoose.Schema(
           ref: "Task",
           required: true,
         },
-        detail: [multiPickupDropSchema],
+        drops: detailSchema,
       },
     ],
   },

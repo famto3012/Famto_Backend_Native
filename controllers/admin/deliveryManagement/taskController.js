@@ -20,6 +20,7 @@ const {
   getDistanceFromPickupToDelivery,
 } = require("../../../utils/customerAppHelpers");
 const { formatDate, formatTime } = require("../../../utils/formatters");
+const BatchOrder = require("../../../models/BatchOrder");
 
 const getTaskByIdController = async (req, res, next) => {
   try {
@@ -61,6 +62,11 @@ const assignAgentToTaskController = async (req, res, next) => {
     agent.appDetail.pendingOrders += 1;
 
     await agent.save();
+
+    res.status(200).json({
+      message: "Notification send to the agent",
+      data: socketData,
+    });
 
     let deliveryAddress = order.orderDetail.deliveryAddress;
 
@@ -132,11 +138,6 @@ const assignAgentToTaskController = async (req, res, next) => {
     };
 
     sendSocketData(agentId, eventName, socketData);
-
-    res.status(200).json({
-      message: "Notification send to the agent",
-      data: socketData,
-    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -339,13 +340,150 @@ const getAgentsController = async (req, res, next) => {
 
 const batchOrder = async (req, res, next) => {
   try {
-    const { taskIds } = req.body;
+    const { taskIds, agentId } = req.body;
 
-    const tasks = await Task.find({ _id: { $in: taskIds } });
+    const [agent, tasks, autoAllocation] = await Promise.all([
+      Agent.findById(agentId),
+      Task.find({ _id: { $in: taskIds } }).populate(
+        "orderId",
+        "merchantId customerId createdAt"
+      ),
+      AutoAllocation.findOne(),
+    ]);
 
-    console.log(tasks);
+    if (!agent) return next(appError("Agent not found", 404));
+
+    if (!tasks.length) return next(appError("No tasks found", 404));
+
+    const firstMode = tasks[0].deliveryMode;
+    const allSameMode = tasks.every((task) => task.deliveryMode === firstMode);
+
+    if (!allSameMode) {
+      return next(appError("All tasks must have the same delivery mode", 400));
+    }
+
+    const merchantId = tasks[0]?.orderId?.merchantId || null;
+
+    const refLocation =
+      tasks[0]?.pickupDropDetails?.[0]?.pickups?.[0]?.location?.join(",");
+    const refAddress = tasks[0]?.pickupDropDetails?.[0]?.pickups?.[0]?.address;
+    const allSameFirstPickupLocation = tasks.every((task) => {
+      const loc =
+        task?.pickupDropDetails?.[0]?.pickups?.[0]?.location?.join(",");
+      return loc === refLocation;
+    });
+
+    if (!allSameFirstPickupLocation) {
+      return next(
+        appError("All tasks must have the same first pickup location", 400)
+      );
+    }
+
+    const option = {
+      agentId,
+      taskStatus: "Unassigned",
+      deliveryMode: firstMode,
+      pickupAddress: refAddress,
+      dropDetails: tasks?.map((task) => ({
+        orderId: task.orderId._id,
+        taskId: task._id,
+        drops: {
+          status: "Pending",
+          location: task?.pickupDropDetails?.[0]?.drops[0].location,
+          address: task?.pickupDropDetails?.[0]?.drops[0].address,
+        },
+      })),
+    };
+
+    await BatchOrder.create(option);
+
+    if (!agent.appDetail) {
+      agent.appDetail = {
+        totalEarning: 0,
+        orders: 0,
+        pendingOrders: 0,
+        totalDistance: 0,
+        cancelledOrders: 0,
+        loginDuration: 0,
+      };
+    }
+
+    agent.appDetail.pendingOrders += 1;
+
+    await agent.save();
 
     res.status(200).json({ success: true });
+
+    let deliveryAddress = order.orderDetail.deliveryAddress;
+
+    const eventName = "newOrder";
+
+    const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+    // Send notifications to each role dynamically
+    for (const role of rolesToNotify) {
+      let roleId;
+
+      if (role === "admin") {
+        roleId = process.env.ADMIN_ID;
+      } else if (role === "merchant") {
+        roleId = merchantId;
+      } else if (role === "driver") {
+        roleId = agentId;
+      } else if (role === "customer") {
+        roleId = customerId;
+      } else {
+        const roleValue = await ManagerRoles.findOne({ roleName: role });
+        let manager;
+        if (roleValue) {
+          manager = await Manager.findOne({ role: roleValue._id });
+        }
+        if (manager) {
+          roleId = manager._id;
+        }
+      }
+
+      if (roleId) {
+        const notificationData = {
+          fcm: {
+            ...data,
+            agentId,
+            orderId: tasks[0].orderId._id,
+            merchantName: refAddress?.fullName || null,
+            pickAddress: refAddress || null,
+            customerName: deliveryAddress?.fullName || null,
+            customerAddress: deliveryAddress,
+            orderType: firstMode || null,
+            taskDate: formatDate(order?.orderDetail?.deliveryTime),
+            taskTime: formatTime(order?.orderDetail?.deliveryTime),
+            timer: autoAllocation?.expireTime || 60,
+          },
+        };
+
+        await sendNotification(
+          roleId,
+          eventName,
+          notificationData,
+          role.charAt(0).toUpperCase() + role.slice(1)
+        );
+      }
+    }
+
+    const socketData = {
+      ...data,
+      orderId: order._id,
+      merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
+      pickAddress: order?.orderDetail?.pickupAddress || null,
+      customerName: deliveryAddress?.fullName || null,
+      customerAddress: deliveryAddress,
+      agentId,
+      orderType: order?.orderDetail?.deliveryMode || null,
+      taskDate: formatDate(order?.orderDetail?.deliveryTime),
+      taskTime: formatTime(order?.orderDetail?.deliveryTime),
+      timer: autoAllocation?.expireTime || null,
+    };
+
+    sendSocketData(agentId, eventName, socketData);
   } catch (err) {
     next(appError(err.message));
   }

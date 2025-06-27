@@ -2149,23 +2149,54 @@ const createOrderByAdminController = async (req, res, next) => {
 
     const orderOptions = {
       customerId: cartFound.customerId,
-      merchantId: cartFound?.merchantId && cartFound.merchantId,
-      items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-        ? orderDetails.formattedItems
-        : cartFound.items,
-      orderDetail: {
-        ...cartFound.cartDetail,
-        deliveryTime,
-      },
+      merchantId: cartFound.merchantId,
+      deliveryMode: cartFound.cartDetail.deliveryMode,
+      deliveryOption: cartFound.cartDetail.deliveryOption,
+      pickupDropDetails: [
+        {
+          pickups: [
+            {
+              pickupLocation: cartFound.cartDetail.pickupLocation,
+              pickupAddress: cartFound.cartDetail.pickupAddress,
+              instructionInPickup: cartFound.cartDetail.instructionToMerchant,
+              voiceInstructionInPickup:
+                cartFound.cartDetail.voiceInstructionToMerchant,
+              items: [],
+            },
+          ],
+          drops: [
+            {
+              deliveryLocation: cartFound.cartDetail.deliveryLocation,
+              deliveryAddress: cartFound.cartDetail.deliveryAddress,
+              instructionInDelivery:
+                cartFound.cartDetail.instructionToDeliveryAgent,
+              voiceInstructionInDelivery:
+                cartFound.cartDetail.voiceInstructionToDeliveryAgent,
+              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.items,
+              orderDetail: {
+                ...cartFound.cartDetail,
+                deliveryTime,
+              },
+            },
+          ],
+        },
+      ],
       billDetail: orderDetails.billDetail,
+      distance: cartFound.cartDetail.distance,
+      deliveryTime,
+      startDate: cartFound.cartDetail.startDate,
+      endDate: cartFound.cartDetail.endDate,
+      time: cartFound.cartDetail.time,
+      numOfDays: cartFound.cartDetail.numOfDays,
       totalAmount: orderDetails.billDetail.grandTotal,
-      status: "Pending",
       paymentMode,
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: orderDetails.purchasedItems,
       "orderDetailStepper.created": {
-        by: "Admin",
+        by: `${req.userRole} - ${req.userName}`,
         date: new Date(),
       },
     };
@@ -2212,33 +2243,34 @@ const createOrderByAdminController = async (req, res, next) => {
       OrderModelToUse.findById(newOrderCreated._id).populate("merchantId"),
     ]);
 
+    res.status(201).json({ cartFound });
+
     const eventName = "newOrderCreated";
 
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
     const socketData = {
       orderId: newOrder?._id,
-      orderDetail: newOrder?.orderDetail,
       billDetail: newOrder?.billDetail,
       orderDetailStepper: newOrder?.orderDetailStepper?.created,
       _id: newOrder?._id,
       orderStatus: newOrder?.status,
       merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
-        newOrder?.orderDetail?.deliveryAddress?.fullName ||
+        newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress?.fullName ||
         newOrder?.customerId?.fullName ||
         "-",
-      deliveryMode: newOrder?.orderDetail?.deliveryMode,
+      deliveryMode: newOrder?.deliveryMode,
       orderDate: formatDate(newOrder?.createdAt),
       orderTime: formatTime(newOrder?.createdAt),
-      deliveryDate: newOrder?.orderDetail?.deliveryTime
-        ? formatDate(newOrder?.orderDetail?.deliveryTime)
+      deliveryDate: newOrder?.deliveryTime
+        ? formatDate(newOrder?.deliveryTime)
         : "-",
-      deliveryTime: newOrder?.orderDetail?.deliveryTime
-        ? formatTime(newOrder?.orderDetail?.deliveryTime)
+      deliveryTime: newOrder?.deliveryTime
+        ? formatTime(newOrder?.deliveryTime)
         : "-",
       paymentMethod: newOrder?.paymentMode,
-      deliveryOption: newOrder?.orderDetail?.deliveryOption,
+      deliveryOption: newOrder?.deliveryOption,
       amount: newOrder?.billDetail?.grandTotal,
     };
 
@@ -2264,8 +2296,6 @@ const createOrderByAdminController = async (req, res, next) => {
       socketData,
       notificationData,
     });
-
-    res.status(201).json({ cartFound });
   } catch (err) {
     next(appError(err.message));
   }
