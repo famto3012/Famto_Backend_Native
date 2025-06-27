@@ -2441,7 +2441,7 @@ const markOrderAsCancelled = async (req, res, next) => {
       Order.findById(orderId),
       Task.findOne({ orderId }),
       AgentNotificationLogs.findOne({ orderId, status: "Accepted" }),
-      AgentNotificationLogs.countDocuments({ status: "Accepted" }),
+      AgentNotificationLogs.find({ status: "Accepted" }),
     ]);
 
     if (!order) return next(appError("Order not found", 404));
@@ -2462,7 +2462,7 @@ const markOrderAsCancelled = async (req, res, next) => {
       }),
     ];
 
-    if (order?.agentId && !notificationCount) {
+    if (order?.agentId && notificationCount.length === 1) {
       promises.push(
         Agent.findByIdAndUpdate(
           order.agentId,
