@@ -1694,7 +1694,12 @@ const orderPaymentController = async (req, res, next) => {
             instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
             voiceInstructionInDelivery:
               cart.cartDetail.voiceInstructionToDeliveryAgent,
-            items: cart.items,
+            items: cart.items?.map((item) => ({
+              itemName: item.productId.productName,
+              quantity: item.quantity,
+              price: item.price,
+              variantTypeId: item.variantTypeId,
+            })),
           },
         ],
       },

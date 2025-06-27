@@ -15,6 +15,7 @@ const cartItemSchema = mongoose.Schema(
     weight: { type: Number, default: null },
     numOfUnits: { type: Number, default: null },
     quantity: { type: Number, default: null },
+    price: { type: Number, default: null },
     itemImageURL: { type: String, default: null },
   },
   { _id: false }
