@@ -2803,11 +2803,12 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
 
     // Find the latest order for the given customerId
     const latestOrder = await TemporaryOrder.find({ customerId })
-      .select("createdAt orderDetail.deliveryMode")
+      .select("createdAt orderDetail.deliveryMode orderId")
       .sort({ createdAt: -1 });
 
     const formattedResponse = latestOrder?.map((order) => ({
       _id: order._id,
+      orderId: order.orderId,
       deliveryMode: order.orderDetail.deliveryMode,
       createdAt: order.createdAt,
     }));
