@@ -619,7 +619,6 @@ customerRoute.post("/apply-promo", isAuthenticated, applyPromoCode);
 
 customerRoute.get(
   "/merchant-availability",
-  isAuthenticated,
   getMerchantTodayAvailability
 );
 
