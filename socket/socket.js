@@ -206,6 +206,7 @@ const createNotificationLog = async (notificationSettings, message) => {
     }
 
     if (notificationSettings?.driver) {
+      console.log({ message });
       try {
         const notificationFound = await AgentNotificationLogs.findOne({
           agentId: message?.agentId,
@@ -264,25 +265,25 @@ const createNotificationLog = async (notificationSettings, message) => {
 const sendNotification = async (userId, eventName, data, role) => {
   const { fcmToken } = userSocketMap[userId] || {};
 
-  if (!fcmToken || fcmToken.length === 0) {
-    console.log(`No fcmToken found for userId: ${userId}`);
-    return;
-  }
+  // if (!fcmToken || fcmToken.length === 0) {
+  //   console.log(`No fcmToken found for userId: ${userId}`);
+  //   return;
+  // }
 
-  let notificationSent = false;
+  let notificationSent = true;
 
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
     status: true,
   });
 
-  // Loop through all FCM tokens and send the notification to each one
-  for (let token of fcmToken) {
-    if (token) {
-      const sent = await sendPushNotificationToUser(token, data.fcm, eventName);
-      if (sent) notificationSent = true; // Mark as sent if at least one succeeds
-    }
-  }
+  // // Loop through all FCM tokens and send the notification to each one
+  // for (let token of fcmToken) {
+  //   if (token) {
+  //     const sent = await sendPushNotificationToUser(token, data.fcm, eventName);
+  //     if (sent) notificationSent = true; // Mark as sent if at least one succeeds
+  //   }
+  // }
 
   // Log notification if at least one was sent successfully
   if (notificationSent) {

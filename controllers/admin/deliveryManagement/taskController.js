@@ -44,10 +44,13 @@ const assignAgentToTaskController = async (req, res, next) => {
     const { taskId } = req.params;
     const { agentId } = req.body;
 
-    const task = await Task.findById(taskId);
-    const order = await Order.findById(task.orderId);
-    const agent = await Agent.findById(agentId);
-    const autoAllocation = await AutoAllocation.findOne();
+    const [task, order, agent, autoAllocation] = await Promise.all([
+      Task.findById(taskId),
+      Order.findById(task.orderId),
+      Agent.findById(agentId),
+      AutoAllocation.findOne(),
+    ]);
+
     if (!agent.appDetail) {
       agent.appDetail = {
         totalEarning: 0,
@@ -91,9 +94,9 @@ const assignAgentToTaskController = async (req, res, next) => {
         let manager;
         if (roleValue) {
           manager = await Manager.findOne({ role: roleValue._id });
-        } // Assuming `role` is the role field to match in Manager model
+        }
         if (manager) {
-          roleId = manager._id; // Set roleId to the Manager's ID
+          roleId = manager._id;
         }
       }
 
@@ -102,7 +105,7 @@ const assignAgentToTaskController = async (req, res, next) => {
           fcm: {
             ...data,
             agentId,
-            orderId: order._id,
+            orderId: [order._id],
             merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
             pickAddress: order?.orderDetail?.pickupAddress || null,
             customerName: deliveryAddress?.fullName || null,
@@ -126,6 +129,7 @@ const assignAgentToTaskController = async (req, res, next) => {
     const socketData = {
       ...data,
       orderId: order._id,
+      taskId: null,
       merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
       pickAddress: order?.orderDetail?.pickupAddress || null,
       customerName: deliveryAddress?.fullName || null,
@@ -135,6 +139,7 @@ const assignAgentToTaskController = async (req, res, next) => {
       taskDate: formatDate(order?.orderDetail?.deliveryTime),
       taskTime: formatTime(order?.orderDetail?.deliveryTime),
       timer: autoAllocation?.expireTime || null,
+      batchOrder: false,
     };
 
     sendSocketData(agentId, eventName, socketData);
@@ -346,7 +351,7 @@ const batchOrder = async (req, res, next) => {
       Agent.findById(agentId),
       Task.find({ _id: { $in: taskIds } }).populate(
         "orderId",
-        "merchantId customerId createdAt"
+        "merchantId customerId createdAt deliveryTime"
       ),
       AutoAllocation.findOne(),
     ]);
@@ -395,7 +400,7 @@ const batchOrder = async (req, res, next) => {
       })),
     };
 
-    await BatchOrder.create(option);
+    const newBatchOrderTask = await BatchOrder.create(option);
 
     if (!agent.appDetail) {
       agent.appDetail = {
@@ -414,7 +419,7 @@ const batchOrder = async (req, res, next) => {
 
     res.status(200).json({ success: true });
 
-    let deliveryAddress = order.orderDetail.deliveryAddress;
+    let deliveryAddress = tasks[0]?.pickupDropDetails?.[0]?.drops?.[0]?.address;
 
     const eventName = "newOrder";
 
@@ -448,14 +453,14 @@ const batchOrder = async (req, res, next) => {
           fcm: {
             ...data,
             agentId,
-            orderId: tasks[0].orderId._id,
+            orderId: tasks?.map((task) => task.orderId._id),
             merchantName: refAddress?.fullName || null,
             pickAddress: refAddress || null,
             customerName: deliveryAddress?.fullName || null,
             customerAddress: deliveryAddress,
             orderType: firstMode || null,
-            taskDate: formatDate(order?.orderDetail?.deliveryTime),
-            taskTime: formatTime(order?.orderDetail?.deliveryTime),
+            taskDate: formatDate(tasks[0]?.orderId?.deliveryTime),
+            taskTime: formatTime(tasks[0]?.orderId?.deliveryTime),
             timer: autoAllocation?.expireTime || 60,
           },
         };
@@ -471,16 +476,18 @@ const batchOrder = async (req, res, next) => {
 
     const socketData = {
       ...data,
-      orderId: order._id,
-      merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
-      pickAddress: order?.orderDetail?.pickupAddress || null,
+      orderId: null,
+      taskId: newBatchOrderTask._id,
+      merchantName: refAddress?.fullName || null,
+      pickAddress: refAddress || null,
       customerName: deliveryAddress?.fullName || null,
       customerAddress: deliveryAddress,
       agentId,
-      orderType: order?.orderDetail?.deliveryMode || null,
-      taskDate: formatDate(order?.orderDetail?.deliveryTime),
-      taskTime: formatTime(order?.orderDetail?.deliveryTime),
+      orderType: firstMode || null,
+      taskDate: formatDate(tasks[0]?.orderId?.deliveryTime),
+      taskTime: formatTime(tasks[0]?.orderId?.deliveryTime),
       timer: autoAllocation?.expireTime || null,
+      batchOrder: true,
     };
 
     sendSocketData(agentId, eventName, socketData);
