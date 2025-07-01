@@ -940,12 +940,15 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     // Generate a unique order ID
     const orderId = new mongoose.Types.ObjectId();
 
+    const deliveryTime = new Date();
+    deliveryTime.setMinutes(deliveryTime.getMinutes() + 60);
+
     // Store order details temporarily in the database
     const tempOrder = await TemporaryOrder.create({
       orderId,
       customerId,
       items: cart.items,
-      orderDetail: cart.cartDetail,
+      orderDetail: { ...cart.cartDetail, deliveryTime },
       billDetail: orderBill,
       totalAmount: orderAmount,
       status: "Pending",
