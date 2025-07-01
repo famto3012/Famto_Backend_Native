@@ -224,17 +224,20 @@ const removeOldNotifications = async () => {
   try {
     const AdminNotificationLog = require("../models/AdminNotificationLog");
     const MerchantNotificationLog = require("../models/MerchantNotificationLog");
+    const AgentNotificationLogs = require("../models/AgentNotificationLog");
+    const CustomerNotificationLogs = require("../models/CustomerNotificationLog");
 
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 20);
+    const tenDaysAgo = moment()
+      .tz("Asia/Kolkata")
+      .subtract(10, "days")
+      .startOf("day")
+      .toDate();
 
     await Promise.all([
-      AdminNotificationLog.deleteMany({
-        createdAt: { $lt: tenDaysAgo },
-      }),
-      MerchantNotificationLog.deleteMany({
-        createdAt: { $lt: tenDaysAgo },
-      }),
+      AdminNotificationLog.deleteMany({ createdAt: { $lte: tenDaysAgo } }),
+      MerchantNotificationLog.deleteMany({ createdAt: { $lte: tenDaysAgo } }),
+      AgentNotificationLogs.deleteMany({ createdAt: { $lte: tenDaysAgo } }),
+      CustomerNotificationLogs.deleteMany({ createdAt: { $lte: tenDaysAgo } }),
     ]);
   } catch (err) {
     console.log(`Error in removeOldNotifications: ${err}`);
