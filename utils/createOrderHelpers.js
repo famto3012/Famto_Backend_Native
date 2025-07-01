@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const moment = require("moment-timezone");
 
 const Agent = require("../models/Agent");
 const Customer = require("../models/Customer");
@@ -233,41 +234,33 @@ const processSchedule = (ifScheduled) => {
     return { startDate: null, endDate: null, time: null, numOfDays: null };
   }
 
-  // Convert DD/MM/YYYY to YYYY-MM-DD for proper parsing
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
 
-    // Try detecting format: if it contains "-", assume YYYY-MM-DD
     if (dateStr.includes("-")) {
-      const [year, month, day] = dateStr.split("-").map(Number);
-      if (!day || !month || !year) {
-        throw new Error(`Invalid date format: ${dateStr}`);
-      }
-      return new Date(year, month - 1, day);
+      return moment(dateStr, "YYYY-MM-DD", true);
     }
 
-    // Fallback to DD/MM/YYYY
-    const [day, month, year] = dateStr.split("/").map(Number);
-    if (!day || !month || !year) {
-      throw new Error(`Invalid date format: ${dateStr}`);
-    }
-    return new Date(year, month - 1, day);
+    return moment(dateStr, "DD/MM/YYYY", true);
   };
 
-  let startDate, endDate;
-  try {
-    startDate = parseDate(ifScheduled.startDate);
-    endDate = parseDate(ifScheduled.endDate);
-  } catch (error) {
-    console.error("Date parsing error:", error.message);
+  const start = parseDate(ifScheduled.startDate);
+  const end = parseDate(ifScheduled.endDate);
+
+  if (!start.isValid() || !end.isValid()) {
+    console.error("Invalid start or end date format");
     return { startDate: null, endDate: null, time: null, numOfDays: null };
   }
 
-  // Convert time from IST to UTC
-  let time = null;
+  // Combine startDate with time and convert IST to UTC
+  let timeMoment;
   try {
-    time = convertISTToUTC(startDate, ifScheduled.time);
-    if (isNaN(new Date(time).getTime())) {
+    timeMoment = moment.tz(
+      `${start.format("YYYY-MM-DD")} ${ifScheduled.time}`,
+      "YYYY-MM-DD HH:mm",
+      "Asia/Kolkata"
+    );
+    if (!timeMoment.isValid()) {
       throw new Error("Invalid time format");
     }
   } catch (error) {
@@ -275,35 +268,22 @@ const processSchedule = (ifScheduled) => {
     return { startDate: null, endDate: null, time: null, numOfDays: null };
   }
 
-  // Standardize start date to UTC
-  const adjustedStartDate = new Date(startDate);
-  adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
-  adjustedStartDate.setUTCHours(18, 30, 0, 0);
+  // Adjusted start date: set to 18:30 UTC (i.e. next day 00:00 IST - 5.5 hrs)
+  let adjustedStart = start.startOf("day");
 
-  if (process.env.NODE_ENV === "production") {
-    adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 1);
-    adjustedStartDate.setUTCHours(18, 30, 0, 0);
-  }
+  // Adjusted end date: set to 18:29:59.999 UTC
+  const adjustedEnd = end.endOf("day");
 
-  // Adjust time correctly
-  const adjustedTime = new Date(time);
-  adjustedTime.setUTCHours(adjustedTime.getUTCHours() - 1);
+  // Adjusted time: subtract 1 hour UTC
+  const adjustedTime = timeMoment.clone().subtract(1, "hour");
 
-  // Standardize end date to 18:29:59.999 UTC
-  const adjustedEndDate = new Date(endDate);
-  adjustedEndDate.setUTCDate(adjustedEndDate.getUTCDate());
-  adjustedEndDate.setUTCHours(18, 29, 59, 999);
-
-  // Calculate number of days correctly
-  const numOfDays = getTotalDaysBetweenDates(
-    adjustedStartDate,
-    adjustedEndDate
-  );
+  // Total number of days (inclusive)
+  const numOfDays = adjustedEnd.diff(adjustedStart, "days") + 1;
 
   return {
-    startDate: adjustedStartDate,
-    endDate: adjustedEndDate,
-    time: adjustedTime,
+    startDate: adjustedStart.toDate(),
+    endDate: adjustedEnd.toDate(),
+    time: adjustedTime.toDate(),
     numOfDays,
   };
 };
