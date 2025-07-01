@@ -100,8 +100,10 @@ app.use(
     origin: [
       "https://dashboard.famto.in",
       "http://localhost:5173",
+      "http://localhost:5174",
       "https://famto.in",
       "https://www.famto.in",
+      "https://order.famto.in",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
