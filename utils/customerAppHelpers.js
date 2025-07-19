@@ -35,18 +35,16 @@ const sortMerchantsBySponsorship = (merchants) => {
 const filterCoordinatesFromData = (parsedData) => {
   let coordinates = [];
 
-  parsedData.pickupDropDetails.forEach((detail) => {
-    // Get pickup coordinates
-    detail.pickups.forEach((pickup) => {
-      const [lat, lng] = pickup.pickupLocation;
-      coordinates.push({ lng, lat });
-    });
+  // Get pickup coordinates
+  parsedData.pickups.forEach((pickup) => {
+    const [lat, lng] = pickup.location;
+    coordinates.push({ lng, lat });
+  });
 
-    // Get drop coordinates
-    detail.drops.forEach((drop) => {
-      const [lat, lng] = drop.deliveryLocation;
-      coordinates.push({ lng, lat });
-    });
+  // Get drop coordinates
+  parsedData.drops.forEach((drop) => {
+    const [lat, lng] = drop.location;
+    coordinates.push({ lng, lat });
   });
 
   return coordinates;

@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 
-// Item Schema (remains same mostly)
 const cartItemSchema = mongoose.Schema(
   {
     itemId: {
@@ -12,7 +11,7 @@ const cartItemSchema = mongoose.Schema(
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     unit: { type: String, default: null },
-    weight: { type: Number, default: null },
+    weight: { type: Number, default: 1 },
     numOfUnits: { type: Number, default: null },
     quantity: { type: Number, default: null },
     itemImageURL: { type: String, default: null },
@@ -20,47 +19,23 @@ const cartItemSchema = mongoose.Schema(
   { _id: false }
 );
 
-// Pickup & Drop pair Schema
-const pickupDropSchema = mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    // Pickup (can be one or multiple depending on mode)
-    pickups: [
-      {
-        pickupLocation: { type: [Number], default: null },
-        pickupAddress: {
-          fullName: String,
-          phoneNumber: String,
-          flat: String,
-          area: String,
-          landmark: String,
-        },
-        instructionInPickup: { type: String, default: null },
-        voiceInstructionInPickup: { type: String, default: null },
-        items: [cartItemSchema], // Items linked to this pickup
-      },
-    ],
-
-    // Drops (can be one or multiple depending on mode)
-    drops: [
-      {
-        deliveryLocation: { type: [Number], default: null },
-        deliveryAddress: {
-          fullName: String,
-          phoneNumber: String,
-          flat: String,
-          area: String,
-          landmark: String,
-        },
-        instructionInDelivery: { type: String, default: null },
-        voiceInstructionInDelivery: { type: String, default: null },
-        items: [cartItemSchema], // Items linked to this drop
-      },
-    ],
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    instructionInPickup: { type: String, default: null },
+    voiceInstructionInPickup: { type: String, default: null },
+    items: [cartItemSchema],
   },
   { _id: false }
 );
 
-// Bill Schema (unchanged mostly)
 const billSchema = mongoose.Schema(
   {
     deliveryChargePerDay: { type: Number, default: null },
@@ -81,7 +56,6 @@ const billSchema = mongoose.Schema(
   { _id: false }
 );
 
-// Master Cart Schema
 const pickAndCustomCartSchema = mongoose.Schema(
   {
     customerId: { type: String, required: true },
@@ -99,7 +73,8 @@ const pickAndCustomCartSchema = mongoose.Schema(
       required: true,
     },
 
-    pickupDropDetails: [pickupDropSchema],
+    pickups: [detailSchema],
+    drops: [detailSchema],
 
     billDetail: billSchema,
 
@@ -110,8 +85,6 @@ const pickAndCustomCartSchema = mongoose.Schema(
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },
     numOfDays: { type: Number, default: null },
-
-    voiceInstructionToDeliveryAgent: { type: String, default: null },
   },
   {
     timestamps: true,

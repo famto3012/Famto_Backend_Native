@@ -1675,33 +1675,28 @@ const orderPaymentController = async (req, res, next) => {
       type: "Debit",
     };
 
-    const pickupDropDetails = [
+    const pickups = [
       {
-        pickups: [
-          {
-            pickupLocation: cart.cartDetail.pickupLocation,
-            pickupAddress: cart.cartDetail.pickupAddress,
-            instructionInPickup: cart.cartDetail.instructionToMerchant,
-            voiceInstructionInPickup:
-              cart.cartDetail.voiceInstructionToMerchant,
-            items: [],
-          },
-        ],
-        drops: [
-          {
-            deliveryLocation: cart.cartDetail.deliveryLocation,
-            deliveryAddress: cart.cartDetail.deliveryAddress,
-            instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
-            voiceInstructionInDelivery:
-              cart.cartDetail.voiceInstructionToDeliveryAgent,
-            items: cart.items?.map((item) => ({
-              itemName: item.productId.productName,
-              quantity: item.quantity,
-              price: item.price,
-              variantTypeId: item.variantTypeId,
-            })),
-          },
-        ],
+        location: cart.cartDetail.pickupLocation,
+        address: cart.cartDetail.pickupAddress,
+        instructionInPickup: cart.cartDetail.instructionToMerchant,
+        voiceInstructionInPickup: cart.cartDetail.voiceInstructionToMerchant,
+        items: [],
+      },
+    ];
+    const drops = [
+      {
+        location: cart.cartDetail.deliveryLocation,
+        address: cart.cartDetail.deliveryAddress,
+        instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
+        voiceInstructionInDelivery:
+          cart.cartDetail.voiceInstructionToDeliveryAgent,
+        items: cart.items?.map((item) => ({
+          itemName: item.productId.productName,
+          quantity: item.quantity,
+          price: item.price,
+          variantTypeId: item.variantTypeId,
+        })),
       },
     ];
 
@@ -1836,7 +1831,8 @@ const orderPaymentController = async (req, res, next) => {
           merchantId: cart.merchantId,
           deliveryMode: cart.cartDetail.deliveryMode,
           deliveryOption: cart.cartDetail.deliveryOption,
-          pickupDropDetails,
+          pickups,
+          drops,
           billDetail: orderBill,
           distance: cart.cartDetail.distance,
           deliveryTime,

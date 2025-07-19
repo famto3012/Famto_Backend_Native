@@ -142,7 +142,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
         merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
         customerName:
           order?.customerId?.fullName ||
-          order?.pickupDropDetails[0]?.drops[0]?.deliveryAddress?.fullName ||
+          order?.drops[0]?.deliveryAddress?.fullName ||
           null,
         assignedAgent: order?.agentId?.fullName || "Unassigned",
         deliveryMode: order?.deliveryMode || null,
@@ -628,12 +628,12 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.pickupDropDetails[0].pickups[0]?.pickupAddress.fullName ||
+          orderFound.pickups[0]?.pickupAddress.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
         pickAddress:
-          orderFound.pickupDropDetails[0].pickups?.map((address) => ({
+          orderFound.pickups?.map((address) => ({
             fullName: address.pickupAddress.fullName,
             phoneNumber: address.pickupAddress.phoneNumber,
             flat: address.pickupAddress.flat,
@@ -641,7 +641,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
             landmark: address.pickupAddress.landmark,
           })) || [],
         dropAddress:
-          orderFound.pickupDropDetails[0].drops?.map((address) => ({
+          orderFound.drops?.map((address) => ({
             fullName: address.deliveryAddress.fullName,
             phoneNumber: address.deliveryAddress.phoneNumber,
             flat: address.deliveryAddress.flat,
@@ -649,12 +649,12 @@ const getOrderDetailByAdminController = async (req, res, next) => {
             landmark: address.deliveryAddress.landmark,
           })) || [],
         pickInstructions:
-          orderFound.pickupDropDetails[0].pickups?.map((instruction) => ({
+          orderFound.pickups?.map((instruction) => ({
             instruction: instruction?.instructionInPickup || null,
             voiceInstruction: instruction?.voiceInstructionInPickup || null,
           })) || [],
         dropInstructions:
-          orderFound.pickupDropDetails[0].drops?.map((instruction) => ({
+          orderFound.drops?.map((instruction) => ({
             instruction: instruction?.instructionInDelivery || null,
             voiceInstruction: instruction?.voiceInstructionInDelivery || null,
           })) || [],
@@ -2150,46 +2150,47 @@ const createOrderByAdminController = async (req, res, next) => {
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+
       deliveryMode: cartFound.cartDetail.deliveryMode,
       deliveryOption: cartFound.cartDetail.deliveryOption,
-      pickupDropDetails: [
+
+      pickups: [
         {
-          pickups: [
-            {
-              pickupLocation: cartFound.cartDetail.pickupLocation,
-              pickupAddress: cartFound.cartDetail.pickupAddress,
-              instructionInPickup: cartFound.cartDetail.instructionToMerchant,
-              voiceInstructionInPickup:
-                cartFound.cartDetail.voiceInstructionToMerchant,
-              items: [],
-            },
-          ],
-          drops: [
-            {
-              deliveryLocation: cartFound.cartDetail.deliveryLocation,
-              deliveryAddress: cartFound.cartDetail.deliveryAddress,
-              instructionInDelivery:
-                cartFound.cartDetail.instructionToDeliveryAgent,
-              voiceInstructionInDelivery:
-                cartFound.cartDetail.voiceInstructionToDeliveryAgent,
-              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-                ? orderDetails.formattedItems
-                : cartFound.items,
-              orderDetail: {
-                ...cartFound.cartDetail,
-                deliveryTime,
-              },
-            },
-          ],
+          pickupLocation: cartFound.cartDetail.pickupLocation,
+          pickupAddress: cartFound.cartDetail.pickupAddress,
+          instructionInPickup: cartFound.cartDetail.instructionToMerchant,
+          voiceInstructionInPickup:
+            cartFound.cartDetail.voiceInstructionToMerchant,
+          items: [],
         },
       ],
+      drops: [
+        {
+          deliveryLocation: cartFound.cartDetail.deliveryLocation,
+          deliveryAddress: cartFound.cartDetail.deliveryAddress,
+          instructionInDelivery:
+            cartFound.cartDetail.instructionToDeliveryAgent,
+          voiceInstructionInDelivery:
+            cartFound.cartDetail.voiceInstructionToDeliveryAgent,
+          items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+            ? orderDetails.formattedItems
+            : cartFound.items,
+          orderDetail: {
+            ...cartFound.cartDetail,
+            deliveryTime,
+          },
+        },
+      ],
+
       billDetail: orderDetails.billDetail,
       distance: cartFound.cartDetail.distance,
+
       deliveryTime,
       startDate: cartFound.cartDetail.startDate,
       endDate: cartFound.cartDetail.endDate,
       time: cartFound.cartDetail.time,
       numOfDays: cartFound.cartDetail.numOfDays,
+
       totalAmount: orderDetails.billDetail.grandTotal,
       paymentMode,
       paymentStatus:
@@ -2201,8 +2202,7 @@ const createOrderByAdminController = async (req, res, next) => {
       },
     };
 
-    const isScheduledOrder =
-      cartFound.cartDetail.deliveryOption === "Scheduled";
+    const isScheduledOrder = cartFound.deliveryOption === "Scheduled";
     const isPickOrCustomOrder = ["Pick and Drop", "Custom Order"].includes(
       deliveryMode
     );
@@ -2257,7 +2257,7 @@ const createOrderByAdminController = async (req, res, next) => {
       orderStatus: newOrder?.status,
       merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
-        newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress?.fullName ||
+        newOrder?.drops[0]?.address?.fullName ||
         newOrder?.customerId?.fullName ||
         "-",
       deliveryMode: newOrder?.deliveryMode,

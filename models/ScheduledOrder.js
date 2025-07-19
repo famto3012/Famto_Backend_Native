@@ -1,93 +1,32 @@
 const mongoose = require("mongoose");
 const DatabaseCounter = require("./DatabaseCounter");
 
-const scheduledOrderItemSchema = mongoose.Schema(
+const cartItemSchema = mongoose.Schema(
   {
-    itemName: {
-      type: String,
-      required: true,
-    },
-    quantity: {
-      type: Number,
-      required: true,
-    },
-    price: {
-      type: Number,
-      required: true,
-    },
-    variantTypeName: {
-      type: String,
-      default: null,
-    },
-    itemImageURL: {
-      type: String,
-      default: null,
-    },
+    itemName: { type: String, required: true },
+    quantity: { type: Number, default: null },
+    price: { type: Number, default: null },
+    variantTypeName: { type: String, default: null },
+    itemImageURL: { type: String, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
-const scheduledOrderDetailSchema = mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    pickupLocation: {
-      type: [Number],
-      required: true,
-    },
-    pickupAddress: {
-      fullName: String,
-      area: String,
-      phoneNumber: String,
-    },
-    deliveryLocation: {
-      type: [Number],
-      required: true,
-    },
-    deliveryMode: {
-      type: String,
-      enum: ["Home Delivery", "Take Away"],
-      required: true,
-    },
-    deliveryOption: {
-      type: String,
-      enum: ["On-demand", "Scheduled"],
-      required: true,
-    },
-    deliveryAddress: {
+    location: { type: [Number] },
+    address: {
       fullName: String,
       phoneNumber: String,
       flat: String,
       area: String,
       landmark: String,
     },
-    instructionToMerchant: {
-      type: String,
-      default: null,
-    },
-    instructionToDeliveryAgent: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionToMerchant: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionToDeliveryAgent: {
-      type: String,
-      default: null,
-    },
-    distance: {
-      type: Number,
-    },
-    numOfDays: {
-      type: Number,
-      default: null,
-    },
+    instructionInPickup: { type: String, default: null },
+    voiceInstructionInPickup: { type: String, default: null },
+    items: [cartItemSchema],
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const billSchema = mongoose.Schema(
@@ -147,26 +86,32 @@ const purchasedItemsSchema = mongoose.Schema({
 
 const scheduledOrderSchema = mongoose.Schema(
   {
-    _id: {
+    _id: { type: String },
+    customerId: { type: String, ref: "Customer", required: true },
+    merchantId: { type: String, ref: "Merchant", required: true },
+
+    deliveryMode: {
       type: String,
-    },
-    customerId: {
-      type: String,
-      ref: "Customer",
+      enum: ["Home Delivery", "Take Away"],
       required: true,
     },
-    merchantId: {
+    deliveryOption: {
       type: String,
-      ref: "Merchant",
+      enum: ["On-demand", "Scheduled"],
       required: true,
     },
-    items: [scheduledOrderItemSchema],
-    orderDetail: scheduledOrderDetailSchema,
+
+    pickups: [detailSchema],
+    drops: [detailSchema],
+
     billDetail: billSchema,
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
+    distance: { type: Number, default: 0 },
+
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    time: { type: Date, required: true },
+
+    totalAmount: { type: Number, required: true },
     status: {
       type: String,
       required: true,
@@ -178,31 +123,14 @@ const scheduledOrderSchema = mongoose.Schema(
       required: true,
       enum: ["Famto-cash", "Online-payment"],
     },
+    paymentId: { type: String, default: null },
     paymentStatus: {
       type: String,
       required: true,
       enum: ["Pending", "Completed", "Failed"],
       default: "Pending",
     },
-    startDate: {
-      type: Date,
-      required: true,
-    },
-    endDate: {
-      type: Date,
-      required: true,
-    },
-    time: {
-      type: Date,
-      required: true,
-    },
-    paymentId: {
-      type: String,
-    },
-    isViewed: {
-      type: Boolean,
-      default: false,
-    },
+    isViewed: { type: Boolean, default: false },
     purchasedItems: [purchasedItemsSchema],
   },
   {

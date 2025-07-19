@@ -56,15 +56,15 @@ const addShopController = async (req, res, next) => {
     }
 
     const pickups = {
-      pickupLocation,
-      pickupAddress: {
+      location: pickupLocation,
+      address: {
         fullName: shopName,
         area: place,
       },
     };
 
     const drops = {
-      deliveryLocation,
+      location: deliveryLocation,
     };
 
     const cart = await PickAndCustomCart.findOneAndUpdate(
@@ -76,12 +76,8 @@ const addShopController = async (req, res, next) => {
         $set: {
           deliveryMode: "Custom Order",
           deliveryOption: "On-demand",
-          pickupDropDetails: [
-            {
-              pickups,
-              drops,
-            },
-          ],
+          pickups,
+          drops,
           distance,
         },
         $setOnInsert: { customerId },
@@ -109,16 +105,14 @@ const getCustomOrderItems = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const formattedResponse = cart.pickupDropDetails[0]?.drops[0]?.items?.map(
-      (item) => ({
-        itemId: item.itemId,
-        itemName: item.itemName,
-        unit: item.unit,
-        numOfUnits: item.numOfUnits,
-        quantity: item.quantity,
-        itemImageURL: item.itemImageURL,
-      })
-    );
+    const formattedResponse = cart?.drops[0]?.items?.map((item) => ({
+      itemId: item.itemId,
+      itemName: item.itemName,
+      unit: item.unit,
+      numOfUnits: item.numOfUnits,
+      quantity: item.quantity,
+      itemImageURL: item.itemImageURL,
+    }));
 
     res.status(200).json(formattedResponse);
   } catch (err) {
@@ -157,7 +151,7 @@ const addItemsToCartController = async (req, res, next) => {
       itemImageURL,
     };
 
-    cart.pickupDropDetails[0]?.drops[0]?.items.push(updatedItems);
+    cart?.drops[0]?.items.push(updatedItems);
 
     await cart.save();
 
@@ -165,7 +159,7 @@ const addItemsToCartController = async (req, res, next) => {
       cartId: cart._id,
       customerId: cart.customerId,
       cartDetail: cart.cartDetail,
-      items: cart.pickupDropDetails[0]?.drops[0]?.items?.map((item) => ({
+      items: cart?.drops[0]?.items?.map((item) => ({
         itemId: item.itemId,
         itemName: item.itemName,
         quantity: item.quantity,
@@ -190,7 +184,7 @@ const getSingleItemController = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const dropDetail = cart.drops;
     const items = dropDetail[0]?.items;
 
     if (!Array.isArray(items)) {
@@ -229,7 +223,7 @@ const editItemInCartController = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const dropDetail = cart.drops;
     const items = dropDetail[0]?.items;
 
     if (!Array.isArray(items)) {
@@ -237,7 +231,7 @@ const editItemInCartController = async (req, res, next) => {
     }
 
     const itemIndex = items.findIndex(
-      (item) => item.itemId.toString() === itemId
+      (item) => item.itemId.toString() === itemId.toString()
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
@@ -293,7 +287,7 @@ const deleteItemInCartController = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const dropDetail = cart.pickupDropDetails?.[0].drops;
+    const dropDetail = cart.drops;
     const items = dropDetail[0]?.items;
 
     if (!Array.isArray(items)) {
@@ -301,7 +295,7 @@ const deleteItemInCartController = async (req, res, next) => {
     }
 
     const itemIndex = items?.findIndex(
-      (item) => item.itemId.toString() === itemId
+      (item) => item.itemId.toString() === itemId.toString()
     );
 
     if (itemIndex === -1) return next(appError("Item not found", 404));
@@ -429,18 +423,14 @@ const addDeliveryAddressController = async (req, res, next) => {
 
     let detail = {
       deliveryOption: "On-demand",
-      pickupDropDetails: [
+      pickups: [...cartFound?.pickupDropDetails[0]?.pickups],
+      drops: [
         {
-          pickups: [...cartFound?.pickupDropDetails[0]?.pickups],
-          drops: [
-            {
-              deliveryLocation,
-              deliveryAddress,
-              instructionInDelivery,
-              voiceInstructionInDelivery: voiceInstructionToAgentURL,
-              items: [...cartFound?.pickupDropDetails[0]?.drops[0].items],
-            },
-          ],
+          location: deliveryLocation,
+          address: deliveryAddress,
+          instructionInDelivery,
+          voiceInstructionInDelivery: voiceInstructionToAgentURL,
+          items: [...cartFound?.pickupDropDetails[0]?.drops[0].items],
         },
       ],
       distance,
@@ -596,16 +586,22 @@ const confirmCustomOrderController = async (req, res, next) => {
     const tempOrder = await TemporaryOrder.create({
       orderId,
       customerId,
+
       deliveryMode: "Custom Order",
       deliveryOption: cart.deliveryOption,
-      pickupDropDetails: cart.pickupDropDetails,
+
+      pickups: cart.pickups,
+      drops: cart.drops,
+
       billDetail: orderBill,
       distance: cart.distance,
+
       deliveryTime,
       startDate: cart.startDate,
       endDate: cart.endDate,
       time: cart.time,
       numOfDays: cart.numOfDays,
+
       totalAmount:
         cart?.billDetail?.discountedGrandTotal ||
         cart?.billDetail?.originalGrandTotal ||
@@ -646,17 +642,24 @@ const confirmCustomOrderController = async (req, res, next) => {
       if (storedOrderData) {
         const newOrder = await Order.create({
           customerId: storedOrderData.customerId,
+
           deliveryMode: storedOrderData.deliveryMode,
           deliveryOption: storedOrderData.deliveryOption,
-          pickupDropDetails: storedOrderData.pickupDropDetails,
+
+          pickups: storedOrderData.pickups,
+          drops: storedOrderData.drops,
+
           billDetail: storedOrderData.billDetail,
           distance: storedOrderData.distance,
+
           deliveryTime: storedOrderData.deliveryTime,
           startDate: storedOrderData.startDate,
           endDate: storedOrderData.endDate,
           time: storedOrderData.time,
           numOfDays: storedOrderData.numOfDays,
-          status: storedOrderData.status,
+
+          totalAmount: storedOrderData.totalAmount,
+
           paymentMode: storedOrderData.paymentMode,
           paymentStatus: storedOrderData.paymentStatus,
           orderDetailStepper: {
@@ -664,9 +667,7 @@ const confirmCustomOrderController = async (req, res, next) => {
               by: "Customer",
               userId: req.userAuth,
               date: new Date(),
-              location:
-                storedOrderData?.pickupDropDetails[0]?.drops[0]
-                  ?.deliveryLocation || [],
+              location: storedOrderData?.drops[0]?.deliveryLocation || [],
             },
           },
         });
@@ -712,8 +713,7 @@ const confirmCustomOrderController = async (req, res, next) => {
           orderStatus: newOrder.status,
           merchantName: "-",
           customerName:
-            newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
-              ?.fullName ||
+            newOrder?.drops[0]?.address?.fullName ||
             newOrder?.customerId?.fullName ||
             "-",
           deliveryMode: newOrder?.deliveryMode,

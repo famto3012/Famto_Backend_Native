@@ -22,38 +22,19 @@ const cartItemSchema = mongoose.Schema(
   { _id: false }
 );
 
-const pickupDropSchema = mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    pickups: [
-      {
-        pickupLocation: { type: [Number], default: null },
-        pickupAddress: {
-          fullName: String,
-          phoneNumber: String,
-          flat: String,
-          area: String,
-          landmark: String,
-        },
-        instructionInPickup: { type: String, default: null },
-        voiceInstructionInPickup: { type: String, default: null },
-        items: [cartItemSchema],
-      },
-    ],
-    drops: [
-      {
-        deliveryLocation: { type: [Number], default: null },
-        deliveryAddress: {
-          fullName: String,
-          phoneNumber: String,
-          flat: String,
-          area: String,
-          landmark: String,
-        },
-        instructionInDelivery: { type: String, default: null },
-        voiceInstructionInDelivery: { type: String, default: null },
-        items: [cartItemSchema],
-      },
-    ],
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    instructionInPickup: { type: String, default: null },
+    voiceInstructionInPickup: { type: String, default: null },
+    items: [cartItemSchema],
   },
   { _id: false }
 );
@@ -243,6 +224,7 @@ const orderSchema = mongoose.Schema(
     merchantId: { type: String, ref: "Merchant", default: null },
     scheduledOrderId: { type: String, ref: "ScheduledOrder", default: null },
     agentId: { type: String, ref: "Agent", default: null },
+
     deliveryMode: {
       type: String,
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
@@ -253,16 +235,20 @@ const orderSchema = mongoose.Schema(
       enum: ["On-demand", "Scheduled"],
       required: true,
     },
-    pickupDropDetails: [pickupDropSchema],
+
+    pickups: [detailSchema],
+    drops: [detailSchema],
+
     billDetail: billSchema,
     distance: { type: Number, default: 0 },
-    duration: { type: Number, default: 0 },
+
     deliveryTime: { type: Date, default: 0 },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },
     numOfDays: { type: Number, default: null },
-    voiceInstructionToDeliveryAgent: { type: String, default: null },
+
+    totalAmount: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ["Pending", "On-going", "Completed", "Cancelled"],

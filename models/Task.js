@@ -23,14 +23,6 @@ const detailSchema = new mongoose.Schema(
   }
 );
 
-const multiPickupDropSchema = new mongoose.Schema(
-  {
-    pickups: [detailSchema],
-    drops: [detailSchema],
-  },
-  { _id: false }
-);
-
 const taskSchema = new mongoose.Schema(
   {
     orderId: { type: String, ref: "Order", required: true },
@@ -45,7 +37,8 @@ const taskSchema = new mongoose.Schema(
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
-    pickupDropDetails: [multiPickupDropSchema],
+    pickups: [detailSchema],
+    drops: [detailSchema],
   },
   { timestamps: true }
 );
