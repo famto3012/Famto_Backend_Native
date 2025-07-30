@@ -34,7 +34,6 @@ const getAllCustomersController = async (req, res, next) => {
       .select(
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails averageRating"
       )
-      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
@@ -258,6 +257,7 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
         .select(
           "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
         )
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean({ virtuals: true }),
