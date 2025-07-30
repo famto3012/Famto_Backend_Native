@@ -34,6 +34,7 @@ const getAllCustomersController = async (req, res, next) => {
       .select(
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails averageRating"
       )
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 

@@ -1721,7 +1721,6 @@ const applyPromoCode = async (req, res, next) => {
 const updateOrderTipController = async (req, res, next) => {
   try {
     const { cartId, deliveryMode, tip = 0 } = req.body;
-
     let cart;
 
     if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
@@ -1730,24 +1729,39 @@ const updateOrderTipController = async (req, res, next) => {
       cart = await PickAndCustomCart.findById(cartId);
     }
 
-    if (!cart) return next(appError("Cart not found", 404));
+    if (!cart) {
+      return next(appError("Cart not found", 404));
+    }
 
     const { billDetail: cartBill } = cart;
-    if (!cartBill) return next(appError("Billing details not found", 404));
+    if (!cartBill) {
+      return next(appError("Billing details not found", 404));
+    }
 
     const oldTip = parseFloat(cartBill.addedTip ?? 0) || 0;
     const newTip = parseFloat(tip) ?? 0;
 
+    // Apply tip update
     cartBill.addedTip = newTip;
 
-    cartBill.subTotal += newTip - oldTip;
-    cartBill.discountedGrandTotal += newTip - oldTip;
-    cartBill.originalGrandTotal += newTip - oldTip;
+    // Only update totals if they are not null
+    if (cartBill.subTotal !== null) {
+      cartBill.subTotal += newTip - oldTip;
+    }
+
+    if (cartBill.discountedGrandTotal !== null) {
+      cartBill.discountedGrandTotal += newTip - oldTip;
+    }
+
+    if (cartBill.originalGrandTotal !== null) {
+      cartBill.originalGrandTotal += newTip - oldTip;
+    }
 
     await cart.save();
 
-    res.status(200).json({ success: true, message: "Tip added successfully" });
+    res.status(200).json({ success: true, message: "Tip", cart: cart });
   } catch (err) {
+    console.error("❗ Error in updateOrderTipController:", err.message);
     next(appError(err.message));
   }
 };

@@ -257,7 +257,7 @@ const processSchedule = (ifScheduled) => {
   try {
     timeMoment = moment.tz(
       `${start.format("YYYY-MM-DD")} ${ifScheduled.time}`,
-      "YYYY-MM-DD HH:mm",
+      "YYYY-MM-DD hh:mm A",
       "Asia/Kolkata"
     );
     if (!timeMoment.isValid()) {
