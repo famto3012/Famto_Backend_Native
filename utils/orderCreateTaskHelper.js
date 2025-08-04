@@ -88,7 +88,7 @@ const notifyAgents = async (order, priorityType) => {
         },
         fcm: {
           title: "New Order",
-          body: "You have a new order to pickup",
+          body: "You have a new order to pickup", 
           image: "",
           orderId: order.id,
           agentId: agent.id,

@@ -217,7 +217,7 @@ const filterCustomerByGeofenceController = async (req, res, next) => {
 
 const fetchAllCustomersByAdminController = async (req, res, next) => {
   try {
-    let { geofence, query, page = 1, limit = 50 } = req.query;
+    let { geofence, walletBalance, query, page = 1, limit = 50 } = req.query;
 
     // Convert to integers
     page = parseInt(page, 10);
@@ -233,6 +233,10 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
     if (geofence && geofence.trim().toLowerCase() !== "all") {
       matchCriteria["customerDetails.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
+    }
+
+    if (walletBalance === "true") {
+      matchCriteria["customerDetails.walletBalance"] = { $gt: 0 };
     }
 
     if (query && query.trim() !== "") {

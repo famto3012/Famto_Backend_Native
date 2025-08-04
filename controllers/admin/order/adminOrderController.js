@@ -653,6 +653,12 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         merchantEarnings: orderFound?.commissionDetail?.merchantEarnings || "-",
         famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
       },
+      detailAddedByAgent: {
+        notes: orderFound?.detailAddedByAgent?.notes || "-",
+        signatureImageURL:
+          orderFound?.detailAddedByAgent?.signatureImageURL || "-",
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || "-",
+      },
       deliveryAgentDetail: {
         _id: orderFound?.agentId?._id || "-",
         name: orderFound?.agentId?.fullName || "-",
@@ -2038,6 +2044,13 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       },
     };
 
+    const detailAddedByAgent = {
+      notes: orderFound?.orderDetailStepper?.notes || "-",
+      signatureImageURL:
+        orderFound?.orderDetailStepper?.signatureImageURL || "-",
+      imageURL: orderFound?.orderDetailStepper?.imageURL || "-",
+    };
+
     const merchantDetail = isScheduledOrder
       ? {
           _id: orderFound?.merchantId?._id || "-",
@@ -2066,6 +2079,7 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       )}`,
       customerDetail,
       merchantDetail,
+      detailAddedByAgent,
       deliveryAgentDetail: {
         _id: "-",
         name: "-",

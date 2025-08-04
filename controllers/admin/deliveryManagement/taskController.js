@@ -302,7 +302,7 @@ const getAgentsController = async (req, res, next) => {
     const { fullName, filter } = req.query;
 
     // Define the base query with common conditions
-    const query = { isApproved: "Approved" };
+    const query = { isApproved: "Approved", isBlocked: false };
 
     // Add conditions based on query parameters
     if (fullName) {

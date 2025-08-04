@@ -669,6 +669,7 @@ const fetchAllMerchantsController = async (req, res, next) => {
       businessCategory,
       geofence,
       subscriptionStatus,
+      sponsorShipStatus,
     } = req.query;
 
     // Ensure correct data types
@@ -717,6 +718,20 @@ const fetchAllMerchantsController = async (req, res, next) => {
       } else if (subscriptionStatus.toLowerCase() === "expired") {
         matchCriteria["merchantDetail.pricing"] = { $eq: [] };
       }
+    }
+
+    if (sponsorShipStatus && sponsorShipStatus.toLowerCase() === "active") {
+      matchCriteria["sponsorshipDetail.0.sponsorshipStatus"] = true;
+      matchCriteria["sponsorshipDetail.0.endDate"] = { $gt: new Date() }; // not expired
+    } else if (
+      sponsorShipStatus &&
+      sponsorShipStatus.toLowerCase() === "inactive"
+    ) {
+      matchCriteria["sponsorshipDetail.0"] = { $exists: true, $ne: [] }; // has detail
+      matchCriteria["sponsorshipDetail.0.$or"] = [
+        { sponsorshipStatus: false },
+        { endDate: { $lte: new Date() } },
+      ];
     }
 
     // Fetch merchants
