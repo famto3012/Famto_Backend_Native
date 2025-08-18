@@ -44,12 +44,17 @@ const assignAgentToTaskController = async (req, res, next) => {
     const { taskId } = req.params;
     const { agentId } = req.body;
 
-    const [task, order, agent, autoAllocation] = await Promise.all([
-      Task.findById(taskId),
+    const task = await Task.findById(taskId);
+    if (!task) return next(appError("Task not found", 404));
+
+    const [order, agent, autoAllocation] = await Promise.all([
+      // Task.findById(taskId),
       Order.findById(task.orderId),
       Agent.findById(agentId),
       AutoAllocation.findOne(),
     ]);
+
+    console.log("Task:", task);
 
     if (!agent.appDetail) {
       agent.appDetail = {
@@ -66,12 +71,7 @@ const assignAgentToTaskController = async (req, res, next) => {
 
     await agent.save();
 
-    res.status(200).json({
-      message: "Notification send to the agent",
-      data: socketData,
-    });
-
-    let deliveryAddress = order.orderDetail.deliveryAddress;
+    // let deliveryAddress = order.orderDetail.deliveryAddress;
 
     const eventName = "newOrder";
 
@@ -106,13 +106,13 @@ const assignAgentToTaskController = async (req, res, next) => {
             ...data,
             agentId,
             orderId: [order._id],
-            merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
-            pickAddress: order?.orderDetail?.pickupAddress || null,
-            customerName: deliveryAddress?.fullName || null,
-            customerAddress: deliveryAddress,
-            orderType: order?.orderDetail?.deliveryMode || null,
-            taskDate: formatDate(order?.orderDetail?.deliveryTime),
-            taskTime: formatTime(order?.orderDetail?.deliveryTime),
+            merchantName: order?.orderId?.pickups[0]?.address?.fullName || null,
+            pickAddress: order?.orderId?.pickups[0]?.address || null,
+            customerName: order?.orderId?.drops[0]?.address.fullName || null,
+            customerAddress: order?.orderId?.drops[0]?.address,
+            orderType: order?.deliveryMode || null,
+            taskDate: formatDate(order?.deliveryTime),
+            taskTime: formatTime(order?.deliveryTime),
             timer: autoAllocation?.expireTime || null,
           },
         };
@@ -130,19 +130,24 @@ const assignAgentToTaskController = async (req, res, next) => {
       ...data,
       orderId: order._id,
       taskId: null,
-      merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
-      pickAddress: order?.orderDetail?.pickupAddress || null,
-      customerName: deliveryAddress?.fullName || null,
-      customerAddress: deliveryAddress,
+      merchantName: order?.orderId?.pickups[0]?.address?.fullName || null,
+      pickAddress: order?.orderId?.pickups[0]?.address || null,
+      customerName: order?.orderId?.drops[0]?.address.fullName || null,
+      customerAddress: order?.orderId?.drops[0]?.address,
       agentId,
-      orderType: order?.orderDetail?.deliveryMode || null,
-      taskDate: formatDate(order?.orderDetail?.deliveryTime),
-      taskTime: formatTime(order?.orderDetail?.deliveryTime),
+      orderType: order?.deliveryMode || null,
+      taskDate: formatDate(order?.deliveryTime),
+      taskTime: formatTime(order?.deliveryTime),
       timer: autoAllocation?.expireTime || null,
       batchOrder: false,
     };
 
     sendSocketData(agentId, eventName, socketData);
+
+    res.status(200).json({
+      message: "Notification send to the agent",
+      data: socketData,
+    });
   } catch (err) {
     next(appError(err.message));
   }

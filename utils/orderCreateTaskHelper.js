@@ -27,16 +27,16 @@ const orderCreateTaskHelper = async (orderId) => {
 
     if (task) return true;
 
-    let pickups = order.pickupDropDetails[0].pickups.map((pick) => ({
+    let pickups = order.pickups.map((pick) => ({
       status: "Pending",
-      location: pick.pickupLocation,
-      address: pick.pickupAddress,
+      location: pick.location,
+      address: pick.address,
     }));
 
-    let drops = order.pickupDropDetails[0].drops.map((drop) => ({
+    let drops = order.drops.map((drop) => ({
       status: "Pending",
-      location: drop.deliveryLocation,
-      address: drop.deliveryAddress,
+      location: drop.location,
+      address: drop.address,
     }));
 
     await Task.create({

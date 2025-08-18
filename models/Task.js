@@ -37,8 +37,6 @@ const taskSchema = new mongoose.Schema(
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
-    pickups: [detailSchema],
-    drops: [detailSchema],
   },
   { timestamps: true }
 );

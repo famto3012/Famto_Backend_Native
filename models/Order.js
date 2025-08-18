@@ -39,6 +39,23 @@ const detailSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const detailSchemaDrops = new mongoose.Schema(
+  {
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    instructionInDrop: { type: String, default: null },
+    voiceInstructionInDrop: { type: String, default: null },
+    items: [cartItemSchema],
+  },
+  { _id: false }
+);
+
 const billSchema = mongoose.Schema(
   {
     deliveryChargePerDay: { type: Number, default: null },
@@ -237,7 +254,7 @@ const orderSchema = mongoose.Schema(
     },
 
     pickups: [detailSchema],
-    drops: [detailSchema],
+    drops: [detailSchemaDrops],
 
     billDetail: billSchema,
     distance: { type: Number, default: 0 },

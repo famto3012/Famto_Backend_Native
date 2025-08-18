@@ -209,7 +209,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
     }
 
     if (deliveryMode && deliveryMode.trim().toLowerCase() !== "all") {
-      filterCriteria["orderDetail.deliveryMode"] = {
+      filterCriteria["deliveryMode"] = {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
@@ -292,9 +292,8 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName,
-        deliveryMode: order?.orderDetail?.deliveryMode,
+          order?.customerId?.fullName || order?.pickups[0]?.address?.fullName,
+        deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
@@ -303,7 +302,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
           order.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
             : order.paymentMode,
-        deliveryOption: order.orderDetail.deliveryOption,
+        deliveryOption: order?.deliveryOption,
         amount: order.billDetail.grandTotal,
       };
     });
@@ -326,6 +325,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
       "merchantDetail"
     );
 
+    console.log("orderFound", orderFound?.merchantId?.merchantDetail?.pricing);
     if (!orderFound) return next(appError("Order not found", 404));
 
     const stepperData = {
@@ -338,7 +338,9 @@ const confirmOrderByAdminController = async (req, res, next) => {
     orderFound.orderDetailStepper.accepted = stepperData;
 
     const modelType =
-      orderFound?.merchantId?.merchantDetail?.pricing[0]?.modelType;
+      orderFound?.merchantId?.merchantDetail?.pricing[0]?.modelType || null;
+
+    console.log("modelType", modelType);
 
     if (orderFound?.merchantId && modelType === "Commission") {
       const { payableAmountToFamto, payableAmountToMerchant } =
@@ -359,7 +361,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderFound.commissionDetail = { famtoEarnings, merchantEarnings };
     }
 
-    if (orderFound?.orderDetail?.deliveryMode !== "Take Away") {
+    if (orderFound?.deliveryMode !== "Take Away") {
       const task = await orderCreateTaskHelper(orderId);
 
       if (!task) return next(appError("Task not created"));
@@ -393,7 +395,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
       fcm: {
         orderId,
         customerId: orderFound.customerId,
-        merchantId: orderFound?.merchantId?._id,
+        merchantId: orderFound?.merchantId,
       },
     };
 
@@ -408,7 +410,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
 
     const userIds = {
       admin: process.env.ADMIN_ID,
-      merchant: orderFound?.merchantId?._id,
+      merchant: orderFound?.merchantId,
       agent: orderFound?.agentId,
       customer: orderFound?.customerId,
     };
@@ -614,7 +616,6 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         orderFound.paymentCollectedFromCustomer !== undefined
           ? orderFound.paymentCollectedFromCustomer
           : null,
-
       vehicleType: orderFound?.billDetail?.vehicleType || "-",
       deliveryMode: orderFound.deliveryMode || "-",
       deliveryOption: orderFound.deliveryOption || "-",
@@ -628,25 +629,28 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.pickups[0]?.pickupAddress.fullName ||
+          orderFound.pickups[0]?.address?.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
         pickAddress:
-          orderFound.pickups?.map((address) => ({
-            fullName: address.pickupAddress.fullName,
-            phoneNumber: address.pickupAddress.phoneNumber,
-            flat: address.pickupAddress.flat,
-            area: address.pickupAddress.area,
-            landmark: address.pickupAddress.landmark,
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
           })) || [],
+
         dropAddress:
-          orderFound.drops?.map((address) => ({
-            fullName: address.deliveryAddress.fullName,
-            phoneNumber: address.deliveryAddress.phoneNumber,
-            flat: address.deliveryAddress.flat,
-            area: address.deliveryAddress.area,
-            landmark: address.deliveryAddress.landmark,
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
           })) || [],
         pickInstructions:
           orderFound.pickups?.map((instruction) => ({
@@ -1640,8 +1644,8 @@ const orderMarkAsReadyController = async (req, res, next) => {
     const orderFound = await Order.findById(orderId);
     if (!orderFound) return next(appError("Order not found.", 400));
 
-    if (orderFound.orderDetail.deliveryMode === "Take Away") {
-      orderFound.orderDetail.isReady = true;
+    if (orderFound.deliveryMode === "Take Away") {
+      orderFound.isReady = true;
 
       await Promise.all([
         orderFound.save(),
@@ -1703,7 +1707,7 @@ const orderMarkAsReadyController = async (req, res, next) => {
       if (orderFound.agentId === null) {
         return next(appError("Order not assigned to any agent.", 400));
       } else {
-        orderFound.orderDetail.isReady = true;
+        orderFound.isReady = true;
         await orderFound.save();
 
         const eventName = "orderReadyAgent";
@@ -1768,12 +1772,12 @@ const markTakeAwayOrderCompletedController = async (req, res, next) => {
 
     if (!orderFound) return next(appError("Order not found.", 400));
 
-    if (orderFound.orderDetail.deliveryMode === "Take Away") {
+    if (orderFound.deliveryMode === "Take Away") {
       const stepperDetail = {
-        by: orderFound.orderDetail.pickupAddress.fullName,
+        by: orderFound.customerId,
         userId: orderFound.merchantId,
         date: new Date(),
-        location: orderFound.orderDetail.pickupLocation,
+        location: orderFound.pickups[0]?.location || "",
       };
       orderFound.status = "Completed";
       orderFound.orderDetailStepper.completed = stepperDetail;
@@ -1838,12 +1842,16 @@ const createInvoiceByAdminController = async (req, res, next) => {
       addedTip = 0,
     } = req.body;
 
+    console.log("Request body:", req.body);
+
     const merchantFound = await fetchMerchantDetails(
       merchantId,
       deliveryMode,
       deliveryOption,
       next
     );
+
+    console.log("Merchant found:", merchantFound);
 
     validateCustomerAddress(
       newCustomer,
@@ -1868,6 +1876,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       otherAddressId,
       formattedErrors,
     });
+
+    console.log("Customer found or created:", customer);
 
     if (!customer) return res.status(409).json({ errors: formattedErrors });
 
@@ -1896,6 +1906,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
 
+    console.log("Scheduled details:", scheduledDetails);
+
     const {
       oneTimeDeliveryCharge,
       surgeCharges,
@@ -1923,6 +1935,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       });
     }
 
+    console.log("Merchant discount amount:", merchantDiscountAmount);
+
     const billDetail = calculateBill(
       itemTotal || 0,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge || 0,
@@ -1932,6 +1946,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       taxAmount || 0,
       addedTip || 0
     );
+
+    console.log("Bill detail:", billDetail);
 
     const cart = await saveCustomerCart(
       deliveryMode,
@@ -1953,6 +1969,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       instructionInDelivery
     );
 
+    console.log("Cart created successfully:", cart);
     let populatedCartWithVariantNames;
     let formattedItems;
     if (deliveryMode === "Take Away" || deliveryMode === "Home Delivery") {
@@ -1966,7 +1983,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
         variantTypeName: item?.variantTypeId?.variantTypeName,
       }));
     } else if (deliveryMode === "Custom Order") {
-      formattedItems = cart.items.map((item) => ({
+      formattedItems = cart.items?.map((item) => ({
         itemId: new mongoose.Types.ObjectId(),
         itemName: item.itemName,
         itemImageURL: item.itemImageURL,
@@ -1982,13 +1999,283 @@ const createInvoiceByAdminController = async (req, res, next) => {
         billDetail: cart.billDetail,
         items: formattedItems || cart.items,
         deliveryMode,
-        buyFromAnyWhere: cart.cartDetail.pickupLocation.length !== 2,
+        // buyFromAnyWhere: cart.pickups.location.length !== 2,
+        buyFromAnyWhere:
+          deliveryMode === "Pick and Drop"
+            ? (cart?.pickups?.[0]?.location?.length || 0) !== 2
+            : (cart?.cartDetail?.pickupLocation?.length || 0) !== 2,
       },
     });
   } catch (err) {
     next(appError(err.message));
   }
 };
+
+// const createInvoiceByAdminController = async (req, res, next) => {
+//   const errors = validationResult(req);
+
+//   let formattedErrors = {};
+//   if (!errors.isEmpty()) {
+//     errors.array().forEach((error) => {
+//       formattedErrors[error.path] = error.msg;
+//     });
+//     return res.status(500).json({ errors: formattedErrors });
+//   }
+
+//   try {
+//     const {
+//       selectedBusinessCategory,
+//       customerId,
+//       newCustomer,
+//       deliveryOption,
+//       deliveryMode,
+//       items,
+//       instructionToMerchant = "",
+//       instructionToDeliveryAgent = "",
+//       merchantId,
+//       customerAddressType,
+//       customerAddressOtherAddressId,
+//       flatDiscount = 0,
+//       newCustomerAddress,
+//       pickUpAddressType,
+//       pickUpAddressOtherAddressId,
+//       deliveryAddressType,
+//       deliveryAddressOtherAddressId,
+//       newPickupAddress,
+//       newDeliveryAddress,
+//       vehicleType,
+//       customPickupLocation,
+//       instructionInPickup = "",
+//       instructionInDelivery = "",
+//       addedTip = 0,
+//       pickups, // NEW for Pick and Drop
+//       drops, // NEW for Pick and Drop
+//     } = req.body;
+
+//     const merchantFound = await fetchMerchantDetails(
+//       merchantId,
+//       deliveryMode,
+//       deliveryOption,
+//       next
+//     );
+
+//     validateCustomerAddress(
+//       newCustomer,
+//       deliveryMode,
+//       newCustomerAddress,
+//       newPickupAddress,
+//       newDeliveryAddress
+//     );
+
+//     const customerAddress =
+//       newCustomerAddress || newPickupAddress || newDeliveryAddress;
+//     const addressType = customerAddressType || deliveryAddressType || "";
+//     const otherAddressId =
+//       customerAddressOtherAddressId || deliveryAddressOtherAddressId || "";
+
+//     const customer = await findOrCreateCustomer({
+//       customerId,
+//       newCustomer,
+//       customerAddress,
+//       deliveryMode,
+//       addressType,
+//       otherAddressId,
+//       formattedErrors,
+//     });
+
+//     if (!customer) return res.status(409).json({ errors: formattedErrors });
+
+//     let distanceInKM;
+//     let pickupLocation, pickupAddress, deliveryLocation, deliveryAddress;
+
+//     if (deliveryMode === "Pick and Drop") {
+//       // Calculate distance & duration like in customer controller
+//       const coordinates = filterCoordinatesFromData({
+//         pickupLocation,
+//         deliveryLocation,
+//       });
+//       const { distanceInKM: dist, duration } =
+//         await getDistanceFromMultipleCoordinates(coordinates);
+//       distanceInKM = dist;
+
+//       // Handle file uploads (voice instructions) same as customer controller
+//       const files = req.files || [];
+//       for (const file of files) {
+//         const matchPickup = file.fieldname.match(/^pickupVoice(\d+)$/);
+//         const matchDrop = file.fieldname.match(/^dropVoice(\d+)$/);
+
+//         if (matchPickup) {
+//           const index = parseInt(matchPickup[1]);
+//           const pickup = pickups?.[index];
+
+//           if (pickup) {
+//             const existingUrl = pickup.voiceInstructionInPickup;
+//             if (existingUrl) {
+//               await deleteFromFirebase(existingUrl);
+//             }
+//             const url = await uploadToFirebase(file, "VoiceInstructions");
+//             pickup.voiceInstructionInPickup = url;
+//           }
+//         }
+
+//         if (matchDrop) {
+//           const index = parseInt(matchDrop[1]);
+//           const drop = drops?.[index];
+
+//           if (drop) {
+//             const existingUrl = drop.voiceInstructionInDelivery;
+//             if (existingUrl) {
+//               await deleteFromFirebase(existingUrl);
+//             }
+//             const url = await uploadToFirebase(file, "VoiceInstructions");
+//             drop.voiceInstructionInDelivery = url;
+//           }
+//         }
+//       }
+//     } else {
+//       ({
+//         pickupLocation,
+//         pickupAddress,
+//         deliveryLocation,
+//         deliveryAddress,
+//         distanceInKM,
+//       } = await handleDeliveryModeForAdmin(
+//         deliveryMode,
+//         customer,
+//         customerAddressType,
+//         customerAddressOtherAddressId,
+//         newCustomer,
+//         newCustomerAddress,
+//         merchantFound,
+//         pickUpAddressType,
+//         pickUpAddressOtherAddressId,
+//         deliveryAddressType,
+//         deliveryAddressOtherAddressId,
+//         newPickupAddress,
+//         newDeliveryAddress,
+//         customPickupLocation
+//       ));
+//     }
+
+//     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
+
+//     const {
+//       oneTimeDeliveryCharge,
+//       surgeCharges,
+//       deliveryChargeForScheduledOrder,
+//       taxAmount,
+//       itemTotal,
+//     } = await calculateDeliveryChargeHelperForAdmin(
+//       deliveryMode,
+//       distanceInKM,
+//       merchantFound,
+//       customer,
+//       items,
+//       scheduledDetails,
+//       vehicleType,
+//       pickupLocation,
+//       selectedBusinessCategory
+//     );
+
+//     let merchantDiscountAmount;
+//     if (merchantFound) {
+//       merchantDiscountAmount = await applyDiscounts({
+//         items,
+//         itemTotal,
+//         merchantId,
+//       });
+//     }
+
+//     const billDetail = calculateBill(
+//       itemTotal || 0,
+//       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge || 0,
+//       surgeCharges || 0,
+//       flatDiscount || 0,
+//       merchantDiscountAmount || 0,
+//       taxAmount || 0,
+//       addedTip || 0
+//     );
+
+//     let cart;
+//     if (deliveryMode === "Pick and Drop") {
+//       cart = await PickAndCustomCart.findOneAndUpdate(
+//         { customerId: customer._id, deliveryMode: "Pick and Drop" },
+//         {
+//           customerId: customer._id,
+//           deliveryMode: "Pick and Drop",
+//           deliveryOption,
+//           pickups,
+//           drops,
+//           distance: distanceInKM,
+//           duration: scheduledDetails?.duration || null,
+//           billDetail,
+//           vehicleType,
+//           items,
+//         },
+//         { new: true, upsert: true }
+//       );
+//     } else {
+//       cart = await saveCustomerCart(
+//         deliveryMode,
+//         deliveryOption,
+//         merchantFound,
+//         customer,
+//         pickupLocation,
+//         pickupAddress,
+//         deliveryLocation,
+//         deliveryAddress,
+//         distanceInKM,
+//         scheduledDetails,
+//         billDetail,
+//         vehicleType,
+//         items,
+//         instructionToMerchant,
+//         instructionToDeliveryAgent,
+//         instructionInPickup,
+//         instructionInDelivery
+//       );
+//     }
+
+//     let populatedCartWithVariantNames;
+//     let formattedItems;
+//     if (deliveryMode === "Take Away" || deliveryMode === "Home Delivery") {
+//       populatedCartWithVariantNames = await formattedCartItems(cart);
+//       formattedItems = populatedCartWithVariantNames.items.map((item) => ({
+//         itemName: item.productId.productName,
+//         itemImageURL: item.productId.productImageURL,
+//         quantity: item.quantity,
+//         price: item.price,
+//         variantTypeName: item?.variantTypeId?.variantTypeName,
+//       }));
+//     } else if (deliveryMode === "Custom Order") {
+//       formattedItems = cart.items.map((item) => ({
+//         itemId: new mongoose.Types.ObjectId(),
+//         itemName: item.itemName,
+//         itemImageURL: item.itemImageURL,
+//         quantity: item.quantity,
+//         unit: item.unit,
+//       }));
+//     } else if (deliveryMode === "Pick and Drop") {
+//       formattedItems = cart.items || [];
+//     }
+
+//     res.status(200).json({
+//       message: "Order invoice created successfully",
+//       data: {
+//         cartId: cart._id,
+//         billDetail: cart.billDetail,
+//         items: formattedItems || cart.items,
+//         deliveryMode,
+//         buyFromAnyWhere:
+//           deliveryMode === "Pick and Drop"
+//             ? false
+//             : cart.cartDetail?.pickupLocation?.length !== 2,
+//       },
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 const getScheduledOrderDetailByAdminController = async (req, res, next) => {
   try {
@@ -1997,7 +2284,7 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
 
     let orderFound;
 
-    if (["Home Delivery", "Take Away"].includes(deliveryMode)) {
+    if (deliveryMode === "Take Away" || deliveryMode === "Home Delivery") {
       orderFound = await ScheduledOrder.findOne({ _id: id })
         .populate({
           path: "customerId",
@@ -2147,49 +2434,78 @@ const createOrderByAdminController = async (req, res, next) => {
       paymentMode
     );
 
+    const isPickAndCustomCart =
+      Array.isArray(cartFound.pickups) && Array.isArray(cartFound.drops);
+    const isCustomerCart = !!cartFound.cartDetail;
+
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+      deliveryMode,
+      deliveryOption:
+        cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,
 
-      deliveryMode: cartFound.cartDetail.deliveryMode,
-      deliveryOption: cartFound.cartDetail.deliveryOption,
+      pickups: isCustomerCart
+        ? [
+            {
+              location: cartFound.cartDetail.pickupLocation,
+              address: cartFound.cartDetail.pickupAddress,
+              instructionInPickup:
+                cartFound.cartDetail.instructionToMerchant || null,
+              voiceInstructionInPickup:
+                cartFound.cartDetail.voiceInstructionToMerchant || null,
+              items: [], // Fill if needed
+            },
+          ]
+        : isPickAndCustomCart
+        ? cartFound.pickups.map((p) => ({
+            location: p.location || [],
+            address: p.address || {},
+            instructionInPickup:
+              p.instructionInPickup ||
+              cartFound.cartDetail?.instructionToDeliveryAgent,
+            voiceInstructionInDrop: p.voiceInstructionInPickup || null,
+            voiceInstructionInDrop: p.voiceInstructionInDrop || null,
+            items: p.items || [],
+          }))
+        : [],
 
-      pickups: [
-        {
-          pickupLocation: cartFound.cartDetail.pickupLocation,
-          pickupAddress: cartFound.cartDetail.pickupAddress,
-          instructionInPickup: cartFound.cartDetail.instructionToMerchant,
-          voiceInstructionInPickup:
-            cartFound.cartDetail.voiceInstructionToMerchant,
-          items: [],
-        },
-      ],
-      drops: [
-        {
-          deliveryLocation: cartFound.cartDetail.deliveryLocation,
-          deliveryAddress: cartFound.cartDetail.deliveryAddress,
-          instructionInDelivery:
-            cartFound.cartDetail.instructionToDeliveryAgent,
-          voiceInstructionInDelivery:
-            cartFound.cartDetail.voiceInstructionToDeliveryAgent,
-          items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-            ? orderDetails.formattedItems
-            : cartFound.items,
-          orderDetail: {
-            ...cartFound.cartDetail,
-            deliveryTime,
-          },
-        },
-      ],
+      drops: isCustomerCart
+        ? [
+            {
+              location: cartFound.cartDetail.deliveryLocation,
+              address: cartFound.cartDetail.deliveryAddress,
+              instructionInDrop:
+                cartFound.cartDetail?.instructionToDeliveryAgent || null,
+              voiceInstructionInDrop:
+                cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
+              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.items,
+              orderDetail: {
+                ...cartFound.cartDetail,
+                deliveryTime,
+              },
+            },
+          ]
+        : isPickAndCustomCart
+        ? cartFound.drops.map((d) => ({
+            location: d.location || [],
+            address: d.address || {},
+            instructionInDrop: d.instructionInDrop || null,
+            voiceInstructionInDrop: d.voiceInstructionInDrop || null,
+            items: d.items || [],
+          }))
+        : [],
 
       billDetail: orderDetails.billDetail,
-      distance: cartFound.cartDetail.distance,
+      distance: cartFound.cartDetail?.distance || cartFound.distance || 0,
 
       deliveryTime,
-      startDate: cartFound.cartDetail.startDate,
-      endDate: cartFound.cartDetail.endDate,
-      time: cartFound.cartDetail.time,
-      numOfDays: cartFound.cartDetail.numOfDays,
+      startDate: cartFound.cartDetail?.startDate || cartFound.startDate,
+      endDate: cartFound.cartDetail?.endDate || cartFound.endDate,
+      time: cartFound.cartDetail?.time || cartFound.time,
+      numOfDays: cartFound.cartDetail?.numOfDays || cartFound.numOfDays,
 
       totalAmount: orderDetails.billDetail.grandTotal,
       paymentMode,
@@ -2202,7 +2518,11 @@ const createOrderByAdminController = async (req, res, next) => {
       },
     };
 
-    const isScheduledOrder = cartFound.deliveryOption === "Scheduled";
+    console.log("Order Options:", orderOptions);
+
+    const isScheduledOrder =
+      (cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption) ===
+      "Scheduled";
     const isPickOrCustomOrder = ["Pick and Drop", "Custom Order"].includes(
       deliveryMode
     );
@@ -2218,11 +2538,12 @@ const createOrderByAdminController = async (req, res, next) => {
       });
       OrderModelToUse = ScheduledOrder;
     } else if (isScheduledOrder && isPickOrCustomOrder) {
+      console.log("Creating Scheduled Pick and Custom Order", orderOptions);
       newOrderCreated = await scheduledPickAndCustom.create({
         ...orderOptions,
-        startDate: cartFound.cartDetail.startDate,
-        endDate: cartFound.cartDetail.endDate,
-        time: cartFound.cartDetail.time,
+        startDate: cartFound.cartDetail?.startDate || cartFound.startDate,
+        endDate: cartFound.cartDetail?.endDate || cartFound.endDate,
+        time: cartFound.cartDetail?.time || cartFound.time,
       });
       OrderModelToUse = scheduledPickAndCustom;
     } else {
@@ -2253,7 +2574,7 @@ const createOrderByAdminController = async (req, res, next) => {
       orderId: newOrder?._id,
       billDetail: newOrder?.billDetail,
       orderDetailStepper: newOrder?.orderDetailStepper?.created,
-      _id: newOrder?._id,
+      // _id: newOrder?._id,
       orderStatus: newOrder?.status,
       merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
@@ -2273,6 +2594,8 @@ const createOrderByAdminController = async (req, res, next) => {
       deliveryOption: newOrder?.deliveryOption,
       amount: newOrder?.billDetail?.grandTotal,
     };
+
+    console.log("Socket Data:", socketData);
 
     const notificationData = {
       fcm: {
@@ -2297,6 +2620,7 @@ const createOrderByAdminController = async (req, res, next) => {
       notificationData,
     });
   } catch (err) {
+    console.error("Error creating order by admin:", err.message);
     next(appError(err.message));
   }
 };

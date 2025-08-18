@@ -80,18 +80,22 @@ const cartDetailSchema = mongoose.Schema(
     startDate: {
       type: Date,
       default: null,
+      required: true,
     },
     endDate: {
       type: Date,
       default: null,
+      required: true,
     },
     time: {
       type: Date,
       default: null,
+      required: true,
     },
     numOfDays: {
       type: Number,
       default: null,
+      required: true,
     },
   },
   {

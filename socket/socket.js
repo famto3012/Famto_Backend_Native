@@ -792,6 +792,7 @@ io.on("connection", async (socket) => {
 
   // Get realtime data count for Home page
   socket.on("getRealTimeDataOnRefresh", () => {
+    console.log("Getting real-time data count for Home page");
     getRealTimeDataCount();
   });
 

@@ -79,7 +79,7 @@ const scheduledPickAndCustomSchema = mongoose.Schema(
   {
     _id: { type: String },
     customerId: { type: String, ref: "Customer", required: true },
-    merchantId: { type: String, ref: "Merchant", required: true },
+    merchantId: { type: String, ref: "Merchant", required: false },
 
     deliveryMode: {
       type: String,
@@ -112,7 +112,7 @@ const scheduledPickAndCustomSchema = mongoose.Schema(
     paymentMode: {
       type: String,
       required: true,
-      enum: ["Famto-cash", "Online-payment"],
+      enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
     },
     paymentId: { type: String, default: null },
     paymentStatus: {

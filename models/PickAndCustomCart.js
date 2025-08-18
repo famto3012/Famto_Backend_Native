@@ -36,6 +36,23 @@ const detailSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const detailSchemaDrops = new mongoose.Schema(
+  {
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    instructionInDrop: { type: String, default: null },
+    voiceInstructionInDrop: { type: String, default: null },
+    items: [cartItemSchema],
+  },
+  { _id: false }
+);
+
 const billSchema = mongoose.Schema(
   {
     deliveryChargePerDay: { type: Number, default: null },
@@ -74,17 +91,17 @@ const pickAndCustomCartSchema = mongoose.Schema(
     },
 
     pickups: [detailSchema],
-    drops: [detailSchema],
+    drops: [detailSchemaDrops],
 
     billDetail: billSchema,
 
     distance: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
 
-    startDate: { type: Date, default: null },
-    endDate: { type: Date, default: null },
-    time: { type: Date, default: null },
-    numOfDays: { type: Number, default: null },
+    startDate: { type: Date, default: null, required: true },
+    endDate: { type: Date, default: null, required: true },
+    time: { type: Date, default: null, required: true },
+    numOfDays: { type: Number, default: null, required: true },
   },
   {
     timestamps: true,
