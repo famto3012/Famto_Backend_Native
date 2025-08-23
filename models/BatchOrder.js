@@ -35,6 +35,7 @@ const batchOrderSchema = new mongoose.Schema(
       required: true,
     },
     pickupAddress: {
+      location: { type: [Number] },
       fullName: String,
       phoneNumber: String,
       flat: String,

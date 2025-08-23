@@ -13,6 +13,7 @@ const {
   sendNotification,
   getUserLocationFromSocket,
 } = require("../socket/socket");
+const BatchOrder = require("../models/BatchOrder");
 
 const orderCreateTaskHelper = async (orderId) => {
   try {
@@ -27,14 +28,16 @@ const orderCreateTaskHelper = async (orderId) => {
 
     if (task) return true;
 
-    let pickups = order.pickups.map((pick) => ({
+    let pickups = order.pickups.map((pick, index) => ({
       status: "Pending",
+      stepIndex: index,
       location: pick.location,
       address: pick.address,
     }));
 
-    let drops = order.drops.map((drop) => ({
+    let drops = order.drops.map((drop, index) => ({
       status: "Pending",
+      stepIndex: index,
       location: drop.location,
       address: drop.address,
     }));
@@ -72,6 +75,52 @@ const orderCreateTaskHelper = async (orderId) => {
     return true;
   } catch (err) {
     throw new Error(`Error in creating order task: ${err}`);
+  }
+};
+
+const batchOrderCreateTaskHelper = async (batchOrderId) => {
+  try {
+    const [batchOrder, task] = await Promise.all([
+      BatchOrder.findById(batchOrderId),
+      Task.exists({ orderId: batchOrderId }),
+    ]);
+
+    if (!batchOrder) {
+      throw new Error("Batch Order not found");
+    }
+
+    if (task) return true;
+
+    let pickups = batchOrder.pickupAddress
+      ? [
+          {
+            status: "Pending",
+            location: batchOrder.pickupAddress.location,
+            address: batchOrder.pickupAddress,
+          },
+        ]
+      : [];
+
+    let drops = batchOrder.dropDetails.map((drop) => ({
+      status: "Pending",
+      location: drop.drops.location,
+      address: drop.drops.address,
+    }));
+
+    await Task.create({
+      orderId: batchOrderId,
+      deliveryMode: batchOrder.deliveryMode,
+      pickupDropDetails: [
+        {
+          pickups,
+          drops,
+        },
+      ],
+    });
+
+    return true;
+  } catch (err) {
+    throw new Error(`Error in creating batch order task: ${err}`);
   }
 };
 
@@ -395,4 +444,4 @@ const fetchNearestAgents = async (merchantId) => {
   return filteredAgents;
 };
 
-module.exports = { orderCreateTaskHelper };
+module.exports = { orderCreateTaskHelper, batchOrderCreateTaskHelper };

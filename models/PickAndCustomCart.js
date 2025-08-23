@@ -98,10 +98,10 @@ const pickAndCustomCartSchema = mongoose.Schema(
     distance: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
 
-    startDate: { type: Date, default: null, required: true },
-    endDate: { type: Date, default: null, required: true },
-    time: { type: Date, default: null, required: true },
-    numOfDays: { type: Number, default: null, required: true },
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    time: { type: Date, default: null },
+    numOfDays: { type: Number, default: null },
   },
   {
     timestamps: true,

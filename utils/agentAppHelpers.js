@@ -353,7 +353,7 @@ const calculateAgentEarnings = async (agent, order) => {
 
   const distanceForOrder = order?.detailAddedByAgent?.distanceCoveredByAgent
     ? order.detailAddedByAgent.distanceCoveredByAgent - distanceFromStartToPick
-    : order.orderDetail.distance;
+    : order.distance;
 
   let orderSalary =
     distanceFromStartToPick * agentPricing.startToPickFarePerKM +
@@ -364,13 +364,12 @@ const calculateAgentEarnings = async (agent, order) => {
   if (agentSurge) {
     surgePrice =
       (order?.detailAddedByAgent?.distanceCoveredByAgent ??
-        order.orderDetail.distance / agentSurge.baseDistance) *
-      agentSurge.baseFare;
+        order.distance / agentSurge.baseDistance) * agentSurge.baseFare;
   }
 
   let totalPurchaseFare = 0;
 
-  if (order.orderDetail.deliveryMode === "Custom Order") {
+  if (order.deliveryMode === "Custom Order") {
     const taskFound = await Task.findOne({ orderId: order._id });
     if (taskFound) {
       const durationInHours =
@@ -399,16 +398,15 @@ const updateOrderDetails = (order, calculatedSalary) => {
   const currentTime = new Date();
   let delayedBy = null;
 
-  if (currentTime > new Date(order.orderDetail.deliveryTime)) {
-    delayedBy = currentTime - new Date(order.orderDetail.deliveryTime);
+  if (currentTime > new Date(order.deliveryTime)) {
+    delayedBy = currentTime - new Date(order.deliveryTime);
   }
 
   order.status = "Completed";
   order.paymentStatus = "Completed";
-  order.orderDetail.deliveryTime = currentTime;
-  order.orderDetail.timeTaken =
-    currentTime - new Date(order.orderDetail.agentAcceptedAt);
-  order.orderDetail.delayedBy = delayedBy;
+  order.deliveryTime = currentTime;
+  order.timeTaken = currentTime - new Date(order.agentAcceptedAt);
+  order.delayedBy = delayedBy;
 
   if (!order?.detailAddedByAgent) order.detailAddedByAgent = {};
 
@@ -439,8 +437,8 @@ const updateAgentDetails = async (
 
   agent.appDetail.orderDetail.push({
     orderId: order._id,
-    deliveryMode: order?.orderDetail?.deliveryMode,
-    customerName: order?.orderDetail?.deliveryAddress?.fullName,
+    deliveryMode: order?.deliveryMode,
+    customerName: order?.deliveryAddress?.fullName,
     completedOn: new Date(),
     grandTotal: order?.detailAddedByAgent?.agentEarning || 0,
   });

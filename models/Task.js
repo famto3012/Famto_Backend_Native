@@ -8,6 +8,7 @@ const detailSchema = new mongoose.Schema(
       default: "Pending",
     },
     location: { type: [Number] },
+    stepIndex: { type: Number },
     address: {
       fullName: String,
       phoneNumber: String,
@@ -32,6 +33,13 @@ const taskSchema = new mongoose.Schema(
       enum: ["Assigned", "Unassigned", "Completed", "Cancelled"],
       default: "Unassigned",
     },
+    pickupDropDetails: [
+      {
+        // orderId: { type: String, ref: "Order", required: true },
+        pickups: [detailSchema],
+        drops: [detailSchema],
+      },
+    ],
     deliveryMode: {
       type: String,
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],

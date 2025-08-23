@@ -21,6 +21,10 @@ const {
 } = require("../../../utils/customerAppHelpers");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const BatchOrder = require("../../../models/BatchOrder");
+const {
+  orderCreateTaskHelper,
+  batchOrderCreateTaskHelper,
+} = require("../../../utils/orderCreateTaskHelper");
 
 const getTaskByIdController = async (req, res, next) => {
   try {
@@ -55,6 +59,7 @@ const assignAgentToTaskController = async (req, res, next) => {
     ]);
 
     console.log("Task:", task);
+    console.log("Task Order:", order);
 
     if (!agent.appDetail) {
       agent.appDetail = {
@@ -106,10 +111,10 @@ const assignAgentToTaskController = async (req, res, next) => {
             ...data,
             agentId,
             orderId: [order._id],
-            merchantName: order?.orderId?.pickups[0]?.address?.fullName || null,
-            pickAddress: order?.orderId?.pickups[0]?.address || null,
-            customerName: order?.orderId?.drops[0]?.address.fullName || null,
-            customerAddress: order?.orderId?.drops[0]?.address,
+            merchantName: order?.pickups[0]?.address?.fullName || null,
+            pickAddress: order?.pickups[0]?.address || null,
+            customerName: order?.drops[0]?.address.fullName || null,
+            customerAddress: order?.drops[0]?.address,
             orderType: order?.deliveryMode || null,
             taskDate: formatDate(order?.deliveryTime),
             taskTime: formatTime(order?.deliveryTime),
@@ -130,10 +135,10 @@ const assignAgentToTaskController = async (req, res, next) => {
       ...data,
       orderId: order._id,
       taskId: null,
-      merchantName: order?.orderId?.pickups[0]?.address?.fullName || null,
-      pickAddress: order?.orderId?.pickups[0]?.address || null,
-      customerName: order?.orderId?.drops[0]?.address.fullName || null,
-      customerAddress: order?.orderId?.drops[0]?.address,
+      merchantName: order?.pickups[0]?.address?.fullName || null,
+      pickAddress: order?.pickups[0]?.address || null,
+      customerName: order?.drops[0]?.address.fullName || null,
+      customerAddress: order?.drops[0]?.address,
       agentId,
       orderType: order?.deliveryMode || null,
       taskDate: formatDate(order?.deliveryTime),
@@ -406,6 +411,17 @@ const batchOrder = async (req, res, next) => {
     };
 
     const newBatchOrderTask = await BatchOrder.create(option);
+
+    console.log("New Batch Order Task Created:", newBatchOrderTask);
+
+    const task = await batchOrderCreateTaskHelper(newBatchOrderTask._id);
+
+    // const task = await orderCreateTaskHelper(newBatchOrderTask._id);
+
+    // if (!task) return next(appError("Task not created"));
+    // if (!task) {
+    //   // console.error("Task creation failed", task);
+    // }
 
     if (!agent.appDetail) {
       agent.appDetail = {

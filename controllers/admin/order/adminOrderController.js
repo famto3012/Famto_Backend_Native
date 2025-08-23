@@ -2632,7 +2632,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     const [orderFound, task] = await Promise.all([
       Order.findOne({
         _id: orderId,
-        "orderDetail.deliveryMode": { $ne: "Take Away" },
+        deliveryMode: { $ne: "Take Away" },
       }).populate("customerId", "fullName"),
       Task.findOne({ orderId }),
     ]);
@@ -2693,7 +2693,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
       let totalPurchaseFare = 0;
 
-      if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+      if (orderFound.deliveryMode === "Custom Order") {
         const taskFound = await Task.findOne({ orderId: orderFound._id });
         if (taskFound) {
           const durationInHours =
@@ -2719,7 +2719,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
     const detail = {
       orderId,
-      deliveryMode: orderFound.orderDetail.deliveryMode,
+      deliveryMode: orderFound.deliveryMode,
       customerName: orderFound.customerId.fullName || "-",
       completedOn: new Date(),
       grandTotal: calculatedSalary,

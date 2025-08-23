@@ -207,13 +207,13 @@ agentRoute.get("/get-ratings", isAuthenticated, getRatingsOfAgentController);
 agentRoute.get("/get-task-preview", isAuthenticated, getTaskPreviewController);
 
 agentRoute.get(
-  "/get-pickup-detail/:taskId",
+  "/get-pickup-detail/:taskId/:stepIndex",
   isAuthenticated,
   getPickUpDetailController
 );
 
 agentRoute.get(
-  "/get-delivery-detail/:taskId",
+  "/get-delivery-detail/:taskId/:stepIndex",
   isAuthenticated,
   getDeliveryDetailController
 );
