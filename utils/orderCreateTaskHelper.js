@@ -33,6 +33,7 @@ const orderCreateTaskHelper = async (orderId) => {
       stepIndex: index,
       location: pick.location,
       address: pick.address,
+      items: pick.items || [],
     }));
 
     let drops = order.drops.map((drop, index) => ({
@@ -40,6 +41,7 @@ const orderCreateTaskHelper = async (orderId) => {
       stepIndex: index,
       location: drop.location,
       address: drop.address,
+      items: drop.items || [],
     }));
 
     await Task.create({

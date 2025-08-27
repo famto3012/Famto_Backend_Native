@@ -680,6 +680,7 @@ const filterProductIdAndQuantity = async (items) => {
 
         return {
           productId: item?.productId,
+          productName: product?.productName || "",
           variantId: item?.variantTypeId || null,
           price,
           costPrice,
@@ -695,10 +696,41 @@ const filterProductIdAndQuantity = async (items) => {
   }
 };
 
+// const reduceProductAvailableQuantity = async (purchasedItems, merchantId) => {
+//   for (const item of purchasedItems) {
+//     if (!item.productId) {
+//       console.warn("Skipping item without productId", item);
+//       continue;
+//     }
+
+//     const product = await Product.findOne({
+//       _id: item.productId,
+//       merchantId,
+//     });
+
+//     if (!product) throw appError("Product not found", 400);
+
+//     // Reduce stock
+//     if (item.variantId) {
+//       const variant = product.variants.id(item.variantId);
+//       if (variant) {
+//         variant.stock = Math.max(0, variant.stock - item.quantity);
+//       }
+//     } else {
+//       product.stock = Math.max(0, product.stock - item.quantity);
+//     }
+
+//     await product.save();
+//   }
+// };
+
 const reduceProductAvailableQuantity = async (purchasedItems, merchantId) => {
+  console.log("Reducing product quantities for items:", purchasedItems);
   try {
     for (const item of purchasedItems) {
       const productFound = await Product.findById(item.productId);
+
+      console.log("Product Found:", productFound, item.productId);
 
       if (!productFound) {
         throw new Error("Product not found");

@@ -1518,20 +1518,31 @@ const prepareOrderDetails = async (cart, paymentMode) => {
   ) {
     const populatedCartWithVariantNames = await formattedCartItems(cart);
 
-    formattedItems = populatedCartWithVariantNames.items.map((item) => {
-      return {
-        itemName: item.productId.productName,
-        itemImageURL: item.productId.productImageURL,
-        quantity: item.quantity,
-        price: item.price,
-        variantTypeName: item?.variantTypeId?.variantTypeName,
-      };
-    });
+    console.log(
+      "Populated Cart with Variant Names:",
+      populatedCartWithVariantNames
+    );
+
+    const populatedCart = await CustomerCart.findById(cart._id)
+      .populate("items.productId") // <- Ensure productId is populated
+      .populate("items.variantTypeId");
+
+    formattedItems = populatedCartWithVariantNames.items.map((item) => ({
+      itemName: item.productId?.productName || "Unnamed",
+      itemImageURL: item.productId?.productImageURL || null,
+      quantity: item.quantity,
+      price: item.price,
+      variantTypeName: item.variantTypeId?.variantTypeName || null,
+    }));
+
+    console.log("Formatted Items:", formattedItems);
 
     purchasedItems = await filterProductIdAndQuantity(
       populatedCartWithVariantNames.items
     );
   }
+
+  console.log("Purchased Items:", purchasedItems);
 
   const billDetail = {
     ...cart.billDetail,

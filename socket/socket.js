@@ -766,7 +766,7 @@ const getPendingNotificationsWithTimers = async (agentId) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log("Pending Notifications:", orderId);
+    console.log("Pending Notifications:", pendingNotifications);
 
     const notificationsWithTimers = pendingNotifications.map((notification) => {
       return {
@@ -780,6 +780,8 @@ const getPendingNotificationsWithTimers = async (agentId) => {
         taskTime: formatTime(notification.orderId?.deliveryTime),
       };
     });
+
+    console.log("Notifications with Timers:", notificationsWithTimers);
 
     return notificationsWithTimers;
   } catch (error) {
@@ -869,6 +871,184 @@ io.on("connection", async (socket) => {
   });
 
   // Order accepted by agent socket
+  // socket.on("agentOrderAccepted", async ({ orderIds, agentId }) => {
+  //   console.log("Agent accepting order:", { orderIds, agentId });
+  //   try {
+  //     // Ensure orderIds is always an array
+  //     const orderIdList = Array.isArray(orderIds) ? orderIds : [orderIds];
+
+  //     const [agent, tasks, orders, sameCancelledOrders] = await Promise.all([
+  //       Agent.findById(agentId),
+  //       Task.find({ orderId: { $in: orderIdList } }).populate("orderId"),
+  //       Order.find({ _id: { $in: orderIdList } }),
+  //       AgentNotificationLogs.countDocuments({
+  //         orderId: { $in: orderIdList },
+  //         agentId,
+  //         status: "Rejected",
+  //       }),
+  //     ]);
+
+  //     // ✅ Update all notification logs in one go
+  //     const updatedNotifications = await AgentNotificationLogs.updateMany(
+  //       {
+  //         orderId: { $in: orderIdList },
+  //         agentId,
+  //         status: "Pending",
+  //       },
+  //       { $set: { status: "Accepted" } }
+  //     );
+
+  //     if (updatedNotifications.modifiedCount === 0) {
+  //       console.log("Agent Notification Logs not found for given orderIds");
+  //       return socket.emit("error", {
+  //         message: "Notification logs of agent not found",
+  //         success: false,
+  //       });
+  //     }
+
+  //     if (!agent) {
+  //       return socket.emit("error", {
+  //         message: "Agent not found",
+  //         success: false,
+  //       });
+  //     }
+
+  //     if (agent.status === "Inactive") {
+  //       return socket.emit("error", {
+  //         message: "Agent should be online to accept new order",
+  //         success: false,
+  //       });
+  //     }
+
+  //     // if (!agentNotification) {
+  //     //   console.log("Agent Notification Log not found");
+  //     //   return socket.emit("error", {
+  //     //     message: "Notification log of agent is not found",
+  //     //     success: false,
+  //     //   });
+  //     // }
+
+  //     // ✅ Update notification log
+  //     AgentNotificationLogs.status = "Accepted";
+  //     await AgentNotificationLogs.save();
+
+  //     const stepperDetail = {
+  //       by: agent.fullName,
+  //       userId: agent._id,
+  //       date: new Date(),
+  //       location: getUserLocationFromSocket(agentId),
+  //     };
+
+  //     // ✅ Update all orders
+  //     await Promise.all(
+  //       orderIdList.map((orderId) =>
+  //         Order.findByIdAndUpdate(
+  //           orderId,
+  //           {
+  //             agentId,
+  //             "orderDetail.agentAcceptedAt": new Date(),
+  //             "orderDetailStepper.assigned": stepperDetail,
+  //             "detailAddedByAgent.distanceCoveredByAgent": null,
+  //           },
+  //           { new: true }
+  //         )
+  //       )
+  //     );
+
+  //     // ✅ Update all tasks
+  //     await Promise.all(
+  //       tasks.map((task) =>
+  //         Task.findByIdAndUpdate(task._id, {
+  //           agentId,
+  //           taskStatus: "Assigned",
+  //           "pickupDropDetails.$[].pickups.$[].status": "Accepted",
+  //           "pickupDropDetails.$[].drops.$[].status": "Accepted",
+  //         })
+  //       )
+  //     );
+
+  //     // ✅ Update agent status
+  //     agent.status = "Busy";
+  //     agent.appDetail.pendingOrders = Math.max(
+  //       0,
+  //       agent.appDetail.pendingOrders - 1
+  //     );
+  //     agent.appDetail.cancelledOrders = Math.max(
+  //       0,
+  //       agent.appDetail.cancelledOrders - sameCancelledOrders
+  //     );
+  //     await agent.save();
+
+  //     const eventName = "agentOrderAccepted";
+
+  //     // 🔔 Send notifications for each order
+  //     for (const order of orders) {
+  //       const { rolesToNotify, data } = await findRolesToNotify(eventName);
+  //       let manager;
+
+  //       const notifications = rolesToNotify.map(async (role) => {
+  //         let roleId;
+
+  //         if (role === "admin") {
+  //           roleId = process.env.ADMIN_ID;
+  //         } else if (role === "merchant") {
+  //           roleId = order?.merchantId;
+  //         } else if (role === "driver") {
+  //           roleId = order?.agentId;
+  //         } else if (role === "customer") {
+  //           roleId = order?.customerId;
+  //         } else {
+  //           const roleValue = await ManagerRoles.findOne({ roleName: role });
+  //           if (roleValue) {
+  //             manager = await Manager.findOne({ role: roleValue._id });
+  //           }
+  //           if (manager) {
+  //             roleId = manager._id;
+  //           }
+  //         }
+
+  //         if (roleId) {
+  //           const notificationData = { fcm: { customerId: order.customerId } };
+  //           return sendNotification(
+  //             roleId,
+  //             eventName,
+  //             notificationData,
+  //             role.charAt(0).toUpperCase() + role.slice(1)
+  //           );
+  //         }
+  //       });
+
+  //       await Promise.all(notifications);
+
+  //       const socketData = {
+  //         ...data,
+  //         agentName: agent.fullName,
+  //         agentImgURL: agent.agentImageURL,
+  //         customerId: order.customerId,
+  //         orderDetailStepper: stepperDetail,
+  //         success: true,
+  //       };
+
+  //       // ✅ Emit socket events
+  //       sendSocketData(order.customerId, eventName, socketData);
+  //       sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+  //       if (order?.merchantId) {
+  //         sendSocketData(order.merchantId, eventName, socketData);
+  //       }
+  //       if (manager?._id) {
+  //         sendSocketData(manager._id, eventName, socketData);
+  //       }
+  //     }
+  //   } catch (err) {
+  //     console.error("Error in accepting order:", err.message);
+
+  //     socket.emit("error", {
+  //       message: err.message,
+  //       success: false,
+  //     });
+  //   }
+  // });
+
   socket.on("agentOrderAccepted", async ({ orderId, agentId }) => {
     try {
       const [agent, task, order, agentNotification, sameCancelledOrders] =
@@ -1023,6 +1203,7 @@ io.on("connection", async (socket) => {
   });
 
   // Order rejected socket
+
   socket.on("agentOrderRejected", async ({ orderId, agentId }) => {
     try {
       const [agentFound, orderFound, agentNotification] = await Promise.all([
@@ -1976,7 +2157,7 @@ io.on("connection", async (socket) => {
           // ✅ Update order + task
           orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
           orderFound.deliveryTime = new Date();
-          if (timeTaken) orderFound.orderDetail.timeTaken = timeTaken;
+          if (timeTaken) orderFound.timeTaken = timeTaken;
 
           deliveryDetail.status = "Completed";
           deliveryDetail.completedTime = new Date();

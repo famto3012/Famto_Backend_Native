@@ -367,6 +367,8 @@ const confirmOrderByAdminController = async (req, res, next) => {
       if (!task) return next(appError("Task not created"));
     }
 
+    console.log("Purchased Items:", orderFound);
+
     if (orderFound?.purchasedItems && orderFound.merchantId) {
       await reduceProductAvailableQuantity(
         orderFound.purchasedItems,
@@ -641,6 +643,20 @@ const getOrderDetailByAdminController = async (req, res, next) => {
             flat: pickup?.address?.flat,
             area: pickup?.address?.area,
             landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
           })) || [],
 
         dropAddress:
@@ -651,6 +667,20 @@ const getOrderDetailByAdminController = async (req, res, next) => {
             flat: drops?.address?.flat,
             area: drops?.address?.area,
             landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
           })) || [],
         pickInstructions:
           orderFound.pickups?.map((instruction) => ({
@@ -671,6 +701,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
         },
       },
+      items: orderFound.purchasedItems || [],
       merchantDetail: {
         _id: orderFound?.merchantId?._id || "-",
         name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
@@ -2662,6 +2693,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
     let calculatedSalary = 0;
     let calculatedSurge = 0;
+    let totalOrderDistance = 0;
 
     const [agentPricing, agentSurge] = await Promise.all([
       AgentPricing.findById(agentFound?.workStructure?.salaryStructureId),
@@ -2679,8 +2711,8 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
         orderFound?.detailAddedByAgent?.startToPickDistance;
 
       const totalOrderDistance = startToPickDistance
-        ? startToPickDistance + orderFound.orderDetail.distance
-        : orderFound.orderDetail.distance;
+        ? startToPickDistance + orderFound?.distance
+        : orderFound?.distance;
 
       let orderSalary = totalOrderDistance * agentPricing.baseDistanceFarePerKM;
 
@@ -2696,16 +2728,43 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       if (orderFound.deliveryMode === "Custom Order") {
         const taskFound = await Task.findOne({ orderId: orderFound._id });
         if (taskFound) {
-          const durationInHours =
-            (new Date(taskFound?.deliveryDetail?.startTime) -
-              new Date(taskFound.pickupDetail.startTime)) /
-            (1000 * 60 * 60);
+          // const durationInHours =
+          //   (new Date(taskFound?.deliveryDetail?.startTime) -
+          //     new Date(taskFound.pickupDetail.startTime)) /
+          //   (1000 * 60 * 60);
 
-          const normalizedHours =
-            durationInHours < 1 ? 1 : Math.floor(durationInHours);
+          let pickupTimes = [];
+          let dropTimes = [];
 
-          totalPurchaseFare =
-            normalizedHours * agentPricing.purchaseFarePerHour;
+          taskFound.pickupDropDetails.forEach((detail) => {
+            detail.pickups.forEach((p) => {
+              if (p.startTime) pickupTimes.push(new Date(p.startTime));
+            });
+            detail.drops.forEach((d) => {
+              if (d.completedTime) dropTimes.push(new Date(d.completedTime));
+            });
+          });
+
+          if (pickupTimes.length > 0 && dropTimes.length > 0) {
+            const firstPickup = new Date(
+              Math.min(...pickupTimes.map((d) => d.getTime()))
+            );
+            const lastDrop = new Date(
+              Math.max(...dropTimes.map((d) => d.getTime()))
+            );
+
+            const durationInHours = (lastDrop - firstPickup) / (1000 * 60 * 60);
+
+            console.log("Duration (hours):", durationInHours);
+
+            const normalizedHours =
+              durationInHours < 1 ? 1 : Math.floor(durationInHours);
+
+            totalPurchaseFare =
+              normalizedHours * agentPricing.purchaseFarePerHour;
+          } else {
+            console.log("Not enough data to calculate duration");
+          }
         }
       }
 
@@ -2756,16 +2815,30 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     orderFound.detailAddedByAgent.distanceCoveredByAgent = totalOrderDistance;
 
     task.taskStatus = "Completed";
-    task.pickupDetail.pickupStatus = "Completed";
-    task.pickupDetail.startTime = new Date();
-    task.pickupDetail.completedTime = new Date();
-    task.deliveryDetail.deliveryStatus = "Completed";
-    task.deliveryDetail.startTime = new Date();
-    task.deliveryDetail.completedTime = new Date();
+    task.pickupDropDetails.forEach((detail) => {
+      // Update all pickups
+      detail.pickups.forEach((pickup) => {
+        pickup.status = "Completed";
+        pickup.startTime = pickup.startTime || new Date(); // keep old if already set
+        pickup.completedTime = new Date();
+      });
+
+      // Update all drops
+      detail.drops.forEach((drop) => {
+        drop.status = "Completed";
+        drop.startTime = drop.startTime || new Date();
+        drop.completedTime = new Date();
+      });
+    });
 
     await Promise.all([
       orderFound.save(),
       agentFound.save(),
+      AgentNotificationLogs.findOneAndUpdate(
+        { orderId },
+        { status: "Completed" },
+        { new: true }
+      ),
       task.save(),
       ActivityLog.create({
         userId: req.userAuth,
@@ -2816,8 +2889,21 @@ const markOrderAsCancelled = async (req, res, next) => {
 
     order.status = "Cancelled";
     task.taskStatus = "Cancelled";
-    task.pickupDetail.pickupStatus = "Cancelled";
-    task.deliveryDetail.deliveryStatus = "Cancelled";
+    task.pickupDropDetails.forEach((detail) => {
+      // Update all pickups
+      detail.pickups.forEach((pickup) => {
+        pickup.status = "Cancelled";
+        pickup.startTime = pickup.startTime || new Date(); // keep old if already set
+        pickup.completedTime = new Date();
+      });
+
+      // Update all drops
+      detail.drops.forEach((drop) => {
+        drop.status = "Cancelled";
+        drop.startTime = drop.startTime || new Date();
+        drop.completedTime = new Date();
+      });
+    });
 
     const promises = [order.save(), task.save()];
 

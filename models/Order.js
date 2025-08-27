@@ -220,6 +220,10 @@ const purchasedItemsSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    productName: {
+      type: String,
+      required: false,
+    },
     costPrice: {
       type: Number,
       default: null,

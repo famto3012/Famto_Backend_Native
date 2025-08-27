@@ -973,8 +973,8 @@ const getHistoryOfAppDetailsController = async (req, res, next) => {
         orders: history.orders || 0,
         cancelledOrders: history.cancelledOrders || 0,
         totalDistance: `${(history.totalDistance || 0).toFixed(2)} km`,
-        totalSurge: Number(totalSurge?.toFixed(2)) || 0,
-        deduction: Number(deduction?.toFixed(2)) || 0,
+        totalSurge: Number(history.totalSurge?.toFixed(2)) || 0,
+        deduction: Number(history.deduction?.toFixed(2)) || 0,
         loginHours: formatToHours(history.loginDuration) || "0:00 hr",
         orderDetail:
           history?.orderDetail?.map((order) => ({
@@ -1317,6 +1317,7 @@ const getPickUpDetailController = async (req, res, next) => {
       time: formatTime(taskFound?.orderId?.createdAt) || null,
       taskStatus: pickupDetail?.status || null,
       pickupName: pickupDetail?.address?.fullName || null,
+      items: pickupDetail?.items || [],
       pickupAddress: pickupDetail?.address?.area || null,
       pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
       instructions:
@@ -1330,7 +1331,7 @@ const getPickUpDetailController = async (req, res, next) => {
         null,
       pickupLocation: pickupDetail?.location || null,
       deliveryMode: taskFound?.deliveryMode || null,
-      orderItems: taskFound?.orderId?.items || [],
+      orderItems: taskFound?.orderId?.purchasedItems || [],
       billDetail: taskFound?.orderId?.billDetail || {},
       paymentMode: taskFound?.orderId?.paymentMode || null,
       paymentStatus: taskFound?.orderId?.paymentStatus || null,
@@ -1388,7 +1389,7 @@ const getDeliveryDetailController = async (req, res, next) => {
         null,
       deliveryLocation: deliveryDetail?.location || null,
       deliveryMode: taskFound?.deliveryMode || null,
-      orderItems: taskFound?.orderId?.items || [],
+      orderItems: taskFound?.orderId?.purchasedItems || [],
       billDetail: taskFound?.orderId?.billDetail || {},
       paymentMode: taskFound?.orderId?.paymentMode || null,
       paymentStatus: taskFound?.orderId?.paymentStatus || null,

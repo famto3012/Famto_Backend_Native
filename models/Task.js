@@ -16,6 +16,22 @@ const detailSchema = new mongoose.Schema(
       area: String,
       landmark: String,
     },
+    items: [
+      {
+        itemName: String,
+        length: Number,
+        width: Number,
+        height: Number,
+        unit: String,
+        weight: Number,
+        numOfUnits: Number,
+        quantity: Number,
+        itemImageURL: String,
+        price: Number,
+        variantTypeName: String,
+      },
+    ],
+
     startTime: { type: Date, default: null },
     completedTime: { type: Date, default: null },
   },
