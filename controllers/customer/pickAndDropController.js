@@ -70,6 +70,8 @@ const addPickUpAddressController = async (req, res, next) => {
       coordinates
     );
 
+    console.log("distanceInKM, duration", distanceInKM, duration);
+
     const pickups = parsedData.pickups;
     const drops = parsedData.drops;
 
@@ -155,15 +157,22 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     const customer = await Customer.findById(customerId);
 
+    console.log("customer", { customer });
+    console.log("Customer Id:", customerId);
+
     if (!customer) return next(appError("Customer not found", 404));
 
     const { cartId } = req.query;
+
+    console.log("Cart ID:", cartId);
 
     const cartFound = await PickAndCustomCart.findOne({
       _id: cartId,
       customerId,
       deliveryMode: "Pick and Drop",
     });
+
+    console.log("Cart Found:", cartFound);
 
     if (!cartFound) return next(appError("Customer cart not found", 404));
 
