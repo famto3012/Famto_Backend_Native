@@ -37,12 +37,16 @@ const AgentNotificationLogSchema = new mongoose.Schema(
       type: DetailSchema,
     },
     deliveryDetail: {
-      type: DetailSchema,
+      type: [DetailSchema],
       required: true,
     },
     orderType: {
       type: String,
       required: true,
+    },
+    isBatchOrder: {
+      type: Boolean,
+      required: false,
     },
     status: {
       type: String,

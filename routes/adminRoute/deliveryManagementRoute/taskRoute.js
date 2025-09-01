@@ -9,6 +9,7 @@ const {
   getTasksController,
   getAgentsController,
   batchOrder,
+  testSocket,
 } = require("../../../controllers/admin/deliveryManagement/taskController");
 
 taskRoute.get(
@@ -33,4 +34,5 @@ taskRoute.get("/agent-filter", isAuthenticated, isAdmin, getAgentsController);
 
 taskRoute.post("/batch-order", isAuthenticated, isAdmin, batchOrder);
 
+taskRoute.post("/test-socket", isAuthenticated, isAdmin, testSocket);
 module.exports = taskRoute;

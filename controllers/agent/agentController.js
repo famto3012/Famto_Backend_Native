@@ -54,6 +54,7 @@ const {
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
 const AgentPricing = require("../../models/AgentPricing");
+const BatchOrder = require("../../models/BatchOrder");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -1034,11 +1035,17 @@ const getRatingsOfAgentController = async (req, res, next) => {
 
 // Get task previews
 const getTaskPreviewController = async (req, res, next) => {
+  console.log("Preview", req.body);
   try {
     const agentId = req.userAuth;
-
+    const { orderId, batchOrder } = req.body;
     const agentFound = await Agent.findById(agentId);
     if (!agentFound) return next(appError("Agent not found", 404));
+
+    let currentTasks = [];
+    let nextTasks = [];
+
+    const groupedTasks = {};
 
     const taskFound = await Task.find({
       agentId,
@@ -1046,79 +1053,157 @@ const getTaskPreviewController = async (req, res, next) => {
     })
       .populate("orderId")
       .sort({ createdAt: 1 });
+    console.log("task found", taskFound);
+    //###########################################
+    if (batchOrder) {
+      const batchOrder = await BatchOrder.findById(orderId);
 
-    let currentTasks = [];
-    let nextTasks = [];
+      // const rawIds = (batchOrder.dropDetails || [])
+      //   .map((d) => d?.taskId)
+      //   .filter(Boolean);
 
-    const groupedTasks = {};
+      // const uniqueIds = [...new Set(rawIds.map(String))] // dedupe
+      //   .map((id) => new mongoose.Types.ObjectId(id)); // ensure ObjectId
 
-    taskFound.forEach((task) => {
-      const orderId = task.orderId?._id;
+      // if (uniqueIds.length === 0) return [];
 
-      if (!groupedTasks[orderId]) {
-        groupedTasks[orderId] = {
-          orderId,
-          orderType: task?.orderId?.deliveryMode || null,
-          tasks: {
-            pickups: [],
-            deliveries: [],
+      // // Fetch only Assigned tasks
+      // const taskFound = await Task.find({
+      //   _id: { $in: uniqueIds },
+      //   status: "Assigned",
+      // }).lean();
+
+      console.log("batchOrder", batchOrder);
+      const pickupValue = {
+        type: "Pickup",
+        // taskId: task._id,
+        // taskStatus: pickup.status,
+        // date: formatDate(task?.orderId?.deliveryTime),
+        // time: formatTime(task.createdAt),
+        address: {
+          fullName: batchOrder.pickupAddress?.fullName || null,
+          // flat: batchOrder.pickupAddress?.flat || null,
+          area: batchOrder.pickupAddress?.area || null,
+          phoneNumber: batchOrder.pickupAddress?.phoneNumber || null,
+          location: batchOrder.pickupAddress?.location || null,
+        },
+        agentLocation: getUserLocationFromSocket(agentId),
+      };
+      const response = {
+        orderId: batchOrder._id,
+        orderType: batchOrder.deliveryMode,
+        tasks: {
+          pickups: pickupValue,
+          deliveries: [],
+        },
+      };
+      console.log("response value 1", response);
+      batchOrder?.dropDetails?.forEach((dropDetails) => {
+        console.log("dropDetails value", dropDetails);
+        const taskFound = Task.findById(dropDetails.taskId)
+          .populate("orderId")
+          .lean();
+        response?.tasks?.deliveries.push({
+          type: "Delivery",
+          taskId: dropDetails.taskId,
+          taskStatus: dropDetails?.drops.status,
+          date: formatDate(taskFound.createdAt),
+          time: formatTime(taskFound?.orderId?.orderDetail?.deliveryTime),
+          address: {
+            fullName: dropDetails?.drops?.address.fullName || null,
+            flat: dropDetails?.drops?.address.flat || null,
+            area: dropDetails?.drops?.address.area || null,
+            phoneNumber: dropDetails?.drops?.address.phoneNumber || null,
+            location: dropDetails?.drops.location || null,
           },
-        };
-      }
-
-      // Loop through each pickup
-      task?.pickupDropDetails?.forEach((detailBlock) => {
-        detailBlock?.pickups?.forEach((pickup) => {
-          groupedTasks[orderId].tasks.pickups.push({
-            type: "Pickup",
-            taskId: task._id,
-            taskStatus: pickup.status,
-            date: formatDate(task?.orderId?.deliveryTime),
-            time: formatTime(task.createdAt),
-            address: {
-              fullName: pickup.address?.fullName || null,
-              flat: pickup.address?.flat || null,
-              area: pickup.address?.area || null,
-              phoneNumber: pickup.address?.phoneNumber || null,
-              location: pickup.location || null,
-            },
-            agentLocation: getUserLocationFromSocket(agentId),
-          });
+          agentLocation: getUserLocationFromSocket(agentId),
         });
+      });
+      console.log("response value", response);
 
-        // Loop through each drop
-        detailBlock?.drops?.forEach((drop) => {
-          groupedTasks[orderId].tasks.deliveries.push({
-            type: "Delivery",
-            taskId: task._id,
-            taskStatus: drop.status,
-            date: formatDate(task.createdAt),
-            time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
-            address: {
-              fullName: drop.address?.fullName || null,
-              flat: drop.address?.flat || null,
-              area: drop.address?.area || null,
-              phoneNumber: drop.address?.phoneNumber || null,
-              location: drop.location || null,
+      //   Object.values(response).forEach((order) => {
+      //   currentTasks.push(order);
+      // });
+
+      res.status(200).json({
+        message: "Task preview",
+        data: {
+          response,
+          //nextTasks, // keep empty for now until we add scheduling logic
+        },
+      });
+    } else {
+      taskFound.forEach((task) => {
+        const orderId = task.orderId?._id;
+        // const orderId = task.orderId;
+
+        if (!groupedTasks[orderId]) {
+          groupedTasks[orderId] = {
+            orderId,
+            orderType: task?.orderId?.deliveryMode || null,
+            tasks: {
+              pickups: [],
+              deliveries: [],
             },
-            agentLocation: getUserLocationFromSocket(agentId),
+          };
+        }
+
+        // Loop through each pickup
+        task?.pickupDropDetails?.forEach((detailBlock) => {
+          detailBlock?.pickups?.forEach((pickup) => {
+            groupedTasks[orderId].tasks.pickups.push({
+              type: "Pickup",
+              taskId: task._id,
+              taskStatus: pickup.status,
+              date: formatDate(task?.orderId?.deliveryTime),
+              time: formatTime(task.createdAt),
+              address: {
+                fullName: pickup.address?.fullName || null,
+                flat: pickup.address?.flat || null,
+                area: pickup.address?.area || null,
+                phoneNumber: pickup.address?.phoneNumber || null,
+                location: pickup.location || null,
+              },
+              agentLocation: getUserLocationFromSocket(agentId),
+            });
+          });
+
+          // Loop through each drop
+          detailBlock?.drops?.forEach((drop) => {
+            groupedTasks[orderId].tasks.deliveries.push({
+              type: "Delivery",
+              taskId: task._id,
+              taskStatus: drop.status,
+              date: formatDate(task.createdAt),
+              time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
+              address: {
+                fullName: drop.address?.fullName || null,
+                flat: drop.address?.flat || null,
+                area: drop.address?.area || null,
+                phoneNumber: drop.address?.phoneNumber || null,
+                location: drop.location || null,
+              },
+              agentLocation: getUserLocationFromSocket(agentId),
+            });
           });
         });
       });
-    });
 
-    // Push into currentTasks
-    Object.values(groupedTasks).forEach((order) => {
-      currentTasks.push(order);
-    });
+      // Push into currentTasks
+      Object.values(groupedTasks).forEach((order) => {
+        currentTasks.push(order);
+      });
 
-    res.status(200).json({
-      message: "Task preview",
-      data: {
-        currentTasks,
-        nextTasks, // keep empty for now until we add scheduling logic
-      },
-    });
+      res.status(200).json({
+        message: "Task preview",
+        data: {
+          currentTasks,
+          nextTasks, // keep empty for now until we add scheduling logic
+        },
+      });
+    }
+
+    //###########################################
   } catch (err) {
     next(appError(err.message));
   }
@@ -1279,68 +1364,152 @@ const getTaskPreviewController = async (req, res, next) => {
 // };
 
 const getPickUpDetailController = async (req, res, next) => {
+  console.log("DATa",req.body);
   try {
     const { taskId, stepIndex } = req.params; // stepIndex from route param
     // If you prefer query: const { stepIndex } = req.query;
+    const { batchOrderId, batchOrder } = req.body;
 
-    const taskFound = await Task.findById(taskId).populate("orderId");
-    if (!taskFound) {
-      return next(appError("Task not found", 404));
+    if (batchOrder) {
+      const batchOrderFound = await BatchOrder.findById(batchOrderId);
+      const taskIds = batchOrderFound.dropDetails.map(
+        (detail) => detail.taskId
+      );
+      const taskFound = await Task.find({
+        _id: { $in: taskIds },
+      }).populate("orderId");
+      if (!taskFound) {
+        return next(appError("Task not found", 404));
+      }
+      console.log("taskFound", taskFound);
+
+      let merchantFound;
+      if (taskFound[0]?.orderId?.merchantId) {
+        merchantFound = await Merchant.findById(
+          taskFound[0].orderId.merchantId
+        );
+      }
+      console.log("merchantFound", merchantFound);
+      console.log(
+        "taskFound.pickupDropDetails",
+        taskFound[0].pickupDropDetails[0]?.pickups
+      );
+
+      // ✅ Find the pickup matching the stepIndex
+      const pickupDetail = taskFound[0].pickupDropDetails[0]?.pickups?.find(
+        (p) => p.stepIndex === parseInt(0)
+      );
+
+      if (!pickupDetail) {
+        return next(
+          appError("Pickup detail not found for this stepIndex", 404)
+        );
+      }
+
+      const formattedResponse = {
+        taskId: taskFound[0]._id,
+        orderId: taskFound[0].orderId?._id || taskFound.orderId, // handle string ID
+        merchantId: merchantFound?._id || null,
+        merchantName: merchantFound?.merchantDetail?.merchantName || null,
+        customerId: taskFound[0]?.orderId?.customerId || null,
+        customerName:
+          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+        customerPhoneNumber:
+          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.phoneNumber ||
+          null,
+        type: "Pickup",
+        date: formatDate(taskFound[0]?.orderId?.createdAt) || null,
+        time: formatTime(taskFound[0]?.orderId?.createdAt) || null,
+        taskStatus: pickupDetail?.status || null,
+        pickupName: pickupDetail?.address?.fullName || null,
+        items: pickupDetail?.items || [],
+        pickupAddress: pickupDetail?.address?.area || null,
+        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
+        instructions:
+          taskFound[0]?.orderId?.orderDetail?.instructionToMerchant ||
+          taskFound[0]?.orderId?.orderDetail?.instructionInPickup ||
+          null,
+        voiceInstructions:
+          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          null,
+        pickupLocation: pickupDetail?.location || null,
+        deliveryMode: taskFound[0]?.deliveryMode || null,
+        orderItems: taskFound.flatMap(
+          (task) => task?.orderId?.purchasedItems || []
+        ),
+        billDetail: taskFound?.orderId?.billDetail || {},
+        paymentMode: taskFound[0]?.orderId?.paymentMode || null,
+        paymentStatus: taskFound[0]?.orderId?.paymentStatus || null,
+      };
+
+      res.status(200).json({
+        message: "Pickup detail fetched successfully.",
+        data: formattedResponse,
+      });
+    } else {
+      const taskFound = await Task.findById(taskId).populate("orderId");
+      if (!taskFound) {
+        return next(appError("Task not found", 404));
+      }
+
+      let merchantFound;
+      if (taskFound?.orderId?.merchantId) {
+        merchantFound = await Merchant.findById(taskFound.orderId.merchantId);
+      }
+
+      // ✅ Find the pickup matching the stepIndex
+      const pickupDetail = taskFound.pickupDropDetails?.[0]?.pickups?.find(
+        (p) => p.stepIndex === parseInt(stepIndex)
+      );
+
+      if (!pickupDetail) {
+        return next(
+          appError("Pickup detail not found for this stepIndex", 404)
+        );
+      }
+
+      const formattedResponse = {
+        taskId: taskFound._id,
+        orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
+        merchantId: merchantFound?._id || null,
+        merchantName: merchantFound?.merchantDetail?.merchantName || null,
+        customerId: taskFound?.orderId?.customerId || null,
+        customerName:
+          taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+        customerPhoneNumber:
+          taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
+        type: "Pickup",
+        date: formatDate(taskFound?.orderId?.createdAt) || null,
+        time: formatTime(taskFound?.orderId?.createdAt) || null,
+        taskStatus: pickupDetail?.status || null,
+        pickupName: pickupDetail?.address?.fullName || null,
+        items: pickupDetail?.items || [],
+        pickupAddress: pickupDetail?.address?.area || null,
+        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
+        instructions:
+          taskFound?.orderId?.orderDetail?.instructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.instructionInPickup ||
+          null,
+        voiceInstructions:
+          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          null,
+        pickupLocation: pickupDetail?.location || null,
+        deliveryMode: taskFound?.deliveryMode || null,
+        orderItems: taskFound?.orderId?.purchasedItems || [],
+        billDetail: taskFound?.orderId?.billDetail || {},
+        paymentMode: taskFound?.orderId?.paymentMode || null,
+        paymentStatus: taskFound?.orderId?.paymentStatus || null,
+      };
+
+      res.status(200).json({
+        message: "Pickup detail fetched successfully.",
+        data: formattedResponse,
+      });
     }
-
-    let merchantFound;
-    if (taskFound?.orderId?.merchantId) {
-      merchantFound = await Merchant.findById(taskFound.orderId.merchantId);
-    }
-
-    // ✅ Find the pickup matching the stepIndex
-    const pickupDetail = taskFound.pickupDropDetails?.[0]?.pickups?.find(
-      (p) => p.stepIndex === parseInt(stepIndex)
-    );
-
-    if (!pickupDetail) {
-      return next(appError("Pickup detail not found for this stepIndex", 404));
-    }
-
-    const formattedResponse = {
-      taskId: taskFound._id,
-      orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
-      merchantId: merchantFound?._id || null,
-      merchantName: merchantFound?.merchantDetail?.merchantName || null,
-      customerId: taskFound?.orderId?.customerId || null,
-      customerName:
-        taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
-      customerPhoneNumber:
-        taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
-      type: "Pickup",
-      date: formatDate(taskFound?.orderId?.createdAt) || null,
-      time: formatTime(taskFound?.orderId?.createdAt) || null,
-      taskStatus: pickupDetail?.status || null,
-      pickupName: pickupDetail?.address?.fullName || null,
-      items: pickupDetail?.items || [],
-      pickupAddress: pickupDetail?.address?.area || null,
-      pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
-      instructions:
-        taskFound?.orderId?.orderDetail?.instructionToMerchant ||
-        taskFound?.orderId?.orderDetail?.instructionInPickup ||
-        null,
-      voiceInstructions:
-        taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
-        null,
-      pickupLocation: pickupDetail?.location || null,
-      deliveryMode: taskFound?.deliveryMode || null,
-      orderItems: taskFound?.orderId?.purchasedItems || [],
-      billDetail: taskFound?.orderId?.billDetail || {},
-      paymentMode: taskFound?.orderId?.paymentMode || null,
-      paymentStatus: taskFound?.orderId?.paymentStatus || null,
-    };
-
-    res.status(200).json({
-      message: "Pickup detail fetched successfully.",
-      data: formattedResponse,
-    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -2162,27 +2331,42 @@ const getAllNotificationsController = async (req, res, next) => {
     startOfDay.setUTCHours(18, 30, 0, 0);
     const endOfDay = new Date();
     endOfDay.setUTCHours(18, 29, 59, 999);
-
+    console.log("startOfDay", startOfDay);
+    console.log("endOfDay", endOfDay);
     // Retrieve notifications within the day for the given agent, sorted by date
     const notifications = await AgentNotificationLogs.find({
       agentId,
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      // createdAt: { $gte: startOfDay, $lte: endOfDay },
     })
-      .populate("orderId", "orderDetail")
+      // .populate("orderDetail")
       .sort({ createdAt: -1 })
       .lean();
+
+    console.log("notifications", notifications);
+
+    //   const notifications = await AgentNotificationLogs.find({
+    //   agentId,
+    //   createdAt: { $gte: startOfDay, $lte: endOfDay },
+    // })
+    //   .populate("orderId", "orderDetail")
+    //   .sort({ createdAt: -1 })
+    //   .lean();
 
     // Format response
     const formattedResponse = notifications.map((notification) => ({
       notificationId: notification?._id || null,
       // orderId: notification?.orderId || null,
-      orderId: notification?.orderId?.map((o) => o._id || o),
+      orderId: notification?.orderId, //?.map((o) => o._id || o),
       pickupDetail: notification?.pickupDetail?.address || null,
-      deliveryDetail: notification?.deliveryDetail?.address || null,
+      // deliveryDetail: notification?.deliveryDetail?.address || null,
+      deliveryDetail: Array.isArray(notification?.deliveryDetail)
+        ? notification.deliveryDetail.map((d) => d.address || null)
+        : [],
       orderType: notification?.orderType || null,
       status: notification?.status || null,
       taskDate: formatDate(notification?.orderId?.orderDetail?.deliveryTime),
       taskTime: formatTime(notification?.orderId?.orderDetail?.deliveryTime),
+      isBatchOrder: notification.isBatchOrder || false,
     }));
 
     res.status(200).json({

@@ -204,9 +204,9 @@ agentRoute.get(
 
 agentRoute.get("/get-ratings", isAuthenticated, getRatingsOfAgentController);
 
-agentRoute.get("/get-task-preview", isAuthenticated, getTaskPreviewController);
+agentRoute.post("/get-task-preview", isAuthenticated, getTaskPreviewController);
 
-agentRoute.get(
+agentRoute.post(
   "/get-pickup-detail/:taskId/:stepIndex",
   isAuthenticated,
   getPickUpDetailController
