@@ -1364,7 +1364,7 @@ const getTaskPreviewController = async (req, res, next) => {
 // };
 
 const getPickUpDetailController = async (req, res, next) => {
-  console.log("DATa",req.body);
+  console.log("DATa", req.body);
   try {
     const { taskId, stepIndex } = req.params; // stepIndex from route param
     // If you prefer query: const { stepIndex } = req.query;
@@ -2336,7 +2336,7 @@ const getAllNotificationsController = async (req, res, next) => {
     // Retrieve notifications within the day for the given agent, sorted by date
     const notifications = await AgentNotificationLogs.find({
       agentId,
-      // createdAt: { $gte: startOfDay, $lte: endOfDay },
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
     })
       // .populate("orderDetail")
       .sort({ createdAt: -1 })

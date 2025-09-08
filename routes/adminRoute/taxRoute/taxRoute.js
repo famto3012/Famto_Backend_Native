@@ -22,6 +22,7 @@ taxRoute.post(
   isAdmin,
   addTaxController
 );
+
 taxRoute.get(
   "/all-tax",
   isAuthenticated,

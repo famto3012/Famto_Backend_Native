@@ -1502,7 +1502,7 @@ io.on("connection", async (socket) => {
           }
         };
 
-        if (batchOrder ) {
+        if (batchOrder) {
           const batchOrderById = await BatchOrder.findById(taskId);
           for (const drop of batchOrderById.dropDetails) {
             await handlePickupStart(
@@ -1669,152 +1669,157 @@ io.on("connection", async (socket) => {
     "reachedPickupLocation",
     async ({ taskId, agentId, location, pickupIndex = 0, batchOrder }) => {
       try {
-       const handleReachedPickupLocation = async(taskId, agentId, location, pickupIndex) => {
-         // Fetch agent and task data in parallel
-        const [agentFound, taskFound] = await Promise.all([
-          Agent.findById(agentId),
-          Task.findOne({ _id: taskId, agentId }),
-        ]);
+        const handleReachedPickupLocation = async (
+          taskId,
+          agentId,
+          location,
+          pickupIndex
+        ) => {
+          // Fetch agent and task data in parallel
+          const [agentFound, taskFound] = await Promise.all([
+            Agent.findById(agentId),
+            Task.findOne({ _id: taskId, agentId }),
+          ]);
 
-        if (!agentFound) {
-          return socket.emit("error", {
-            message: "Agent not found",
-            success: false,
-          });
-        }
+          if (!agentFound) {
+            return socket.emit("error", {
+              message: "Agent not found",
+              success: false,
+            });
+          }
 
-        if (!taskFound) {
-          return socket.emit("error", {
-            message: "Task not found",
-            success: false,
-          });
-        }
+          if (!taskFound) {
+            return socket.emit("error", {
+              message: "Task not found",
+              success: false,
+            });
+          }
 
-        const orderFound = await Order.findById(taskFound.orderId);
-        if (!orderFound) {
-          return socket.emit("error", {
-            message: "Order not found",
-            success: false,
-          });
-        }
+          const orderFound = await Order.findById(taskFound.orderId);
+          if (!orderFound) {
+            return socket.emit("error", {
+              message: "Order not found",
+              success: false,
+            });
+          }
 
-        const eventName = "reachedPickupLocation";
-        const { rolesToNotify, data } = await findRolesToNotify(eventName);
+          const eventName = "reachedPickupLocation";
+          const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-        const maxRadius = 100.5; // 500 meters
-        const pickupDetail =
-          taskFound.pickupDropDetails?.[0]?.pickups?.[pickupIndex];
+          const maxRadius = 100.5; // 500 meters
+          const pickupDetail =
+            taskFound.pickupDropDetails?.[0]?.pickups?.[pickupIndex];
 
-        if (!pickupDetail) {
-          return socket.emit("error", {
-            message: "Pickup detail not found",
-            success: false,
-          });
-        }
+          if (!pickupDetail) {
+            return socket.emit("error", {
+              message: "Pickup detail not found",
+              success: false,
+            });
+          }
 
-        const pickupLocation = pickupDetail.location;
-        const agentLocation =
-          location && location?.length === 2
-            ? location
-            : getUserLocationFromSocket(agentId);
+          const pickupLocation = pickupDetail.location;
+          const agentLocation =
+            location && location?.length === 2
+              ? location
+              : getUserLocationFromSocket(agentId);
 
-        if (!agentLocation || agentLocation?.length !== 2) {
-          return socket.emit("error", {
-            message: "Invalid location",
-            success: false,
-          });
-        }
+          if (!agentLocation || agentLocation?.length !== 2) {
+            return socket.emit("error", {
+              message: "Invalid location",
+              success: false,
+            });
+          }
 
-        // Calculate distance
-        const distance = turf.distance(
-          turf.point(pickupLocation),
-          turf.point(agentLocation),
-          { units: "kilometers" }
-        );
+          // Calculate distance
+          const distance = turf.distance(
+            turf.point(pickupLocation),
+            turf.point(agentLocation),
+            { units: "kilometers" }
+          );
 
-        if (distance < maxRadius) {
-          // ✅ Mark pickup as completed
-          pickupDetail.status = "Completed";
-          pickupDetail.completedTime = new Date();
+          if (distance < maxRadius) {
+            // ✅ Mark pickup as completed
+            pickupDetail.status = "Completed";
+            pickupDetail.completedTime = new Date();
 
-          const stepperDetail = {
-            by: agentFound.fullName,
-            userId: agentId,
-            date: new Date(),
-            location: agentLocation,
-          };
+            const stepperDetail = {
+              by: agentFound.fullName,
+              userId: agentId,
+              date: new Date(),
+              location: agentLocation,
+            };
 
-          orderFound.orderDetailStepper.reachedPickupLocation = stepperDetail;
+            orderFound.orderDetailStepper.reachedPickupLocation = stepperDetail;
 
-          taskFound.markModified("pickupDropDetails");
-          await Promise.all([taskFound.save(), orderFound.save()]);
+            taskFound.markModified("pickupDropDetails");
+            await Promise.all([taskFound.save(), orderFound.save()]);
 
-          // 🔔 Send notifications to each role dynamically
-          for (const role of rolesToNotify) {
-            const roleId = {
-              admin: process.env.ADMIN_ID,
-              merchant: orderFound?.merchantId,
-              driver: orderFound?.agentId,
-              customer: orderFound?.customerId,
-            }[role];
+            // 🔔 Send notifications to each role dynamically
+            for (const role of rolesToNotify) {
+              const roleId = {
+                admin: process.env.ADMIN_ID,
+                merchant: orderFound?.merchantId,
+                driver: orderFound?.agentId,
+                customer: orderFound?.customerId,
+              }[role];
 
-            if (roleId) {
-              const notificationData = {
-                fcm: {
-                  customerId: orderFound.customerId,
-                },
-              };
+              if (roleId) {
+                const notificationData = {
+                  fcm: {
+                    customerId: orderFound.customerId,
+                  },
+                };
 
-              await sendNotification(
-                roleId,
-                eventName,
-                notificationData,
-                role.charAt(0).toUpperCase() + role.slice(1)
-              );
+                await sendNotification(
+                  roleId,
+                  eventName,
+                  notificationData,
+                  role.charAt(0).toUpperCase() + role.slice(1)
+                );
+              }
             }
+
+            const socketData = {
+              ...data,
+              orderId: taskFound.orderId,
+              agentId,
+              agentName: agentFound.fullName,
+              orderDetailStepper: stepperDetail,
+              success: true,
+            };
+
+            const event = "agentReachedPickupLocation";
+
+            sendSocketData(orderFound.customerId, eventName, socketData);
+            sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+            if (orderFound?.merchantId) {
+              sendSocketData(orderFound.merchantId, eventName, socketData);
+            }
+
+            sendSocketData(agentId, event, {
+              message: "Agent reached pickup location",
+              success: true,
+            });
+          } else {
+            // ❌ Agent too far
+            const event = "agentNotReachedPickupLocation";
+            const { data } = await findRolesToNotify(event);
+
+            const dataToSend = {
+              ...data,
+              orderId: taskFound.orderId,
+              agentId,
+            };
+
+            await sendNotification(agentId, event, dataToSend, "Agent");
+
+            return socket.emit("error", {
+              message: "Agent is far from pickup point",
+              success: false,
+            });
           }
-
-          const socketData = {
-            ...data,
-            orderId: taskFound.orderId,
-            agentId,
-            agentName: agentFound.fullName,
-            orderDetailStepper: stepperDetail,
-            success: true,
-          };
-
-          const event = "agentReachedPickupLocation";
-
-          sendSocketData(orderFound.customerId, eventName, socketData);
-          sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-          if (orderFound?.merchantId) {
-            sendSocketData(orderFound.merchantId, eventName, socketData);
-          }
-
-          sendSocketData(agentId, event, {
-            message: "Agent reached pickup location",
-            success: true,
-          });
-        } else {
-          // ❌ Agent too far
-          const event = "agentNotReachedPickupLocation";
-          const { data } = await findRolesToNotify(event);
-
-          const dataToSend = {
-            ...data,
-            orderId: taskFound.orderId,
-            agentId,
-          };
-
-          await sendNotification(agentId, event, dataToSend, "Agent");
-
-          return socket.emit("error", {
-            message: "Agent is far from pickup point",
-            success: false,
-          });
-        }
-       }
-       if (batchOrder ) {
+        };
+        if (batchOrder) {
           const batchOrderById = await BatchOrder.findById(taskId);
           for (const drop of batchOrderById.dropDetails) {
             await handleReachedPickupLocation(
@@ -1825,7 +1830,12 @@ io.on("connection", async (socket) => {
             );
           }
         } else {
-          await handleReachedPickupLocation(taskId, agentId, location, pickupIndex);
+          await handleReachedPickupLocation(
+            taskId,
+            agentId,
+            location,
+            pickupIndex
+          );
         }
       } catch (err) {
         return socket.emit("error", {
@@ -1839,170 +1849,817 @@ io.on("connection", async (socket) => {
   // Started Delivery
   socket.on(
     "agentDeliveryStarted",
-    async ({ taskId, agentId, location, dropIndex }) => {
+    async ({ taskId, agentId, location, dropIndex, batchOrder }) => {
+      const TAG = "[agentDeliveryStarted]";
+      console.log(TAG, "called with:", {
+        taskId,
+        agentId,
+        location,
+        dropIndex,
+        batchOrder,
+      });
+      console.time(`${TAG} ${taskId}`);
+
+      const safeLogObj = (obj, max = 1000) => {
+        try {
+          const s = JSON.stringify(obj);
+          return s.length > max ? s.slice(0, max) + "...(truncated)" : s;
+        } catch (e) {
+          return String(obj).slice(0, 1000);
+        }
+      };
+
       try {
-        const [agentFound, taskFound] = await Promise.all([
-          Agent.findById(agentId),
-          Task.findById(taskId),
-        ]);
+        // helper to send debug to agent socket (optional)
+        const agentSocketId = userSocketMap[agentId]?.socketId;
+        console.log(TAG, "agentSocketId:", agentSocketId || "none");
 
-        const eventName = "agentDeliveryStarted";
-
-        if (!agentFound) {
-          return socket.emit("error", {
-            message: "Agent not found",
-            success: false,
+        // ---------- BatchOrder flow ----------
+        const handleBatchDropStart = async (
+          batchOrderId,
+          agentId,
+          location,
+          dropIndex
+        ) => {
+          console.log(TAG, "[BATCH] Starting batch flow:", {
+            batchOrderId,
+            agentId,
+            dropIndex,
           });
-        }
 
-        if (!taskFound) {
-          return socket.emit("error", {
-            message: "Task not found",
-            success: false,
-          });
-        }
-
-        // ✅ Check if pickupDropDetails exists
-        if (!taskFound.pickupDropDetails?.length) {
-          return socket.emit("error", {
-            message: "No pickup/drop details found",
-            success: false,
-          });
-        }
-
-        const delivery = taskFound.pickupDropDetails[0].drops?.[dropIndex];
-
-        if (!delivery) {
-          return socket.emit("error", {
-            message: "Invalid drop index",
-            success: false,
-          });
-        }
-
-        // ✅ Prevent duplicate start
-        if (delivery.status === "Started") {
-          const agentSocketId = userSocketMap[agentId]?.socketId;
-          if (agentSocketId) {
-            io.to(agentSocketId).emit(eventName, {
-              data: "Delivery already started",
-              success: true,
+          // 1) fetch batchOrder
+          let batchOrderDoc;
+          try {
+            batchOrderDoc = await BatchOrder.findById(batchOrderId);
+            console.log(
+              TAG,
+              "[BATCH] BatchOrder found:",
+              !!batchOrderDoc,
+              batchOrderDoc
+                ? {
+                    id: batchOrderDoc._id,
+                    dropCount: (batchOrderDoc.dropDetails || []).length,
+                  }
+                : null
+            );
+          } catch (err) {
+            console.error(TAG, "[BATCH] Error fetching BatchOrder:", err);
+            return socket.emit("error", {
+              message: "Error fetching BatchOrder",
+              success: false,
+              details: err.message || err,
             });
           }
-          return;
-        }
 
-        const orderFound = await Order.findById(taskFound.orderId).populate(
-          "customerId",
-          "customerDetails.geofenceId"
-        );
+          if (!batchOrderDoc) {
+            return socket.emit("error", {
+              message: "BatchOrder not found",
+              success: false,
+            });
+          }
 
-        if (!orderFound) {
-          return socket.emit("error", {
-            message: "Order not found",
-            success: false,
+          // 2) validate dropIndex
+          const ddLen = batchOrderDoc.dropDetails?.length || 0;
+          console.log(
+            TAG,
+            `[BATCH] dropDetails length: ${ddLen}, requested dropIndex: ${dropIndex}`
+          );
+          dropIndex = Number(dropIndex);
+          if (Number.isNaN(dropIndex) || dropIndex < 0 || dropIndex >= ddLen) {
+            console.error(TAG, "[BATCH] Invalid drop index:", dropIndex);
+            return socket.emit("error", {
+              message: "Invalid drop index (batch)",
+              success: false,
+            });
+          }
+
+          const drop = batchOrderDoc.dropDetails[dropIndex];
+          console.log(TAG, "[BATCH] drop (preview):", safeLogObj(drop, 800));
+
+          // 3) status checks
+          const curStatus = drop?.drops?.status;
+          console.log(TAG, `[BATCH] current drop.status = ${curStatus}`);
+          if (curStatus === "Started") {
+            console.log(TAG, "[BATCH] Drop already started - notifying agent");
+            if (agentSocketId)
+              io.to(agentSocketId).emit("agentDeliveryStarted", {
+                data: "Delivery already started (batch)",
+                success: true,
+              });
+            return;
+          }
+          if (curStatus === "Completed") {
+            console.error(TAG, "[BATCH] Drop already completed");
+            return socket.emit("error", {
+              message: "Delivery already completed",
+              success: false,
+            });
+          }
+
+          // 4) update drop
+          const before = JSON.parse(JSON.stringify(drop.drops || {}));
+          drop.drops.status = "Started";
+          drop.drops.startTime = new Date();
+          console.log(TAG, "[BATCH] Updating drop.drops (before / after):", {
+            before: safeLogObj(before, 300),
+            after: safeLogObj(drop.drops, 300),
           });
-        }
 
-        let distanceCoveredByAgent = 0;
+          // 5) save
+          try {
+            await batchOrderDoc.save();
+            console.log(
+              TAG,
+              "[BATCH] BatchOrder saved successfully:",
+              batchOrderDoc._id
+            );
+          } catch (saveErr) {
+            console.error(TAG, "[BATCH] Failed to save BatchOrder:", saveErr);
+            return socket.emit("error", {
+              message: "Failed to save BatchOrder",
+              success: false,
+              details: saveErr.message || saveErr,
+            });
+          }
 
-        if (orderFound?.deliveryMode === "Custom Order") {
-          const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            location,
-            delivery.location
-          );
+          // 6) fetch agent and order for notifications / order-stepper update
+          let agentFound = null;
+          let orderFound = null;
+          try {
+            [agentFound, orderFound] = await Promise.allSettled([
+              Agent.findById(agentId),
+              Order.findById(drop.orderId).populate(
+                "customerId",
+                "customerDetails.geofenceId"
+              ),
+            ]).then((results) =>
+              results.map((r) => (r.status === "fulfilled" ? r.value : null))
+            );
+            console.log(
+              TAG,
+              "[BATCH] agentFound:",
+              !!agentFound,
+              "orderFound:",
+              !!orderFound
+            );
+          } catch (fetchErr) {
+            console.error(TAG, "[BATCH] error fetching Agent/Order:", fetchErr);
+          }
 
-          distanceCoveredByAgent =
-            (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-            distanceInKM;
-        } else {
-          distanceCoveredByAgent =
-            (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-            (orderFound?.orderDetail?.distance || 0);
-        }
-
-        // ✅ Update task drop
-        delivery.status = "Started";
-        delivery.startTime = new Date();
-
-        // ✅ Order stepper
-        const stepperDetail = {
-          by: agentFound.fullName,
-          userId: agentId,
-          date: new Date(),
-          location,
-        };
-
-        if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
-        orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
-          distanceCoveredByAgent.toFixed(2)
-        );
-
-        if (!orderFound.orderDetailStepper) orderFound.orderDetailStepper = {};
-        orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
-
-        if (orderFound?.deliveryMode === "Custom Order") {
-          await updateBillOfCustomOrderInDelivery(
-            orderFound,
-            taskFound,
-            socket
-          );
-        }
-
-        await Promise.all([orderFound.save(), taskFound.save()]);
-
-        // 🔔 Notify roles
-        const { rolesToNotify } = await findRolesToNotify(eventName);
-
-        for (const role of rolesToNotify) {
-          const roleId = {
-            admin: process.env.ADMIN_ID,
-            merchant: orderFound?.merchantId,
-            driver: orderFound?.agentId,
-            customer: orderFound?.customerId._id,
-          }[role];
-
-          if (roleId) {
-            const notificationData = {
-              fcm: {
-                customerId: orderFound.customerId,
-                orderId: taskFound.orderId,
-              },
+          // 7) optional: update order stepper similar to task flow (if order exists)
+          let stepperDetail = null;
+          if (orderFound) {
+            stepperDetail = {
+              by: (agentFound && agentFound.fullName) || "Unknown",
+              userId: agentId,
+              date: new Date(),
+              location,
             };
 
-            await sendNotification(
-              roleId,
-              eventName,
-              notificationData,
-              role.charAt(0).toUpperCase() + role.slice(1)
+            try {
+              orderFound.orderDetailStepper =
+                orderFound.orderDetailStepper || {};
+              orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
+              await orderFound.save();
+              console.log(
+                TAG,
+                "[BATCH] Order updated with deliveryStarted stepper:",
+                orderFound._id
+              );
+            } catch (orderSaveErr) {
+              console.error(
+                TAG,
+                "[BATCH] Failed to update Order:",
+                orderSaveErr
+              );
+            }
+          } else {
+            console.warn(
+              TAG,
+              "[BATCH] Order not found for drop.orderId:",
+              drop.orderId
             );
           }
-        }
 
-        // 🔔 Emit socket events
-        const socketData = { orderDetailStepper: stepperDetail };
-        sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-        sendSocketData(orderFound?.customerId._id, eventName, socketData);
+          // 8) notify roles (log everything)
+          try {
+            const eventName = "agentDeliveryStarted";
+            const { rolesToNotify } = await findRolesToNotify(eventName);
+            console.log(TAG, "[BATCH] rolesToNotify:", rolesToNotify);
 
-        if (orderFound?.merchantId)
-          sendSocketData(orderFound.merchantId, eventName, socketData);
+            for (const role of rolesToNotify) {
+              const roleId = {
+                admin: process.env.ADMIN_ID,
+                merchant: orderFound?.merchantId,
+                driver: orderFound?.agentId,
+                customer: orderFound?.customerId?._id,
+              }[role];
 
-        const agentSocketId = userSocketMap[agentId]?.socketId;
-        if (agentSocketId) {
-          io.to(agentSocketId).emit(eventName, {
-            data: "Delivery successfully started",
-            success: true,
+              console.log(TAG, `[BATCH] role=${role} roleId=${roleId}`);
+              if (roleId) {
+                const notificationData = {
+                  fcm: {
+                    customerId: orderFound?.customerId?._id,
+                    orderId: drop.orderId,
+                  },
+                };
+                try {
+                  await sendNotification(
+                    roleId,
+                    eventName,
+                    notificationData,
+                    role.charAt(0).toUpperCase() + role.slice(1)
+                  );
+                  console.log(
+                    TAG,
+                    `[BATCH] sendNotification success for role ${role}`
+                  );
+                } catch (notifErr) {
+                  console.error(
+                    TAG,
+                    `[BATCH] sendNotification failed for role ${role}:`,
+                    notifErr
+                  );
+                }
+              }
+            }
+          } catch (notifyErr) {
+            console.error(
+              TAG,
+              "[BATCH] Error in rolesToNotify/sendNotification:",
+              notifyErr
+            );
+          }
+
+          // 9) socket emits
+          try {
+            const emitPayload = {
+              orderId: drop.orderId,
+              orderDetailStepper: stepperDetail,
+            };
+            sendSocketData(
+              process.env.ADMIN_ID,
+              "agentDeliveryStarted",
+              emitPayload
+            );
+            if (orderFound?.customerId?._id)
+              sendSocketData(
+                orderFound.customerId._id,
+                "agentDeliveryStarted",
+                emitPayload
+              );
+
+            if (agentSocketId) {
+              io.to(agentSocketId).emit("agentDeliveryStarted", {
+                data: "Delivery successfully started (BatchOrder)",
+                success: true,
+              });
+            }
+            console.log(TAG, "[BATCH] Socket emits done");
+          } catch (emitErr) {
+            console.error(TAG, "[BATCH] Error during socket emits:", emitErr);
+          }
+
+          console.log(TAG, "[BATCH] Flow complete for dropIndex:", dropIndex);
+        }; // end handleBatchDropStart
+
+        // ---------- Task flow (existing logic but instrumented) ----------
+        const handleTaskDropStart = async (
+          taskId,
+          agentId,
+          location,
+          dropIndex
+        ) => {
+          console.log(TAG, "[TASK] Starting task flow:", {
+            taskId,
+            agentId,
+            dropIndex,
           });
+
+          // 1) fetch Task + Agent
+          let taskFound = null,
+            agentFound = null;
+          try {
+            [taskFound, agentFound] = await Promise.all([
+              Task.findById(taskId),
+              Agent.findById(agentId),
+            ]);
+            console.log(
+              TAG,
+              "[TASK] taskFound:",
+              !!taskFound,
+              "agentFound:",
+              !!agentFound
+            );
+          } catch (err) {
+            console.error(TAG, "[TASK] Error fetching Task/Agent:", err);
+            return socket.emit("error", {
+              message: "Error fetching Task/Agent",
+              success: false,
+              details: err.message || err,
+            });
+          }
+
+          if (!agentFound)
+            return socket.emit("error", {
+              message: "Agent not found",
+              success: false,
+            });
+          if (!taskFound)
+            return socket.emit("error", {
+              message: "Task not found",
+              success: false,
+            });
+
+          // 2) validate pickupDropDetails and dropIndex
+          if (!taskFound.pickupDropDetails?.length) {
+            console.error(TAG, "[TASK] No pickupDropDetails on task");
+            return socket.emit("error", {
+              message: "No pickup/drop details found",
+              success: false,
+            });
+          }
+          const dropsArr = taskFound.pickupDropDetails[0].drops || [];
+          console.log(
+            TAG,
+            "[TASK] drops length:",
+            dropsArr.length,
+            "requested dropIndex:",
+            dropIndex
+          );
+          dropIndex = Number(dropIndex);
+          const delivery = dropsArr[dropIndex];
+          if (!delivery) {
+            console.error(
+              TAG,
+              "[TASK] Invalid drop index for Task:",
+              dropIndex
+            );
+            return socket.emit("error", {
+              message: "Invalid drop index",
+              success: false,
+            });
+          }
+
+          console.log(
+            TAG,
+            "[TASK] delivery before:",
+            safeLogObj(delivery, 800)
+          );
+          if (delivery.status === "Started") {
+            console.log(TAG, "[TASK] Delivery already started for this drop");
+            if (agentSocketId)
+              io.to(agentSocketId).emit("agentDeliveryStarted", {
+                data: "Delivery already started",
+                success: true,
+              });
+            return;
+          }
+          if (delivery.status === "Completed") {
+            console.error(
+              TAG,
+              "[TASK] Delivery already completed for this drop"
+            );
+            return socket.emit("error", {
+              message: "Delivery already completed",
+              success: false,
+            });
+          }
+
+          // 3) fetch order
+          let orderFound;
+          try {
+            orderFound = await Order.findById(taskFound.orderId).populate(
+              "customerId",
+              "customerDetails.geofenceId"
+            );
+            console.log(TAG, "[TASK] orderFound:", !!orderFound);
+          } catch (err) {
+            console.error(TAG, "[TASK] Error fetching Order:", err);
+            return socket.emit("error", {
+              message: "Error fetching Order",
+              success: false,
+            });
+          }
+          if (!orderFound)
+            return socket.emit("error", {
+              message: "Order not found",
+              success: false,
+            });
+
+          // 4) compute distanceCoveredByAgent (log intermediate)
+          let distanceCoveredByAgent = 0;
+          try {
+            if (orderFound?.deliveryMode === "Custom Order") {
+              const { distanceInKM } = await getDistanceFromPickupToDelivery(
+                location,
+                delivery.location
+              );
+              console.log(
+                TAG,
+                "[TASK] Custom Order: distanceInKM:",
+                distanceInKM
+              );
+              distanceCoveredByAgent =
+                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+                distanceInKM;
+            } else {
+              const base = orderFound?.orderDetail?.distance || 0;
+              console.log(
+                TAG,
+                "[TASK] Non-custom: orderDetail.distance:",
+                base
+              );
+              distanceCoveredByAgent =
+                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+                base;
+            }
+            console.log(
+              TAG,
+              "[TASK] distanceCoveredByAgent computed:",
+              distanceCoveredByAgent
+            );
+          } catch (distErr) {
+            console.error(TAG, "[TASK] Error computing distance:", distErr);
+          }
+
+          // 5) update delivery and order stepper
+          delivery.status = "Started";
+          delivery.startTime = new Date();
+          const stepperDetail = {
+            by: agentFound.fullName,
+            userId: agentId,
+            date: new Date(),
+            location,
+          };
+          orderFound.detailAddedByAgent = orderFound.detailAddedByAgent || {};
+          orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+            (distanceCoveredByAgent || 0).toFixed(2)
+          );
+          orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
+          orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
+
+          // 6) special: custom order update
+          if (orderFound?.deliveryMode === "Custom Order") {
+            try {
+              console.log(TAG, "[TASK] Updating bill for Custom Order");
+              await updateBillOfCustomOrderInDelivery(
+                orderFound,
+                taskFound,
+                socket
+              );
+            } catch (uErr) {
+              console.error(
+                TAG,
+                "[TASK] updateBillOfCustomOrderInDelivery failed:",
+                uErr
+              );
+            }
+          }
+
+          // 7) save both
+          try {
+            await Promise.all([orderFound.save(), taskFound.save()]);
+            console.log(TAG, "[TASK] Saved order and task successfully:", {
+              orderId: orderFound._id,
+              taskId: taskFound._id,
+            });
+          } catch (saveErr) {
+            console.error(TAG, "[TASK] Error saving order/task:", saveErr);
+            return socket.emit("error", {
+              message: "Failed to save order/task",
+              success: false,
+              details: saveErr.message || saveErr,
+            });
+          }
+
+          // 8) notify roles (instrumented)
+          try {
+            const eventName = "agentDeliveryStarted";
+            const { rolesToNotify } = await findRolesToNotify(eventName);
+            console.log(TAG, "[TASK] rolesToNotify:", rolesToNotify);
+            for (const role of rolesToNotify) {
+              const roleId = {
+                admin: process.env.ADMIN_ID,
+                merchant: orderFound?.merchantId,
+                driver: orderFound?.agentId,
+                customer: orderFound?.customerId?._id,
+              }[role];
+              console.log(
+                TAG,
+                `[TASK] sending notification for role=${role} roleId=${roleId}`
+              );
+              if (roleId) {
+                const notificationData = {
+                  fcm: {
+                    customerId: orderFound.customerId?._id,
+                    orderId: taskFound.orderId,
+                  },
+                };
+                try {
+                  await sendNotification(
+                    roleId,
+                    eventName,
+                    notificationData,
+                    role.charAt(0).toUpperCase() + role.slice(1)
+                  );
+                  console.log(
+                    TAG,
+                    `[TASK] sendNotification success for ${role}`
+                  );
+                } catch (notifErr) {
+                  console.error(
+                    TAG,
+                    `[TASK] sendNotification failed for ${role}:`,
+                    notifErr
+                  );
+                }
+              }
+            }
+          } catch (notifyErr) {
+            console.error(
+              TAG,
+              "[TASK] Error in notification block:",
+              notifyErr
+            );
+          }
+
+          // 9) socket emits
+          try {
+            const socketData = { orderDetailStepper: stepperDetail };
+            sendSocketData(
+              process.env.ADMIN_ID,
+              "agentDeliveryStarted",
+              socketData
+            );
+            sendSocketData(
+              orderFound?.customerId?._id,
+              "agentDeliveryStarted",
+              socketData
+            );
+            if (orderFound?.merchantId)
+              sendSocketData(
+                orderFound.merchantId,
+                "agentDeliveryStarted",
+                socketData
+              );
+            if (agentSocketId) {
+              io.to(agentSocketId).emit("agentDeliveryStarted", {
+                data: "Delivery successfully started",
+                success: true,
+              });
+            }
+            console.log(TAG, "[TASK] emits done");
+          } catch (emitErr) {
+            console.error(TAG, "[TASK] Error during emits:", emitErr);
+          }
+
+          console.log(
+            TAG,
+            "[TASK] Flow complete for taskId:",
+            taskId,
+            "dropIndex:",
+            dropIndex
+          );
+        }; // end handleTaskDropStart
+
+        // ---------- Choose flow and run ----------
+        if (batchOrder) {
+          await handleBatchDropStart(taskId, agentId, location, dropIndex);
+        } else {
+          await handleTaskDropStart(taskId, agentId, location, dropIndex);
         }
       } catch (err) {
-        console.log("Agent failed to start delivery", err);
-
+        console.error(TAG, "Top-level error:", err);
         return socket.emit("error", {
-          message: `Error in starting delivery trip: ${err}`,
+          message: `Error in starting delivery trip: ${err.message || err}`,
           success: false,
         });
+      } finally {
+        console.timeEnd(`${TAG} ${taskId}`);
       }
     }
   );
+
+  // socket.on(
+  //   "agentDeliveryStarted",
+
+  //   async ({ taskId, agentId, location, dropIndex, batchOrder }) => {
+  //     console.log("agentDeliveryStarted called with:", {
+  //       taskId,
+  //       agentId,
+  //       location,
+  //       dropIndex,
+  //       batchOrder,
+  //     });
+  //     try {
+  //       const handleDropStart = async (
+  //         taskId,
+  //         agentId,
+  //         location,
+  //         dropIndex
+  //       ) => {
+  //         const [taskFound, agentFound] = await Promise.all([
+  //           Task.findById(taskId),
+  //           Agent.findById(agentId),
+  //         ]);
+
+  //         const eventName = "agentDeliveryStarted";
+
+  //         if (!agentFound) {
+  //           return socket.emit("error", {
+  //             message: "Agent not found",
+  //             success: false,
+  //           });
+  //         }
+
+  //         if (!taskFound) {
+  //           return socket.emit("error", {
+  //             message: "Task not found",
+  //             success: false,
+  //           });
+  //         }
+
+  //         // ✅ Check if pickupDropDetails exists
+  //         if (!taskFound.pickupDropDetails?.length) {
+  //           return socket.emit("error", {
+  //             message: "No pickup/drop details found",
+  //             success: false,
+  //           });
+  //         }
+
+  //         const delivery = taskFound.pickupDropDetails[0].drops?.[dropIndex];
+
+  //         if (!delivery) {
+  //           return socket.emit("error", {
+  //             message: "Invalid drop index",
+  //             success: false,
+  //           });
+  //         }
+
+  //         // ✅ Prevent duplicate start
+  //         if (delivery.status === "Started") {
+  //           const agentSocketId = userSocketMap[agentId]?.socketId;
+  //           if (agentSocketId) {
+  //             io.to(agentSocketId).emit(eventName, {
+  //               data: "Delivery already started",
+  //               success: true,
+  //             });
+  //           }
+  //           return;
+  //         }
+
+  //         if (delivery.status === "Completed") {
+  //           return socket.emit("error", {
+  //             message: "Delivery already completed",
+  //             success: false,
+  //           });
+  //         }
+
+  //         const orderFound = await Order.findById(taskFound.orderId).populate(
+  //           "customerId",
+  //           "customerDetails.geofenceId"
+  //         );
+
+  //         if (!orderFound) {
+  //           return socket.emit("error", {
+  //             message: "Order not found",
+  //             success: false,
+  //           });
+  //         }
+
+  //         let distanceCoveredByAgent = 0;
+
+  //         if (orderFound?.deliveryMode === "Custom Order") {
+  //           const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //             location,
+  //             delivery.location
+  //           );
+
+  //           distanceCoveredByAgent =
+  //             (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+  //             distanceInKM;
+  //         } else {
+  //           distanceCoveredByAgent =
+  //             (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+  //             (orderFound?.orderDetail?.distance || 0);
+  //         }
+
+  //         // ✅ Update task drop
+  //         delivery.status = "Started";
+  //         delivery.startTime = new Date();
+
+  //         // ✅ Order stepper
+  //         const stepperDetail = {
+  //           by: agentFound.fullName,
+  //           userId: agentId,
+  //           date: new Date(),
+  //           location,
+  //         };
+
+  //         if (!orderFound.detailAddedByAgent)
+  //           orderFound.detailAddedByAgent = {};
+  //         orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+  //           distanceCoveredByAgent.toFixed(2)
+  //         );
+
+  //         if (!orderFound.orderDetailStepper)
+  //           orderFound.orderDetailStepper = {};
+  //         orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
+
+  //         if (orderFound?.deliveryMode === "Custom Order") {
+  //           await updateBillOfCustomOrderInDelivery(
+  //             orderFound,
+  //             taskFound,
+  //             socket
+  //           );
+  //         }
+
+  //         await Promise.all([orderFound.save(), taskFound.save()]);
+
+  //         // 🔔 Notify roles
+  //         const { rolesToNotify } = await findRolesToNotify(eventName);
+
+  //         for (const role of rolesToNotify) {
+  //           const roleId = {
+  //             admin: process.env.ADMIN_ID,
+  //             merchant: orderFound?.merchantId,
+  //             driver: orderFound?.agentId,
+  //             customer: orderFound?.customerId._id,
+  //           }[role];
+
+  //           if (roleId) {
+  //             const notificationData = {
+  //               fcm: {
+  //                 customerId: orderFound.customerId._id,
+  //                 orderId: taskFound.orderId,
+  //               },
+  //             };
+
+  //             await sendNotification(
+  //               roleId,
+  //               eventName,
+  //               notificationData,
+  //               role.charAt(0).toUpperCase() + role.slice(1)
+  //             );
+  //           }
+  //         }
+
+  //         // 🔔 Emit socket events
+  //         const socketData = { orderDetailStepper: stepperDetail };
+  //         sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+  //         sendSocketData(orderFound?.customerId._id, eventName, socketData);
+
+  //         if (orderFound?.merchantId)
+  //           sendSocketData(orderFound.merchantId, eventName, socketData);
+
+  //         const agentSocketId = userSocketMap[agentId]?.socketId;
+  //         if (agentSocketId) {
+  //           io.to(agentSocketId).emit(eventName, {
+  //             data: "Delivery successfully started",
+  //             success: true,
+  //           });
+  //         }
+
+  //         if (batchOrder) {
+  //           // 🟢 Handle BatchOrder case
+  //           const batchOrderById = await BatchOrder.findById(taskId); // here taskId is actually the batchOrderId
+  //           if (!batchOrderById) {
+  //             return socket.emit("error", {
+  //               message: "BatchOrder not found",
+  //               success: false,
+  //             });
+  //           }
+
+  //           const drop = batchOrderById.dropDetails[dropIndex];
+  //           if (!drop) {
+  //             return socket.emit("error", {
+  //               message: "Invalid drop index",
+  //               success: false,
+  //             });
+  //           }
+
+  //           drop.drops.status = "Started";
+  //           drop.drops.startTime = new Date();
+
+  //           await batchOrderById.save();
+
+  //           // 🔔 Send notifications + socket emits here (like your Task logic)
+  //         } else {
+  //           // 🟢 Handle normal Task case
+  //           await handleDropStart(taskId, agentId, location, dropIndex);
+  //         }
+  //       };
+  //     } catch (err) {
+  //       console.log("Agent failed to start delivery", err);
+
+  //       return socket.emit("error", {
+  //         message: `Error in starting delivery trip: ${err}`,
+  //         success: false,
+  //       });
+  //     }
+  //   }
+  // );
 
   // socket.on("agentDeliveryStarted", async ({ taskId, agentId, location }) => {
   //   try {
