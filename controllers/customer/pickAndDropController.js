@@ -35,10 +35,9 @@ const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const { findRolesToNotify } = require("../../socket/socket");
 
-<<<<<<< HEAD
 // Initialize cart
-=======
->>>>>>> pick-and-drop
+// =======
+
 const initializePickAndDrop = async (req, res, next) => {
   try {
     const customerId = req.userAuth;
@@ -885,10 +884,10 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     const tempOrder = await TemporaryOrder.create({
       orderId,
       customerId,
-<<<<<<< HEAD
+      // <<<<<<< HEAD
       items: cart.items,
       orderDetail: { ...cart.cartDetail, deliveryTime },
-=======
+      // =======
 
       deliveryMode: "Pick and Drop",
       deliveryOption: cart.deliveryOption,
@@ -896,7 +895,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       pickups: cart.pickups,
       drops: cart.drops,
 
->>>>>>> pick-and-drop
+      // >>>>>>> pick-and-drop
       billDetail: orderBill,
       distance: cart.distance,
 

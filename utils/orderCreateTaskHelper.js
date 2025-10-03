@@ -149,7 +149,7 @@ const notifyAgents = async (order, priorityType) => {
         },
         fcm: {
           title: "New Order",
-          body: "You have a new order to pickup", 
+          body: "You have a new order to pickup",
           image: "",
           orderId: order.id,
           agentId: agent.id,
@@ -446,8 +446,4 @@ const fetchNearestAgents = async (merchantId) => {
   return filteredAgents;
 };
 
-<<<<<<< HEAD
-module.exports = { orderCreateTaskHelper };
-=======
 module.exports = { orderCreateTaskHelper, batchOrderCreateTaskHelper };
->>>>>>> pick-and-drop

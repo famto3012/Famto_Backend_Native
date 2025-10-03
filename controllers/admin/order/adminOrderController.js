@@ -2724,15 +2724,9 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       const startToPickDistance =
         orderFound?.detailAddedByAgent?.startToPickDistance;
 
-<<<<<<< HEAD
-      totalOrderDistance = startToPickDistance
-        ? startToPickDistance + orderFound.orderDetail.distance
-        : orderFound.orderDetail.distance;
-=======
       const totalOrderDistance = startToPickDistance
         ? startToPickDistance + orderFound?.distance
         : orderFound?.distance;
->>>>>>> pick-and-drop
 
       let orderSalary = totalOrderDistance * agentPricing.baseDistanceFarePerKM;
 
