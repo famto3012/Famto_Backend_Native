@@ -4,215 +4,107 @@ const cartItemSchema = mongoose.Schema(
   {
     itemId: {
       type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId(),
     },
-    itemName: {
-      type: String,
-      required: true,
-    },
-    length: {
-      type: Number,
-      default: null,
-    },
-    width: {
-      type: Number,
-      default: null,
-    },
-    height: {
-      type: Number,
-      default: null,
-    },
-    unit: {
-      type: String,
-      default: null,
-    },
-    weight: {
-      type: Number,
-      default: null,
-    },
-    numOfUnits: {
-      type: Number,
-      default: null,
-    },
-    quantity: {
-      type: Number,
-      default: null,
-    },
-    itemImageURL: {
-      type: String,
-      default: null,
-    },
+    itemName: { type: String, required: true },
+    length: { type: Number, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    unit: { type: String, default: null },
+    weight: { type: Number, default: 1 },
+    numOfUnits: { type: Number, default: null },
+    quantity: { type: Number, default: null },
+    itemImageURL: { type: String, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
-const cartDetailSchema = mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    pickupLocation: {
-      type: [Number],
-      default: null,
-    },
-    pickupAddress: {
+    location: { type: [Number] },
+    address: {
       fullName: String,
       phoneNumber: String,
       flat: String,
       area: String,
       landmark: String,
     },
+    instructionInPickup: { type: String, default: null },
+    voiceInstructionInPickup: { type: String, default: null },
+    items: [cartItemSchema],
+  },
+  { _id: false }
+);
 
-    deliveryLocation: {
-      type: [Number],
-      required: true,
-    },
-    deliveryAddress: {
+const detailSchemaDrops = new mongoose.Schema(
+  {
+    location: { type: [Number] },
+    address: {
       fullName: String,
       phoneNumber: String,
       flat: String,
       area: String,
       landmark: String,
     },
-    instructionInPickup: {
-      type: String,
-      default: null,
-    },
-    instructionInDelivery: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionInPickup: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionInDelivery: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionToDeliveryAgent: {
-      type: String,
-      default: null,
-    },
+    instructionInDrop: { type: String, default: null },
+    voiceInstructionInDrop: { type: String, default: null },
+    items: [cartItemSchema],
+  },
+  { _id: false }
+);
+
+const billSchema = mongoose.Schema(
+  {
+    deliveryChargePerDay: { type: Number, default: null },
+    originalDeliveryCharge: { type: Number, required: true },
+    discountedDeliveryCharge: { type: Number, default: null },
+    discountedAmount: { type: Number, default: null },
+    originalGrandTotal: { type: Number, default: null },
+    discountedGrandTotal: { type: Number, default: null },
+    itemTotal: { type: Number, default: 0 },
+    addedTip: { type: Number, default: null },
+    subTotal: { type: Number, default: null },
+    vehicleType: { type: String, default: null },
+    surgePrice: { type: Number, default: null },
+    taxAmount: { type: Number, default: null },
+    promoCodeUsed: { type: String, default: null },
+    promoCodeDiscount: { type: Number, default: null },
+  },
+  { _id: false }
+);
+
+const pickAndCustomCartSchema = mongoose.Schema(
+  {
+    customerId: { type: String, required: true },
+    merchantId: { type: String, ref: "Merchant", required: false },
+
     deliveryMode: {
       type: String,
       enum: ["Pick and Drop", "Custom Order"],
       required: true,
     },
+
     deliveryOption: {
       type: String,
       enum: ["On-demand", "Scheduled"],
       required: true,
     },
-    distance: {
-      type: Number,
-      default: 0,
-    },
-    duration: {
-      type: Number,
-      default: 0,
-    },
-    startDate: {
-      type: Date,
-      default: null,
-    },
-    endDate: {
-      type: Date,
-      default: null,
-    },
-    time: {
-      type: Date,
-      default: null,
-    },
-    numOfDays: {
-      type: Number,
-      default: null,
-    },
-  },
-  {
-    _id: false,
-  }
-);
 
-const billSchema = mongoose.Schema(
-  {
-    deliveryChargePerDay: {
-      type: Number,
-      default: null,
-    },
-    originalDeliveryCharge: {
-      type: Number,
-      required: true,
-    },
-    discountedDeliveryCharge: {
-      type: Number,
-      default: null,
-    },
-    discountedAmount: {
-      type: Number,
-      default: null,
-    },
-    originalGrandTotal: {
-      type: Number,
-      default: null,
-    },
-    discountedGrandTotal: {
-      type: Number,
-      default: null,
-    },
-    itemTotal: {
-      type: Number,
-      default: 0,
-    },
-    addedTip: {
-      type: Number,
-      default: null,
-    },
-    subTotal: {
-      type: Number,
-      default: null,
-    },
-    vehicleType: {
-      type: String,
-      default: null,
-    },
-    surgePrice: {
-      type: Number,
-      default: null,
-    },
-    taxAmount: {
-      type: Number,
-      default: null,
-    },
-    promoCodeUsed: {
-      type: String,
-      default: null,
-    },
-    promoCodeDiscount: {
-      type: Number,
-      default: null,
-    },
-  },
-  {
-    _id: false,
-  }
-);
+    pickups: [detailSchema],
+    drops: [detailSchemaDrops],
 
-const pickAndCustomCartSchema = mongoose.Schema(
-  {
-    customerId: {
-      type: String,
-      required: true,
-    },
-    merchantId: {
-      type: String,
-      ref: "Merchant",
-      required: false,
-    },
-    cartDetail: cartDetailSchema,
     billDetail: billSchema,
-    items: [cartItemSchema],
+
+    distance: { type: Number, default: 0 },
+    duration: { type: Number, default: 0 },
+
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    time: { type: Date, default: null },
+    numOfDays: { type: Number, default: null },
   },
   {
-    timeStamp: true,
+    timestamps: true,
   }
 );
 
@@ -220,4 +112,5 @@ const PickAndCustomCart = mongoose.model(
   "PickAndCustomCart",
   pickAndCustomCartSchema
 );
+
 module.exports = PickAndCustomCart;

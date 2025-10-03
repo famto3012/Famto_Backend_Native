@@ -93,7 +93,7 @@ const {
   getVehiclePricingDetailsController,
   initializePickAndDrop,
   getPickAndDropBill,
-  updatePickAndDropItems,
+  getPickAndDropItems,
 } = require("../../controllers/customer/pickAndDropController");
 const {
   addShopController,
@@ -284,14 +284,6 @@ customerRoute.post(
   confirmOrderDetailController
 );
 
-// customerRoute.post(
-//   "/apply-promocode",
-//   isAuthenticated,
-//   applyPromoCodeController
-// );
-
-// customerRoute.post("/add-tip", isAuthenticated, applyTipController);
-
 customerRoute.post("/confirm-order", isAuthenticated, orderPaymentController);
 
 customerRoute.post(
@@ -405,11 +397,8 @@ customerRoute.delete(
 );
 
 customerRoute.post(
-  "/add-pick-and-drop-address",
-  upload.fields([
-    { name: "voiceInstructionInPickup", maxCount: 1 },
-    { name: "voiceInstructionInDelivery", maxCount: 1 },
-  ]),
+  "/add-address-and-items",
+  upload.any(),
   isAuthenticated,
   addPickUpAddressController
 );
@@ -420,6 +409,8 @@ customerRoute.get(
   getVehiclePricingDetailsController
 );
 
+customerRoute.get("/pick-and-drop-items", isAuthenticated, getPickAndDropItems);
+
 customerRoute.get(
   "/get-pick-and-drop-bill",
   isAuthenticated,
@@ -427,22 +418,10 @@ customerRoute.get(
 );
 
 customerRoute.post(
-  "/add-additional-pick-items",
-  isAuthenticated,
-  updatePickAndDropItems
-);
-
-customerRoute.post(
-  "/add-pick-and-drop-items",
+  "/confirm-pick-and-drop-vehicle",
   isAuthenticated,
   confirmPickAndDropVehicleType
 );
-
-// customerRoute.post(
-//   "/add-tip-and-promocode",
-//   isAuthenticated,
-//   addTipAndApplyPromoCodeInPickAndDropController
-// );
 
 customerRoute.post(
   "/confirm-pick-and-drop",

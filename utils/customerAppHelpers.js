@@ -32,6 +32,24 @@ const sortMerchantsBySponsorship = (merchants) => {
   });
 };
 
+const filterCoordinatesFromData = (parsedData) => {
+  let coordinates = [];
+
+  // Get pickup coordinates
+  parsedData.pickups.forEach((pickup) => {
+    const [lat, lng] = pickup.location;
+    coordinates.push({ lng, lat });
+  });
+
+  // Get drop coordinates
+  parsedData.drops.forEach((drop) => {
+    const [lat, lng] = drop.location;
+    coordinates.push({ lng, lat });
+  });
+
+  return coordinates;
+};
+
 const getDistanceFromPickupToDelivery = async (
   pickupCoordinates,
   deliveryCoordinates,
@@ -63,8 +81,60 @@ const getDistanceFromPickupToDelivery = async (
     data.results.distances &&
     data.results.distances.length > 0
   ) {
-    const distance = (data.results.distances[0][1] / 1000).toFixed(2);
-    const durationInMinutes = Math.ceil(data.results.durations[0][1] / 60);
+    const finalDistance = data.results.distances[0]?.length - 1;
+    const finalDuration = data.results.distances[0]?.length - 1;
+    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
+      2
+    );
+    const durationInMinutes = Math.ceil(
+      data.results.durations[0][finalDuration] / 60
+    );
+
+    const distanceInKM = parseFloat(distance);
+
+    return { distanceInKM, durationInMinutes };
+  }
+};
+
+const getDistanceFromMultipleCoordinates = async (
+  coordinates,
+  profile = "biking"
+) => {
+  const joined = coordinates
+    .map((coord) => `${coord.lng},${coord.lat}`)
+    .join(";");
+
+  if (process.env.NODE_ENV === "development") {
+    const getRandomFloat = (min, max) => {
+      const random = Math.random() * (max - min) + min;
+      return Number(random.toFixed(2));
+    };
+
+    return {
+      distanceInKM: getRandomFloat(2, 10),
+      durationInMinutes: getRandomFloat(5.5, 30),
+    };
+  }
+
+  const { data } = await axios.get(
+    `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${joined}`
+  );
+
+  if (
+    data &&
+    data.results &&
+    data.results.distances &&
+    data.results.distances.length > 0
+  ) {
+    const finalDistance = data.results.distances[0]?.length - 1;
+    const finalDuration = data.results.distances[0]?.length - 1;
+    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
+      2
+    );
+
+    const durationInMinutes = Math.ceil(
+      data.results.durations[0][finalDuration] / 60
+    );
 
     const distanceInKM = parseFloat(distance);
 
@@ -610,6 +680,7 @@ const filterProductIdAndQuantity = async (items) => {
 
         return {
           productId: item?.productId,
+          productName: product?.productName || "",
           variantId: item?.variantTypeId || null,
           price,
           costPrice,
@@ -625,10 +696,41 @@ const filterProductIdAndQuantity = async (items) => {
   }
 };
 
+// const reduceProductAvailableQuantity = async (purchasedItems, merchantId) => {
+//   for (const item of purchasedItems) {
+//     if (!item.productId) {
+//       console.warn("Skipping item without productId", item);
+//       continue;
+//     }
+
+//     const product = await Product.findOne({
+//       _id: item.productId,
+//       merchantId,
+//     });
+
+//     if (!product) throw appError("Product not found", 400);
+
+//     // Reduce stock
+//     if (item.variantId) {
+//       const variant = product.variants.id(item.variantId);
+//       if (variant) {
+//         variant.stock = Math.max(0, variant.stock - item.quantity);
+//       }
+//     } else {
+//       product.stock = Math.max(0, product.stock - item.quantity);
+//     }
+
+//     await product.save();
+//   }
+// };
+
 const reduceProductAvailableQuantity = async (purchasedItems, merchantId) => {
+  console.log("Reducing product quantities for items:", purchasedItems);
   try {
     for (const item of purchasedItems) {
       const productFound = await Product.findById(item.productId);
+
+      console.log("Product Found:", productFound, item.productId);
 
       if (!productFound) {
         throw new Error("Product not found");
@@ -1077,4 +1179,6 @@ module.exports = {
   applyPromoCodeDiscount,
   populateCartDetails,
   deductPromoCodeDiscount,
+  getDistanceFromMultipleCoordinates,
+  filterCoordinatesFromData,
 };

@@ -46,6 +46,7 @@ const {
   getTimeSlotsForAgent,
   chooseTimeSlot,
   getAllAgentTaskController,
+  completeBatchOrderController,
 } = require("../../controllers/agent/agentController");
 const { upload } = require("../../utils/imageOperation");
 const isAuthenticated = require("../../middlewares/isAuthenticated");
@@ -204,16 +205,16 @@ agentRoute.get(
 
 agentRoute.get("/get-ratings", isAuthenticated, getRatingsOfAgentController);
 
-agentRoute.get("/get-task-preview", isAuthenticated, getTaskPreviewController);
+agentRoute.post("/get-task-preview", isAuthenticated, getTaskPreviewController);
 
-agentRoute.get(
-  "/get-pickup-detail/:taskId",
+agentRoute.post(
+  "/get-pickup-detail/:taskId/:stepIndex",
   isAuthenticated,
   getPickUpDetailController
 );
 
 agentRoute.get(
-  "/get-delivery-detail/:taskId",
+  "/get-delivery-detail/:taskId/:stepIndex",
   isAuthenticated,
   getDeliveryDetailController
 );
@@ -247,6 +248,12 @@ agentRoute.patch(
 );
 
 agentRoute.post("/complete-order", isAuthenticated, completeOrderController);
+
+agentRoute.post(
+  "/complete-batch-order",
+  isAuthenticated,
+  completeBatchOrderController
+);
 
 agentRoute.post(
   "/add-rating-to-customer/:orderId",

@@ -353,7 +353,7 @@ const calculateAgentEarnings = async (agent, order) => {
 
   const distanceForOrder = order?.detailAddedByAgent?.distanceCoveredByAgent
     ? order.detailAddedByAgent.distanceCoveredByAgent - distanceFromStartToPick
-    : order.orderDetail.distance;
+    : order.distance;
 
   let orderSalary =
     distanceFromStartToPick * agentPricing.startToPickFarePerKM +
@@ -362,18 +362,14 @@ const calculateAgentEarnings = async (agent, order) => {
   let surgePrice = 0;
 
   if (agentSurge) {
-    const distance =
-      order?.detailAddedByAgent?.distanceCoveredByAgent ??
-      order.orderDetail.distance;
-
-    const criteria = Math.ceil(distance / agentSurge.baseDistance);
-
-    surgePrice = criteria * agentSurge.baseFare;
+    surgePrice =
+      (order?.detailAddedByAgent?.distanceCoveredByAgent ??
+        order.distance / agentSurge.baseDistance) * agentSurge.baseFare;
   }
 
   let totalPurchaseFare = 0;
 
-  if (order.orderDetail.deliveryMode === "Custom Order") {
+  if (order.deliveryMode === "Custom Order") {
     const taskFound = await Task.findOne({ orderId: order._id });
     if (taskFound) {
       const durationInHours =
@@ -402,21 +398,71 @@ const updateOrderDetails = (order, calculatedSalary) => {
   const currentTime = new Date();
   let delayedBy = null;
 
-  if (currentTime > new Date(order.orderDetail.deliveryTime)) {
-    delayedBy = currentTime - new Date(order.orderDetail.deliveryTime);
+  if (currentTime > new Date(order.deliveryTime)) {
+    delayedBy = currentTime - new Date(order.deliveryTime);
   }
 
   order.status = "Completed";
   order.paymentStatus = "Completed";
-  order.orderDetail.deliveryTime = currentTime;
-  order.orderDetail.timeTaken =
-    currentTime - new Date(order.orderDetail.agentAcceptedAt);
-  order.orderDetail.delayedBy = delayedBy;
+  order.deliveryTime = currentTime;
+  order.timeTaken = currentTime - new Date(order.agentAcceptedAt);
+  order.delayedBy = delayedBy;
 
   if (!order?.detailAddedByAgent) order.detailAddedByAgent = {};
 
   order.detailAddedByAgent.agentEarning = calculatedSalary;
 };
+
+// const updateAgentDetails = async (
+//   agent,
+//   order,
+//   calculatedSalary,
+//   calculatedSurge,
+//   isOrderCompleted
+// ) => {
+//   if (isOrderCompleted) {
+//     agent.appDetail.orders += 1;
+//   } else {
+//     agent.appDetail.cancelledOrders += 1;
+//   }
+
+//   console.log("Agent ID:", agent._id);
+//   console.log("Order ID:", order._id);
+//   console.log("Order Completed Status:", isOrderCompleted);
+//   console.log("Calculated Salary:", calculatedSalary);
+//   console.log("Calculated Surge:", calculatedSurge);
+
+//   agent.appDetail.totalEarning += parseFloat(calculatedSalary);
+//   agent.appDetail.totalDistance += parseFloat(
+//     order.detailAddedByAgent?.distanceCoveredByAgent?.toFixed(2)
+//   );
+//   agent.appDetail.totalStartToPickDistance += parseFloat(
+//     order?.detailAddedByAgent?.startToPickDistance?.toFixed(2)
+//   );
+//   agent.appDetail.totalSurge += parseFloat(calculatedSurge);
+
+//   agent.appDetail.orderDetail.push({
+//     orderId: order._id,
+//     deliveryMode: order?.deliveryMode,
+//     customerName: order?.deliveryAddress?.fullName,
+//     completedOn: new Date(),
+//     grandTotal: order?.detailAddedByAgent?.agentEarning || 0,
+//   });
+
+//   const currentDay = moment.tz(new Date(), "Asia/Kolkata");
+//   const startOfDay = currentDay.startOf("day").toDate();
+//   const endOfDay = currentDay.endOf("day").toDate();
+
+//   const agentTasks = await Task.find({
+//     taskStatus: "Assigned",
+//     agentId: agent._id,
+//     createdAt: { $gte: startOfDay, $lte: endOfDay },
+//   }).sort({
+//     createdAt: 1,
+//   });
+
+//   agentTasks.length > 0 ? (agent.status = "Busy") : (agent.status = "Free");
+// };
 
 const updateAgentDetails = async (
   agent,
@@ -425,6 +471,8 @@ const updateAgentDetails = async (
   calculatedSurge,
   isOrderCompleted
 ) => {
+  console.log("👉 Entering updateAgentDetails...");
+
   if (isOrderCompleted) {
     agent.appDetail.orders += 1;
   } else {
@@ -433,20 +481,22 @@ const updateAgentDetails = async (
 
   agent.appDetail.totalEarning += parseFloat(calculatedSalary);
   agent.appDetail.totalDistance += parseFloat(
-    order.detailAddedByAgent?.distanceCoveredByAgent?.toFixed(2)
+    order.detailAddedByAgent?.distanceCoveredByAgent?.toFixed(2) || 0
   );
   agent.appDetail.totalStartToPickDistance += parseFloat(
-    order?.detailAddedByAgent?.startToPickDistance?.toFixed(2)
+    order?.detailAddedByAgent?.startToPickDistance?.toFixed(2) || 0
   );
   agent.appDetail.totalSurge += parseFloat(calculatedSurge);
 
   agent.appDetail.orderDetail.push({
     orderId: order._id,
-    deliveryMode: order?.orderDetail?.deliveryMode,
-    customerName: order?.orderDetail?.deliveryAddress?.fullName,
+    deliveryMode: order?.deliveryMode,
+    customerName: order?.drops[0]?.address?.fullName || "N/A",
     completedOn: new Date(),
     grandTotal: order?.detailAddedByAgent?.agentEarning || 0,
   });
+
+  console.log("👉 Agent appDetail after push:", agent.appDetail);
 
   const currentDay = moment.tz(new Date(), "Asia/Kolkata");
   const startOfDay = currentDay.startOf("day").toDate();
@@ -456,19 +506,105 @@ const updateAgentDetails = async (
     taskStatus: "Assigned",
     agentId: agent._id,
     createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({
-    createdAt: 1,
-  });
+  }).sort({ createdAt: 1 });
 
-  agentTasks.length > 0 ? (agent.status = "Busy") : (agent.status = "Free");
+  agent.status = agentTasks.length > 0 ? "Busy" : "Free";
+
+  console.log("👉 Agent status set to:", agent.status);
+
+  // mark nested changes
+  agent.markModified("appDetail");
+};
+
+const updateAgentDetailsForBatch = async (agent, batchOrders) => {
+  console.log("👉 Entering updateAgentDetailsForBatch...");
+
+  // calculate salary & surge for all orders
+  const { calculatedSalary, calculatedSurge } =
+    await calculateBatchAgentEarnings(agent, batchOrders);
+
+  // Increase order count
+  agent.appDetail.orders += 1;
+
+  // Update earnings & surge
+  agent.appDetail.totalEarning += calculatedSalary;
+  agent.appDetail.totalSurge += calculatedSurge;
+
+  let totalDistance = 0;
+  let totalStartToPickDistance = 0;
+
+  for (const order of batchOrders) {
+    totalDistance += parseFloat(
+      order.detailAddedByAgent?.distanceCoveredByAgent?.toFixed(2) || 0
+    );
+    totalStartToPickDistance += parseFloat(
+      order.detailAddedByAgent?.startToPickDistance?.toFixed(2) || 0
+    );
+
+    // Push order detail for history
+    agent.appDetail.orderDetail.push({
+      orderId: order._id,
+      deliveryMode: order.deliveryMode,
+      customerName: order.drops[0]?.address?.fullName || "N/A",
+      completedOn: new Date(),
+      grandTotal: order.detailAddedByAgent?.agentEarning || 0,
+    });
+  }
+
+  // Save total distances
+  agent.appDetail.totalDistance += totalDistance;
+  agent.appDetail.totalStartToPickDistance += totalStartToPickDistance;
+
+  console.log("👉 Agent appDetail after batch update:", agent.appDetail);
+
+  // Check agent status
+  const currentDay = moment.tz(new Date(), "Asia/Kolkata");
+  const startOfDay = currentDay.startOf("day").toDate();
+  const endOfDay = currentDay.endOf("day").toDate();
+
+  const agentTasks = await Task.find({
+    taskStatus: "Assigned",
+    agentId: agent._id,
+    createdAt: { $gte: startOfDay, $lte: endOfDay },
+  }).sort({ createdAt: 1 });
+
+  agent.status = agentTasks.length > 0 ? "Busy" : "Free";
+
+  console.log("👉 Agent status set to:", agent.status);
+
+  agent.markModified("appDetail");
+  await agent.save();
+};
+
+const calculateBatchAgentEarnings = async (agent, batchOrders) => {
+  let totalSalary = 0;
+  let totalSurge = 0;
+
+  for (const order of batchOrders) {
+    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
+      agent,
+      order
+    );
+
+    totalSalary += calculatedSalary;
+    totalSurge += calculatedSurge;
+  }
+
+  return {
+    calculatedSalary: Number(totalSalary.toFixed(2)),
+    calculatedSurge: Number(totalSurge.toFixed(2)),
+  };
 };
 
 const updateNotificationStatus = async (orderId) => {
+  console.log("Updating notification status for orderId:", orderId);
   try {
     const notificationFound = await AgentNotificationLogs.findOne({
       orderId,
       status: "Accepted",
     });
+
+    console.log("notification Found", notificationFound);
 
     if (!notificationFound) throw new Error("Notification not found");
 
@@ -587,6 +723,8 @@ module.exports = {
   calculateAgentEarnings,
   updateOrderDetails,
   updateAgentDetails,
+  updateAgentDetailsForBatch,
+  calculateBatchAgentEarnings,
   updateNotificationStatus,
   updateCustomerSubscriptionCount,
   updateBillOfCustomOrderInDelivery,

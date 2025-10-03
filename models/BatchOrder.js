@@ -8,7 +8,6 @@ const detailSchema = new mongoose.Schema(
       default: "Pending",
     },
     location: { type: [Number] },
-    stepIndex: { type: Number },
     address: {
       fullName: String,
       phoneNumber: String,
@@ -16,54 +15,52 @@ const detailSchema = new mongoose.Schema(
       area: String,
       landmark: String,
     },
-    items: [
-      {
-        itemName: String,
-        length: Number,
-        width: Number,
-        height: Number,
-        unit: String,
-        weight: Number,
-        numOfUnits: Number,
-        quantity: Number,
-        itemImageURL: String,
-        price: Number,
-        variantTypeName: String,
-      },
-    ],
-
     startTime: { type: Date, default: null },
     completedTime: { type: Date, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
-const taskSchema = new mongoose.Schema(
+const batchOrderSchema = new mongoose.Schema(
   {
-    orderId: { type: String, ref: "Order", required: true },
     agentId: { type: String, ref: "Agent", default: null },
     taskStatus: {
       type: String,
       enum: ["Assigned", "Unassigned", "Completed", "Cancelled"],
       default: "Unassigned",
     },
-    pickupDropDetails: [
-      {
-        // orderId: { type: String, ref: "Order", required: true },
-        pickups: [detailSchema],
-        drops: [detailSchema],
-      },
-    ],
     deliveryMode: {
       type: String,
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
+    pickupAddress: {
+      location: { type: [Number] },
+      status: {
+        type: String,
+        enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
+        default: "Pending",
+      },
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    dropDetails: [
+      {
+        orderId: { type: String, ref: "Order", required: true },
+        taskId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Task",
+          required: true,
+        },
+        drops: detailSchema,
+      },
+    ],
   },
   { timestamps: true }
 );
 
-const Task = mongoose.model("Task", taskSchema);
-module.exports = Task;
+const BatchOrder = mongoose.model("BatchOrder", batchOrderSchema);
+module.exports = BatchOrder;

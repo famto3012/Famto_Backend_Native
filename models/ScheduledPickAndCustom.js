@@ -1,103 +1,38 @@
 const mongoose = require("mongoose");
 const DatabaseCounter = require("./DatabaseCounter");
 
-const scheduledPickAndCustomItemSchema = mongoose.Schema(
+const cartItemSchema = mongoose.Schema(
   {
-    itemType: {
-      type: String,
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId(),
     },
-    length: {
-      type: Number,
-    },
-    width: {
-      type: Number,
-    },
-    height: {
-      type: Number,
-    },
-    unit: {
-      type: String,
-    },
-    weight: {
-      type: Number,
-    },
-    numOfUnits: {
-      type: Number,
-      default: null,
-    },
-    quantity: {
-      type: Number,
-      default: null,
-    },
-    itemImageURL: {
-      type: String,
-      default: null,
-    },
+    itemName: { type: String, required: true },
+    length: { type: Number, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    unit: { type: String, default: null },
+    weight: { type: Number, default: null },
+    numOfUnits: { type: Number, default: null },
+    quantity: { type: Number, default: null },
+    itemImageURL: { type: String, default: null },
   },
   { _id: false }
 );
 
-const scheduledPickAndCustomDetailSchema = mongoose.Schema(
+const detailSchema = new mongoose.Schema(
   {
-    pickupLocation: {
-      type: [Number],
-      default: null,
-    },
-    pickupAddress: {
+    location: { type: [Number] },
+    address: {
       fullName: String,
       phoneNumber: String,
       flat: String,
       area: String,
       landmark: String,
     },
-    deliveryLocation: {
-      type: [Number],
-      required: true,
-    },
-    deliveryAddress: {
-      fullName: String,
-      phoneNumber: String,
-      flat: String,
-      area: String,
-      landmark: String,
-    },
-    deliveryMode: {
-      type: String,
-      enum: ["Pick and Drop", "Custom Order"],
-      required: true,
-    },
-    deliveryOption: {
-      type: String,
-      enum: ["On-demand", "Scheduled"],
-      required: true,
-    },
-    instructionInDelivery: {
-      type: String,
-      default: null,
-    },
-    instructionInPickup: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionInPickup: {
-      type: String,
-      default: null,
-    },
-    voiceInstructionInDelivery: {
-      type: String,
-      default: null,
-    },
-    voiceInstructiontoAgent: {
-      type: String,
-      default: null,
-    },
-    distance: {
-      type: Number,
-    },
-    numOfDays: {
-      type: Number,
-      default: null,
-    },
+    instructionInPickup: { type: String, default: null },
+    voiceInstructionInPickup: { type: String, default: null },
+    items: [cartItemSchema],
   },
   { _id: false }
 );
@@ -142,26 +77,32 @@ const billSchema = mongoose.Schema(
 
 const scheduledPickAndCustomSchema = mongoose.Schema(
   {
-    _id: {
+    _id: { type: String },
+    customerId: { type: String, ref: "Customer", required: true },
+    merchantId: { type: String, ref: "Merchant", required: false },
+
+    deliveryMode: {
       type: String,
-    },
-    customerId: {
-      type: String,
-      ref: "Customer",
+      enum: ["Pick and Drop", "Custom Order"],
       required: true,
     },
-    merchantId: {
+    deliveryOption: {
       type: String,
-      ref: "Merchant",
-      required: false,
+      enum: ["On-demand", "Scheduled"],
+      required: true,
     },
-    items: [scheduledPickAndCustomItemSchema],
-    orderDetail: scheduledPickAndCustomDetailSchema,
+
+    pickups: [detailSchema],
+    drops: [detailSchema],
+
     billDetail: billSchema,
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
+    distance: { type: Number, default: 0 },
+
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    time: { type: Date, required: true },
+
+    totalAmount: { type: Number, required: true },
     status: {
       type: String,
       required: true,
@@ -171,29 +112,16 @@ const scheduledPickAndCustomSchema = mongoose.Schema(
     paymentMode: {
       type: String,
       required: true,
-      enum: ["Famto-cash", "Online-payment"],
+      enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
     },
+    paymentId: { type: String, default: null },
     paymentStatus: {
       type: String,
       required: true,
       enum: ["Pending", "Completed", "Failed"],
       default: "Pending",
     },
-    startDate: {
-      type: Date,
-      required: true,
-    },
-    endDate: {
-      type: Date,
-      required: true,
-    },
-    time: {
-      type: Date,
-      required: true,
-    },
-    paymentId: {
-      type: String,
-    },
+    isViewed: { type: Boolean, default: false },
   },
   {
     timestamps: true,

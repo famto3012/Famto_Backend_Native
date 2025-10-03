@@ -62,7 +62,7 @@ const deleteOrderAndTask = async () => {
     const customerId = "C241213";
 
     // Fetch all orders for the customer
-    const orders = await Order.find({ customerId });
+    const orders = await Order.find({ customerId: { $ne: customerId } });
 
     // Collect task IDs related to the orders
     const taskIDs = [];
@@ -84,7 +84,7 @@ const deleteOrderAndTask = async () => {
       await Order.deleteMany({ _id: { $in: orderIds } });
     }
 
-    console.log(`Deleted orders and tasks for customer: ${customerId}`);
+    console.log(`Deleted orders and tasks for customers: ${customerId}`);
   } catch (err) {
     console.log(`Error in deleting orders & tasks: ${err}`);
   }

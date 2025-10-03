@@ -11,6 +11,10 @@ const cartItemSchema = mongoose.Schema(
       type: Number,
       required: true,
     },
+    itemName: {
+      type: Number,
+      required: true,
+    },
     price: {
       type: Number,
       required: true,
@@ -80,18 +84,22 @@ const cartDetailSchema = mongoose.Schema(
     startDate: {
       type: Date,
       default: null,
+      required: true,
     },
     endDate: {
       type: Date,
       default: null,
+      required: true,
     },
     time: {
       type: Date,
       default: null,
+      required: true,
     },
     numOfDays: {
       type: Number,
       default: null,
+      required: true,
     },
   },
   {

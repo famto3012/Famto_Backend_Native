@@ -225,6 +225,7 @@ const findOrCreateCustomer = async ({
 };
 
 const processSchedule = (ifScheduled) => {
+  console.log("Processing schedule:", ifScheduled);
   if (
     !ifScheduled ||
     !ifScheduled.startDate ||
@@ -863,6 +864,8 @@ const calculateDeliveryChargesHelper = async ({
 const applyDiscounts = async ({ items, itemTotal, merchantId }) => {
   let merchantDiscountAmount = 0;
 
+  console.log("Applying discounts for items:", items, itemTotal, merchantId);
+
   // Fetch all products with their discounts in a single query
   const productIds = items.map((item) => item.productId);
   const products = await Product.find({ _id: { $in: productIds } })
@@ -973,7 +976,8 @@ const fetchMerchantDetails = async (
   deliveryOption,
   next
 ) => {
-  if (!merchantId || !["Take Away", "Home Delivery"].includes(deliveryMode)) {
+  if (!merchantId) {
+    console.error("Invalid merchantId or deliveryMode");
     return null;
   }
 
@@ -1407,16 +1411,51 @@ const saveCustomerCart = async (
         : billDetail,
   };
 
+  const cartDetailsForPickandCustomCart = {
+    customerId: customer._id,
+    merchantId: merchant?._id || null,
+    deliveryMode,
+    deliveryOption,
+    pickups: [
+      {
+        location: pickupLocation || [], // should be [lat, lng]
+        address: pickupAddress || {},
+        instructionInPickup: instructionInPickup,
+        items: updatedItems,
+      },
+    ],
+    drops: [
+      {
+        location: deliveryLocation || [],
+        address: deliveryAddress || {},
+        instructionInDrop: instructionInDelivery,
+        // If you want drop items, add here:
+        // items: updatedItems,
+      },
+    ],
+    billDetail: { ...billDetail, vehicleType },
+    distance: distance || 0,
+    startDate: scheduledDetails?.startDate,
+    endDate: scheduledDetails?.endDate,
+    time: scheduledDetails?.time,
+    numOfDays: scheduledDetails?.numOfDays,
+  };
+
   if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
+    console.log("CustomerCart updated or created", cartDetails);
     return await CustomerCart.findOneAndUpdate(
       { customerId: customer._id },
       { $set: cartDetails },
       { new: true, upsert: true }
     );
   } else if (["Pick and Drop", "Custom Order"].includes(deliveryMode)) {
+    console.log(
+      "PickAndCustomCart updated or created",
+      cartDetailsForPickandCustomCart
+    );
     return await PickAndCustomCart.findOneAndUpdate(
       { customerId: customer._id },
-      { $set: cartDetails },
+      { $set: cartDetailsForPickandCustomCart },
       { new: true, upsert: true }
     );
   }
@@ -1445,29 +1484,45 @@ const calculateDeliveryTime = (merchant, cartDeliveryMode) => {
 };
 
 const prepareOrderDetails = async (cart, paymentMode) => {
-  const isScheduled = cart.cartDetail.deliveryOption === "Scheduled";
+  const isScheduled =
+    (cart.cartDetail?.deliveryOption || cart.deliveryOption) === "Scheduled";
   if (paymentMode === "Cash-on-delivery" && isScheduled)
     throw new Error("Pay on delivery is not supported for scheduled order");
 
   let formattedItems, purchasedItems;
 
-  if (["Take Away", "Home Delivery"].includes(cart.cartDetail.deliveryMode)) {
+  if (
+    ["Take Away", "Home Delivery"].includes(
+      cart.cartDetail?.deliveryMode || cart.deliveryMode
+    )
+  ) {
     const populatedCartWithVariantNames = await formattedCartItems(cart);
 
-    formattedItems = populatedCartWithVariantNames.items.map((item) => {
-      return {
-        itemName: item.productId.productName,
-        itemImageURL: item.productId.productImageURL,
-        quantity: item.quantity,
-        price: item.price,
-        variantTypeName: item?.variantTypeId?.variantTypeName,
-      };
-    });
+    console.log(
+      "Populated Cart with Variant Names:",
+      populatedCartWithVariantNames
+    );
+
+    const populatedCart = await CustomerCart.findById(cart._id)
+      .populate("items.productId") // <- Ensure productId is populated
+      .populate("items.variantTypeId");
+
+    formattedItems = populatedCartWithVariantNames.items.map((item) => ({
+      itemName: item.productId?.productName || "Unnamed",
+      itemImageURL: item.productId?.productImageURL || null,
+      quantity: item.quantity,
+      price: item.price,
+      variantTypeName: item.variantTypeId?.variantTypeName || null,
+    }));
+
+    console.log("Formatted Items:", formattedItems);
 
     purchasedItems = await filterProductIdAndQuantity(
       populatedCartWithVariantNames.items
     );
   }
+
+  console.log("Purchased Items:", purchasedItems);
 
   const billDetail = {
     ...cart.billDetail,
