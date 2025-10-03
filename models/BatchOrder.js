@@ -36,6 +36,11 @@ const batchOrderSchema = new mongoose.Schema(
     },
     pickupAddress: {
       location: { type: [Number] },
+      status: {
+        type: String,
+        enum: ["Pending", "Accepted", "Started", "Completed", "Cancelled"],
+        default: "Pending",
+      },
       fullName: String,
       phoneNumber: String,
       flat: String,

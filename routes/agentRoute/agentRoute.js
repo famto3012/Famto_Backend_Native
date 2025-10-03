@@ -46,6 +46,7 @@ const {
   getTimeSlotsForAgent,
   chooseTimeSlot,
   getAllAgentTaskController,
+  completeBatchOrderController,
 } = require("../../controllers/agent/agentController");
 const { upload } = require("../../utils/imageOperation");
 const isAuthenticated = require("../../middlewares/isAuthenticated");
@@ -247,6 +248,12 @@ agentRoute.patch(
 );
 
 agentRoute.post("/complete-order", isAuthenticated, completeOrderController);
+
+agentRoute.post(
+  "/complete-batch-order",
+  isAuthenticated,
+  completeBatchOrderController
+);
 
 agentRoute.post(
   "/add-rating-to-customer/:orderId",
