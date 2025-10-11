@@ -969,7 +969,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
                   : false,
               productImageURL: row["Product Image"]?.trim() || "",
               availableQuantity:
-                parseInt(row["Available Quantity"]?.trim()) || 0,
+                parseInt(row["Available quantity"]?.trim()) || 0,
               alert: parseInt(row["Alert"]?.trim()) || 0,
               variants: [], // Initialize empty variants array
             };

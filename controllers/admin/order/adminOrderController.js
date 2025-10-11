@@ -790,58 +790,121 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
 
     let formattedResponse = [];
 
+    console.log("allOrders", allOrders);
+
     allOrders?.forEach((order) => {
-      order.items.forEach((item) => {
-        formattedResponse.push({
-          orderId: order._id,
-          status: order?.status || "-",
-          merchantId: order?.merchantId?._id || "-",
-          merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-          customerName: order?.customerId?.fullName || "-",
-          customerPhoneNumber:
-            order?.orderDetail?.deliveryAddress?.phoneNumber || "-",
-          customerEmail: order?.customerId?.email || "-",
-          agentName: order?.agentId?.fullName || "-",
-          agentPhoneNumber: order?.agentId?.phoneNumber || "-",
-          deliveryMode: order?.orderDetail?.deliveryMode || "-",
-          orderTime:
-            `${formatDate(order?.createdAt)} | ${formatTime(
-              order?.createdAt
-            )}` || "-",
-          deliveryTime:
-            `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
-              order?.orderDetail?.deliveryTime
-            )}` || "-",
-          paymentMode: order?.paymentMode || "-",
-          deliveryOption: order?.orderDetail?.deliveryOption || "-",
-          totalAmount: order?.billDetail?.grandTotal || "-",
-          deliveryAddress:
-            `${order?.orderDetail?.deliveryAddress?.fullName}, ${order?.orderDetail?.deliveryAddress?.flat}, ${order?.orderDetail?.deliveryAddress?.area}, ${order?.orderDetail?.deliveryAddress?.landmark}` ||
-            "-",
-          distanceInKM: order?.orderDetail?.distance || "-",
-          distanceTravelledByAgent:
-            order?.detailAddedByAgent?.distanceCoveredByAgent || "-",
-          agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
-          cancellationReason: order?.cancellationReason || "-",
-          cancellationDescription: order?.cancellationDescription || "-",
-          merchantEarnings: order?.merchantEarnings || "-",
-          famtoEarnings: order?.famtoEarnings || "-",
-          deliveryCharge: order?.billDetail?.deliveryCharge || "-",
-          taxAmount: order?.billDetail?.taxAmount || "-",
-          discountedAmount: order?.billDetail?.discountedAmount || "-",
-          itemTotal: order?.billDetail?.itemTotal || "-",
-          addedTip: order?.billDetail?.addedTip || "-",
-          subTotal: order?.billDetail?.subTotal || "-",
-          surgePrice: order?.billDetail?.surgePrice || "-",
-          transactionId: order?.paymentId || "-",
-          itemName: item?.itemName || "-",
-          quantity: item?.quantity || "-",
-          length: item?.length || "-",
-          width: item?.width || "-",
-          height: item?.height || "-",
+      if (order?.purchasedItems && Array.isArray(order.purchasedItems)) {
+        order.purchasedItems.forEach((item) => {
+          formattedResponse.push({
+            orderId: order._id,
+            status: order?.status || "-",
+            merchantId: order?.merchantId?._id || "-",
+            merchantName:
+              order?.merchantId?.merchantDetail?.merchantName || "-",
+            customerName: order?.customerId?.fullName || "-",
+            customerPhoneNumber: order?.drops[0]?.address?.phoneNumber || "-",
+            // customerEmail: order?.customerId?.email || "-",
+            agentName: order?.agentId?.fullName || "-",
+            agentPhoneNumber: order?.agentId?.phoneNumber || "-",
+            deliveryMode: order?.deliveryMode || "-",
+            orderTime:
+              `${formatDate(order?.createdAt)} | ${formatTime(
+                order?.createdAt
+              )}` || "-",
+            deliveryTime:
+              `${formatDate(order?.deliveryTime)} | ${formatTime(
+                order?.deliveryTime
+              )}` || "-",
+            paymentMode: order?.paymentMode || "-",
+            deliveryOption: order?.deliveryOption || "-",
+            totalAmount: order?.billDetail?.grandTotal || "-",
+            deliveryAddress:
+              `${order?.drops[0]?.address?.fullName || ""}, ${
+                order?.drops[0]?.address?.flat || ""
+              }, ${order?.drops[0]?.address?.area || ""}, ${
+                order?.drops[0]?.address?.landmark || ""
+              }` || "-",
+            distanceInKM: order?.distance || "-",
+            distanceTravelledByAgent: order?.distanceCoveredByAgent || "-",
+            agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
+            cancellationReason: order?.cancellationReason || "-",
+            cancellationDescription: order?.cancellationDescription || "-",
+            merchantEarnings: order?.merchantEarnings || "-",
+            famtoEarnings: order?.famtoEarnings || "-",
+            deliveryCharge: order?.billDetail?.deliveryCharge || "-",
+            taxAmount: order?.billDetail?.taxAmount || "-",
+            discountedAmount: order?.billDetail?.discountedAmount || "-",
+            itemTotal: order?.billDetail?.itemTotal || "-",
+            addedTip: order?.billDetail?.addedTip || "-",
+            subTotal: order?.billDetail?.subTotal || "-",
+            surgePrice: order?.billDetail?.surgePrice || "-",
+            transactionId: order?.paymentId || "-",
+            itemName: item?.itemName || "-",
+            quantity: item?.quantity || "-",
+            length: item?.length || "-",
+            width: item?.width || "-",
+            height: item?.height || "-",
+          });
         });
-      });
+      } else {
+        console.log(
+          `Order ID ${order._id} has no items array or it's not an array.`
+        );
+      }
     });
+
+    // allOrders?.forEach((order) => {
+    //   order.items.forEach((item) => {
+    //     formattedResponse.push({
+    //       orderId: order._id,
+    //       status: order?.status || "-",
+    //       merchantId: order?.merchantId?._id || "-",
+    //       merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
+    //       customerName: order?.customerId?.fullName || "-",
+    //       customerPhoneNumber:
+    //         order?.orderDetail?.deliveryAddress?.phoneNumber || "-",
+    //       customerEmail: order?.customerId?.email || "-",
+    //       agentName: order?.agentId?.fullName || "-",
+    //       agentPhoneNumber: order?.agentId?.phoneNumber || "-",
+    //       deliveryMode: order?.orderDetail?.deliveryMode || "-",
+    //       orderTime:
+    //         `${formatDate(order?.createdAt)} | ${formatTime(
+    //           order?.createdAt
+    //         )}` || "-",
+    //       deliveryTime:
+    //         `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
+    //           order?.orderDetail?.deliveryTime
+    //         )}` || "-",
+    //       paymentMode: order?.paymentMode || "-",
+    //       deliveryOption: order?.orderDetail?.deliveryOption || "-",
+    //       totalAmount: order?.billDetail?.grandTotal || "-",
+    //       deliveryAddress:
+    //         `${order?.orderDetail?.deliveryAddress?.fullName}, ${order?.orderDetail?.deliveryAddress?.flat}, ${order?.orderDetail?.deliveryAddress?.area}, ${order?.orderDetail?.deliveryAddress?.landmark}` ||
+    //         "-",
+    //       distanceInKM: order?.orderDetail?.distance || "-",
+    //       distanceTravelledByAgent:
+    //         order?.detailAddedByAgent?.distanceCoveredByAgent || "-",
+    //       agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
+    //       cancellationReason: order?.cancellationReason || "-",
+    //       cancellationDescription: order?.cancellationDescription || "-",
+    //       merchantEarnings: order?.merchantEarnings || "-",
+    //       famtoEarnings: order?.famtoEarnings || "-",
+    //       deliveryCharge: order?.billDetail?.deliveryCharge || "-",
+    //       taxAmount: order?.billDetail?.taxAmount || "-",
+    //       discountedAmount: order?.billDetail?.discountedAmount || "-",
+    //       itemTotal: order?.billDetail?.itemTotal || "-",
+    //       addedTip: order?.billDetail?.addedTip || "-",
+    //       subTotal: order?.billDetail?.subTotal || "-",
+    //       surgePrice: order?.billDetail?.surgePrice || "-",
+    //       transactionId: order?.paymentId || "-",
+    //       itemName: item?.itemName || "-",
+    //       quantity: item?.quantity || "-",
+    //       length: item?.length || "-",
+    //       width: item?.width || "-",
+    //       height: item?.height || "-",
+    //     });
+    //   });
+    // });
 
     let filePath = path.join(__dirname, "../../../Order_CSV.csv");
 
@@ -1324,12 +1387,17 @@ const downloadOrderBillController = async (req, res, next) => {
       return next(appError("Order not found or no bill details available"));
     }
 
-    const formattedItems = orderFound.items.map((item) => ({
-      itemName: item.itemName,
-      quantity: item.quantity,
-      price: item.price,
-      variantTypeName: item.variantTypeName,
-    }));
+    console.log("orderFound", orderFound);
+
+    // Handle items safely
+    const formattedItems = Array.isArray(orderFound.items)
+      ? orderFound.items.map((item) => ({
+          itemName: item.itemName,
+          quantity: item.quantity,
+          price: item.price,
+          variantTypeName: item.variantTypeName,
+        }))
+      : [];
 
     // Helper function to safely convert to number
     const toNumber = (value) => Number(value) || 0;
@@ -1523,16 +1591,18 @@ const downloadOrderBillController = async (req, res, next) => {
                         }</p>
                     </div>
                     <div style="margin-bottom: -10px;">
-                        <p style="color: #919191;">Phone Number</p>
-                        <p>${orderFound?.merchantId?.merchantName || "-"}</p>
+                        <p style="color: #919191;">Customer Name</p>
+                        <p>${orderFound?.customerId?.fullName || "-"}</p>
                     </div>
                     <div style="margin-bottom: -10px;">
-                        <p style="color: #919191;">Address</p>
+                        <p style="color: #919191;">Phone Number</p>
                         <p>${
-                          orderFound?.merchantId?.merchantDetail
-                            ?.displayAddress || "-"
+                          orderFound?.customerId?.phoneNumber ||
+                          "-"?.displayAddress ||
+                          "-"
                         }</p>
                     </div>
+                    
                 </div>
 
                 <!-- Order Info -->
@@ -1549,11 +1619,11 @@ const downloadOrderBillController = async (req, res, next) => {
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Delivery Mode</p>
-                        <p>${orderFound?.orderDetail?.deliveryMode}</p>
+                        <p>${orderFound?.deliveryMode}</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Delivery Option</p>
-                        <p>${orderFound?.orderDetail?.deliveryOption}</p>
+                        <p>${orderFound?.deliveryOption}</p>
                     </div>
                 </div>
             </div>
@@ -1562,16 +1632,16 @@ const downloadOrderBillController = async (req, res, next) => {
             <table>
                <thead> 
       ${
-        orderFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
-        orderFound?.orderDetail?.deliveryMode === "Custom Order"
+        orderFound?.deliveryMode === "Pick and Drop" ||
+        orderFound?.deliveryMode === "Custom Order"
           ? `<th colspan="3">Item</th><th>Price</th>`
           : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
       }  
             </thead>   
                 <tbody>
                  ${
-                   orderFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
-                   orderFound?.orderDetail?.deliveryMode === "Custom Order"
+                   orderFound?.deliveryMode === "Pick and Drop" ||
+                   orderFound?.deliveryMode === "Custom Order"
                      ? ``
                      : `  ${formattedItems?.map((item) => {
                          let price = item?.quantity * item?.price;
@@ -2404,8 +2474,8 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       orderStatus: orderFound.status || "-",
       paymentStatus: orderFound.paymentStatus || "-",
       paymentMode: orderFound.paymentMode || "-",
-      deliveryMode: orderDetail?.deliveryMode || "-",
-      deliveryOption: orderDetail?.deliveryOption || "-",
+      deliveryMode: orderFound?.deliveryMode || "-",
+      deliveryOption: orderFound?.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
         orderFound.startDate
       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
@@ -2414,7 +2484,80 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
         orderFound.time
       )}`,
-      customerDetail,
+      customerDetail: {
+        _id: orderFound.customerId._id,
+        name:
+          orderFound.customerId.fullName ||
+          orderFound.pickups[0]?.address?.fullName ||
+          "-",
+        email: orderFound.customerId.email || "-",
+        phone: orderFound.customerId.phoneNumber || "-",
+        pickAddress:
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+
+        dropAddress:
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+        pickInstructions:
+          orderFound.pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDelivery || null,
+            voiceInstruction: instruction?.voiceInstructionInDelivery || null,
+          })) || [],
+        ratingsToDeliveryAgent: {
+          rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
+          review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
+        },
+        ratingsByDeliveryAgent: {
+          rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
+          review: orderFound?.orderRating?.ratingByDeliveryAgent?.review || "-",
+        },
+      },
       merchantDetail,
       detailAddedByAgent,
       deliveryAgentDetail: {

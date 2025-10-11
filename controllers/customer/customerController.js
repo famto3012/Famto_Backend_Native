@@ -82,7 +82,7 @@ const registerAndLoginController = async (req, res, next) => {
         },
       });
     } else {
-      customer.lastPlatformUsed = platform ? platform : "Not recognized";
+      customer.lastPlatformUsed = platform ? platform : "Web";
 
       customer.customerDetails = {
         ...customer.customerDetails,
@@ -823,7 +823,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
     if (!orderFound) return next(appError("Order not found", 404));
 
     let showBill = true;
-    if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+    if (orderFound?.deliveryMode === "Custom Order") {
       const task = await Task.findOne({ orderId }).select("deliveryDetail");
 
       showBill = false;
@@ -850,18 +850,18 @@ const getSingleOrderDetailController = async (req, res, next) => {
       merchantName:
         orderFound?.merchantId?.merchantDetail?.merchantName || null,
       merchantPhone: orderFound?.merchantId?.phoneNumber || null,
-      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
+      deliveryTime: formatTime(orderFound?.deliveryTime),
       paymentStatus: orderFound?.paymentStatus || null,
       pickUpAddress:
-        orderFound?.orderDetail?.pickupAddress ||
-        orderFound?.orderDetail?.pickupLocation ||
+        orderFound?.pickups?.[0]?.address?.flat ||
+        orderFound?.orderDetail?.area ||
         null,
       deliveryAddress:
-        orderFound?.orderDetail?.deliveryAddress ||
-        orderFound?.orderDetail?.deliveryLocation ||
+        orderFound?.drops?.[0]?.address?.flat ||
+        orderFound?.drops?.[0]?.address?.area ||
         null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+      pickUpLocation: orderFound?.pickups?.[0]?.address?.area || null,
+      deliveryLocation: orderFound?.drops?.[0]?.address?.area || null,
       items: orderFound?.items || null,
       billDetail: showBill
         ? {
@@ -880,7 +880,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
       orderDate: formatDate(orderFound?.createdAt),
       orderTime: formatTime(orderFound?.createdAt),
       paymentMode: orderFound?.paymentMode || null,
-      deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
+      deliveryMode: orderFound?.deliveryMode || null,
       vehicleType: orderFound?.billDetail?.vehicleType || null,
       orderDetailStepper: orderFound?.orderDetailStepper || null,
       detailAddedByAgent: {
