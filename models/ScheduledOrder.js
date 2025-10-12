@@ -176,7 +176,7 @@ const scheduledOrderSchema = mongoose.Schema(
     paymentMode: {
       type: String,
       required: true,
-      enum: ["Famto-cash", "Online-payment"],
+      enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
     },
     paymentStatus: {
       type: String,

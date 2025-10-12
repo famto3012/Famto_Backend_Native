@@ -1270,6 +1270,8 @@ const downloadOrderBillController = async (req, res, next) => {
       return next(appError("Order not found or no bill details available"));
     }
 
+    console.log(orderFound);
+
     const formattedItems = orderFound.items.map((item) => ({
       itemName: item.itemName,
       quantity: item.quantity,
@@ -1469,14 +1471,13 @@ const downloadOrderBillController = async (req, res, next) => {
                         }</p>
                     </div>
                     <div style="margin-bottom: -10px;">
-                        <p style="color: #919191;">Phone Number</p>
-                        <p>${orderFound?.merchantId?.merchantName || "-"}</p>
+                        <p style="color: #919191;">Customer Name</p>
+                        <p>${orderFound?.customerId?.fullName || "-"}</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Address</p>
                         <p>${
-                          orderFound?.merchantId?.merchantDetail
-                            ?.displayAddress || "-"
+                          orderFound?.orderDetail?.deliveryAddress?.area || "-"
                         }</p>
                     </div>
                 </div>
