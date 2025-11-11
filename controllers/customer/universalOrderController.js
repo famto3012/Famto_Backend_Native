@@ -2494,6 +2494,22 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             return;
           }
 
+
+          const fixedPurchasedItems = Array.isArray(storedOrderData.purchasedItems)
+  ? storedOrderData.purchasedItems.map(item => ({
+      ...item,
+      // only extract the ObjectId if variantId is an object
+      variantId:
+        typeof item.variantId === "object" && item.variantId !== null
+          ? item.variantId.id || null
+          : item.variantId || null,
+      productId:
+        typeof item.productId === "object" && item.productId !== null
+          ? item.productId._id || item.productId.id || item.productId
+          : item.productId,
+    }))
+  : [];
+
           console.log("🧱 Creating final order from temporary data...");
           let newOrderCreated = await Order.create({
             customerId: storedOrderData.customerId,
@@ -2506,7 +2522,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             paymentMode: storedOrderData.paymentMode,
             paymentStatus: storedOrderData.paymentStatus,
             paymentId: storedOrderData.paymentId,
-            purchasedItems: storedOrderData.purchasedItems,
+            purchasedItems: fixedPurchasedItems,
             "orderDetailStepper.created": {
               by:
                 storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
