@@ -20,7 +20,7 @@ const cartItemSchema = mongoose.Schema(
   { _id: false }
 );
 
-const detailSchema = new mongoose.Schema(
+const pickupDetailSchema = new mongoose.Schema(
   {
     location: { type: [Number] },
     address: {
@@ -35,6 +35,55 @@ const detailSchema = new mongoose.Schema(
     items: [cartItemSchema],
   },
   { _id: false }
+);
+
+const dropDetailSchema = new mongoose.Schema(
+  {
+    location: { type: [Number] },
+    address: {
+      fullName: String,
+      phoneNumber: String,
+      flat: String,
+      area: String,
+      landmark: String,
+    },
+    instructionInDrop: { type: String, default: null },
+    voiceInstructionInDrop: { type: String, default: null },
+    items: [cartItemSchema],
+  },
+  { _id: false }
+);
+
+const purchasedItemsSchema = mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    price: {
+      type: Number,
+      default: null,
+    },
+    productName: {
+      type: String,
+      required: false,
+    },
+    costPrice: {
+      type: Number,
+      default: null,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+    },
+  },
+  {
+    _id: false,
+  }
 );
 
 const billSchema = mongoose.Schema(
@@ -72,8 +121,8 @@ const tempOrderSchema = new mongoose.Schema(
       required: true,
     },
 
-    pickups: [detailSchema],
-    drops: [detailSchema],
+    pickups: [pickupDetailSchema],
+    drops: [dropDetailSchema],
 
     billDetail: billSchema,
     distance: { type: Number, default: 0 },
@@ -97,6 +146,7 @@ const tempOrderSchema = new mongoose.Schema(
       default: "Pending",
     },
     paymentId: { type: String, default: null },
+    purchasedItems : [purchasedItemsSchema]
   },
   { timestamps: true }
 );

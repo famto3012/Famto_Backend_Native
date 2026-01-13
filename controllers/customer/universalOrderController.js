@@ -1398,10 +1398,15 @@ const confirmOrderDetailController = async (req, res, next) => {
       next
     );
 
+    console.log(req.body);
+    console.log(ifScheduled?.startDate);
+
     let deliveryOption = "On-demand";
     if (ifScheduled?.startDate && ifScheduled?.endDate && ifScheduled?.time) {
       deliveryOption = "Scheduled";
     }
+
+    console.log(deliveryOption);
 
     validateDeliveryOption(merchant, deliveryOption, next);
 
@@ -1688,8 +1693,8 @@ const orderPaymentController = async (req, res, next) => {
       {
         location: cart.cartDetail.deliveryLocation,
         address: cart.cartDetail.deliveryAddress,
-        instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
-        voiceInstructionInDelivery:
+        instructionInDrop: cart.cartDetail.instructionToDeliveryAgent,
+        voiceInstructionInDrop:
           cart.cartDetail.voiceInstructionToDeliveryAgent,
         items: cart.items?.map((item) => ({
           itemName: item.productId.productName,
@@ -1721,6 +1726,8 @@ const orderPaymentController = async (req, res, next) => {
           orderDetail: cart.cartDetail,
           billDetail: orderBill,
           totalAmount: orderAmount,
+          deliveryMode: cart.cartDetail.deliveryMode,
+          deliveryOption : cart.cartDetail.deliveryOption,
           status: "Pending",
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
@@ -1729,6 +1736,8 @@ const orderPaymentController = async (req, res, next) => {
           time: cart.cartDetail.time,
           purchasedItems,
         });
+
+        console.log("Scheduled Order Created", newOrderCreated);
 
         walletTransaction.orderId = newOrderCreated._id;
 
@@ -1744,11 +1753,9 @@ const orderPaymentController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Scheduled order (#${
-              newOrderCreated._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Scheduled order (#${newOrderCreated._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
         ]);
 
@@ -1784,7 +1791,7 @@ const orderPaymentController = async (req, res, next) => {
             newOrder?.orderDetail?.deliveryAddress?.fullName ||
             newOrder?.customerId?.fullName ||
             "-",
-          deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          deliveryMode: newOrder?.deliveryMode,
           orderDate: formatDate(newOrder.createdAt),
           orderTime: formatTime(newOrder.createdAt),
           deliveryDate: newOrder?.orderDetail?.deliveryTime
@@ -1794,7 +1801,7 @@ const orderPaymentController = async (req, res, next) => {
             ? formatTime(newOrder.orderDetail.deliveryTime)
             : "-",
           paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.orderDetail.deliveryOption,
+          deliveryOption: newOrder?.deliveryOption,
           amount: newOrder.billDetail.grandTotal,
         };
 
@@ -1810,7 +1817,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId: newOrder._id,
           createdAt: newOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
-          deliveryMode: newOrder.orderDetail.deliveryMode,
+          deliveryMode: newOrder.deliveryMode,
         });
 
         // Send notifications to each role dynamically
@@ -1874,7 +1881,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
-          deliveryMode: tempOrder.orderDetail.deliveryMode,
+          deliveryMode: tempOrder.deliveryMode,
         });
 
         // After 60 seconds, create the order if not canceled
@@ -1885,7 +1892,8 @@ const orderPaymentController = async (req, res, next) => {
             let newOrderCreated = await Order.create({
               customerId: storedOrderData.customerId,
               merchantId: storedOrderData.merchantId,
-              pickupDropDetails: storedOrderData.pickupDropDetails,
+              pickups: storedOrderData.pickups,
+              drops: storedOrderData.drops,
               billDetail: storedOrderData.billDetail,
               distance: storedOrderData.distance,
               deliveryTime: storedOrderData.deliveryTime,
@@ -1893,6 +1901,8 @@ const orderPaymentController = async (req, res, next) => {
               endDate: storedOrderData.endDate,
               time: storedOrderData.time,
               numOfDays: storedOrderData.numOfDays,
+              deliveryMode: storedOrderData.deliveryMode,
+              deliveryOption: storedOrderData.deliveryOption,
               totalAmount: storedOrderData.totalAmount,
               status: storedOrderData.status,
               paymentMode: storedOrderData.paymentMode,
@@ -1932,11 +1942,9 @@ const orderPaymentController = async (req, res, next) => {
               ActivityLog.create({
                 userId: req.userAuth,
                 userType: req.userRole,
-                description: `Order (#${
-                  newOrderCreated._id
-                }) from customer app by ${req?.userName || "N/A"} ( ${
-                  req.userAuth
-                } )`,
+                description: `Order (#${newOrderCreated._id
+                  }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                  } )`,
               }),
             ]);
 
@@ -1965,7 +1973,7 @@ const orderPaymentController = async (req, res, next) => {
               merchantName:
                 newOrder?.merchantId?.merchantDetail?.merchantName || "-",
               customerName:
-                newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+                newOrder?.drops[0]?.deliveryAddress
                   ?.fullName ||
                 newOrder?.customerId?.fullName ||
                 "-",
@@ -2019,7 +2027,8 @@ const orderPaymentController = async (req, res, next) => {
         merchantId: cart.merchantId,
         deliveryMode: cart.cartDetail.deliveryMode,
         deliveryOption: cart.cartDetail.deliveryOption,
-        pickupDropDetails,
+        pickups,
+        drops,
         billDetail: orderBill,
         distance: cart.cartDetail.distance,
         deliveryTime,
@@ -2053,18 +2062,28 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
-        deliveryMode: tempOrder.orderDetail.deliveryMode,
+        deliveryMode: tempOrder.deliveryMode,
       });
 
       // After 60 seconds, create the order if not canceled
       setTimeout(async () => {
+        console.log('⏱️ setTimeout triggered for orderId:', orderId);
+
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
+
+        console.log('Stored temp order:', storedOrderData?._id);
+
+        if (!storedOrderData) {
+          console.log('⚠️ Temporary order not found, probably cancelled');
+          return;
+        }
 
         if (storedOrderData) {
           let newOrderCreated = await Order.create({
             customerId: storedOrderData.customerId,
             merchantId: storedOrderData.merchantId,
-            pickupDropDetails: storedOrderData.pickupDropDetails,
+            pickups: storedOrderData.pickups,
+            drops: storedOrderData.drops,
             billDetail: storedOrderData.billDetail,
             distance: storedOrderData.distance,
             deliveryTime: storedOrderData.deliveryTime,
@@ -2072,7 +2091,9 @@ const orderPaymentController = async (req, res, next) => {
             endDate: storedOrderData.endDate,
             time: storedOrderData.time,
             numOfDays: storedOrderData.numOfDays,
+            deliveryMode: storedOrderData.deliveryMode,
             totalAmount: storedOrderData.totalAmount,
+            deliveryOption: storedOrderData.deliveryOption,
             status: storedOrderData.status,
             paymentMode: storedOrderData.paymentMode,
             paymentStatus: storedOrderData.paymentStatus,
@@ -2105,11 +2126,9 @@ const orderPaymentController = async (req, res, next) => {
             ActivityLog.create({
               userId: req.userAuth,
               userType: req.userRole,
-              description: `Order (#${
-                newOrderCreated._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${
-                req.userAuth
-              } )`,
+              description: `Order (#${newOrderCreated._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                } )`,
             }),
           ]);
 
@@ -2137,7 +2156,7 @@ const orderPaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+              newOrder?.drops[0]?.address
                 ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
@@ -2318,28 +2337,29 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       10
     );
 
-    const pickupDropDetails = [
+
+     const pickups = [
       {
-        pickups: [
-          {
-            pickupLocation: cart.cartDetail.pickupLocation,
-            pickupAddress: cart.cartDetail.pickupAddress,
-            instructionInPickup: cart.cartDetail.instructionToMerchant,
-            voiceInstructionInPickup:
-              cart.cartDetail.voiceInstructionToMerchant,
-            items: [],
-          },
-        ],
-        drops: [
-          {
-            deliveryLocation: cart.cartDetail.deliveryLocation,
-            deliveryAddress: cart.cartDetail.deliveryAddress,
-            instructionInDelivery: cart.cartDetail.instructionToDeliveryAgent,
-            voiceInstructionInDelivery:
-              cart.cartDetail.voiceInstructionToDeliveryAgent,
-            items: cart.items,
-          },
-        ],
+        location: cart.cartDetail.pickupLocation,
+        address: cart.cartDetail.pickupAddress,
+        instructionInPickup: cart.cartDetail.instructionToMerchant,
+        voiceInstructionInPickup: cart.cartDetail.voiceInstructionToMerchant,
+        items: [],
+      },
+    ];
+    const drops = [
+      {
+        location: cart.cartDetail.deliveryLocation,
+        address: cart.cartDetail.deliveryAddress,
+        instructionInDrop: cart.cartDetail.instructionToDeliveryAgent,
+        voiceInstructionInDrop:
+          cart.cartDetail.voiceInstructionToDeliveryAgent,
+        items: cart.items?.map((item) => ({
+          itemName: item.productId.productName,
+          quantity: item.quantity,
+          price: item.price,
+          variantTypeId: item.variantTypeId,
+        })),
       },
     ];
 
@@ -2356,6 +2376,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         items: formattedItems,
         orderDetail: cart.cartDetail,
         billDetail: orderBill,
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
         totalAmount: orderAmount,
         status: "Pending",
         paymentMode: "Online-payment",
@@ -2378,11 +2400,9 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
-          description: `Scheduled order (#${
-            newOrderCreated._id
-          }) from customer app by ${req?.userName || "N/A"} ( ${
-            req.userAuth
-          } )`,
+          description: `Scheduled order (#${newOrderCreated._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+            } )`,
         }),
       ]);
 
@@ -2459,6 +2479,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       // Generate a unique order ID
       const orderId = new mongoose.Types.ObjectId();
 
+      console.log("Initalizing temporary cart");
+
       // Store order details temporarily in the database
       const tempOrder = await TemporaryOrder.create({
         orderId,
@@ -2466,7 +2488,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         merchantId: cart.merchantId,
         deliveryMode: cart.cartDetail.deliveryMode,
         deliveryOption: cart.cartDetail.deliveryOption,
-        pickupDropDetails,
+        pickups,
+        drops,
         billDetail: orderBill,
         distance: cart.cartDetail.distance,
         deliveryTime,
@@ -2475,12 +2498,13 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         time: cart.cartDetail.time,
         numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
-        paymentMode: "Cash-on-delivery",
+        paymentMode: "Online-payment",
         paymentStatus: "Pending",
         purchasedItems,
       });
 
       if (!tempOrder) {
+        console.log("Error in creating temporary order");
         return next(appError("Error in creating temporary order"));
       }
 
@@ -2499,29 +2523,38 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
-        deliveryMode: tempOrder.orderDetail.deliveryMode,
+        deliveryMode: tempOrder.deliveryMode,
       });
+
+      console.log("Temporay Order Created");
 
       // After 60 seconds, create the order if not canceled
       setTimeout(async () => {
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
+
+        console.log("Stored order data",storedOrderData);
 
         if (storedOrderData) {
           const existingOrder = await Order.findOne({
             _id: storedOrderData.orderId,
           });
 
+          console.log("Temporary order fetched",existingOrder);
+
           if (existingOrder) return;
 
           let newOrderCreated = await Order.create({
             customerId: storedOrderData.customerId,
             merchantId: storedOrderData.merchantId,
-            pickupDropDetails: storedOrderData.pickupDropDetails,
+            pickups: storedOrderData.pickups,
+            drops: storedOrderData.drops,
             billDetail: storedOrderData.billDetail,
             distance: storedOrderData.distance,
             deliveryTime: storedOrderData.deliveryTime,
             startDate: storedOrderData.startDate,
             endDate: storedOrderData.endDate,
+            deliveryMode: storedOrderData.deliveryMode,
+            deliveryOption : storedOrderData.deliveryOption,
             time: storedOrderData.time,
             numOfDays: storedOrderData.numOfDays,
             totalAmount: storedOrderData.totalAmount,
@@ -2537,6 +2570,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
           });
 
           if (!newOrderCreated) {
+            console.log("Error in creating new Order",newOrderCreated);
             return next(appError("Error in creating order"));
           }
 
@@ -2557,11 +2591,9 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             ActivityLog.create({
               userId: req.userAuth,
               userType: req.userRole,
-              description: `Order (#${
-                newOrderCreated._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${
-                req.userAuth
-              } )`,
+              description: `Order (#${newOrderCreated._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                } )`,
             }),
           ]);
 
@@ -2590,7 +2622,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.pickupDropDetails[0]?.drops[0]?.deliveryAddress
+              newOrder?.drops[0]?.deliveryAddress
                 ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
@@ -2768,9 +2800,9 @@ const getOrderTrackingDetail = async (req, res, next) => {
       },
       inTransit:
         task.pickupDetail.pickupStatus === "Started" ||
-        task.pickupDetail.pickupStatus === "Completed" ||
-        task.deliveryDetail.deliveryStatus === "Started" ||
-        task.deliveryDetail.deliveryStatus === "Completed"
+          task.pickupDetail.pickupStatus === "Completed" ||
+          task.deliveryDetail.deliveryStatus === "Started" ||
+          task.deliveryDetail.deliveryStatus === "Completed"
           ? true
           : false,
       completeStatus: order.status === "Completed" ? true : false,

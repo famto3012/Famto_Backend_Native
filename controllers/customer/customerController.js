@@ -781,22 +781,28 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
       scheduledPickAndCustom.find({ customerId }),
     ]);
 
+    console.log("Initalizing all orders");
+
     const allOrders = [...universalOrders, ...pickAndCustomOrders].sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
+
+    console.log("All Orders",allOrders);
 
     const formattedResponse = allOrders?.map((order) => ({
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
       displayAddress: order?.merchantId?.merchantDetail?.displayAddress || null,
-      deliveryMode: order.orderDetail.deliveryMode || null,
+      deliveryMode: order.deliveryMode || null,
       startDate: formatDate(order?.startDate),
       endDate: formatDate(order?.endDate),
       time: formatTime(order.time) || null,
-      numberOfDays: order?.orderDetail?.numOfDays || null,
+      numberOfDays: order?.numOfDays || null,
       grandTotal: order.billDetail.grandTotal || null,
       orderStatus: order?.status,
     }));
+
+    console.log("Formatted Response",formattedResponse);
 
     res.status(200).json({ data: formattedResponse });
   } catch (err) {
@@ -817,7 +823,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status"
+        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status deliveryMode pickups drops purchasedItems"
       );
 
     if (!orderFound) return next(appError("Order not found", 404));
@@ -838,6 +844,8 @@ const getSingleOrderDetailController = async (req, res, next) => {
       }
     }
 
+    console.log("Order Response",orderFound);
+
     // Construct the response object
     const formattedResponse = {
       orderId: orderFound?._id,
@@ -852,17 +860,19 @@ const getSingleOrderDetailController = async (req, res, next) => {
       merchantPhone: orderFound?.merchantId?.phoneNumber || null,
       deliveryTime: formatTime(orderFound?.deliveryTime),
       paymentStatus: orderFound?.paymentStatus || null,
-      pickUpAddress:
-        orderFound?.pickups?.[0]?.address?.flat ||
-        orderFound?.orderDetail?.area ||
-        null,
-      deliveryAddress:
-        orderFound?.drops?.[0]?.address?.flat ||
-        orderFound?.drops?.[0]?.address?.area ||
-        null,
+      // pickUpAddress:
+      //   orderFound?.pickups?.[0]?.address?.flat ||
+      //   orderFound?.orderDetail?.area ||
+      //   null,  
+    pickUpAddress: orderFound?.pickups?.[0]?.address || null,
+    deliveryAddress: orderFound?.drops?.[0]?.address || null,
+    // deliveryAddress:
+      //   orderFound?.drops?.[0]?.address?.flat ||
+      //   orderFound?.drops?.[0]?.address?.area ||
+      //   null,
       pickUpLocation: orderFound?.pickups?.[0]?.address?.area || null,
       deliveryLocation: orderFound?.drops?.[0]?.address?.area || null,
-      items: orderFound?.items || null,
+      items: orderFound?.purchasedItems || null,
       billDetail: showBill
         ? {
             deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
@@ -917,9 +927,9 @@ const getScheduledOrderDetailController = async (req, res, next) => {
 
     const formattedResponse = {
       orderId: orderFound._id,
-      pickUpAddress: orderFound?.orderDetail?.pickupAddress || null,
-      deliveryAddress: orderFound?.orderDetail?.deliveryAddress || null,
-      items: orderFound?.items || null,
+      pickUpAddress: orderFound?.pickups?.[0]?.address || null,
+      deliveryAddress: orderFound?.drops?.[0]?.address || null,
+      items: orderFound?.purchasedItems || null,
       billDetail: {
         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
         taxAmount: orderFound?.billDetail?.taxAmount || null,
@@ -935,13 +945,13 @@ const getScheduledOrderDetailController = async (req, res, next) => {
       orderDate: formatDate(orderFound?.createdAt),
       orderTime: formatTime(orderFound?.createdAt),
       paymentMode: orderFound?.paymentMode || null,
-      deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
+      deliveryMode: orderFound?.deliveryMode || null,
       vehicleType: orderFound?.billDetail?.vehicleType || null,
       startDate: formatDate(orderFound?.startDate),
       endDate: formatDate(orderFound?.endDate),
       time: formatTime(orderFound.time) || null,
-      numberOfDays: orderFound?.orderDetail?.numOfDays || null,
-      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
+      numberOfDays: orderFound?.numOfDays || null,
+      deliveryTime: formatTime(orderFound?.deliveryTime),
     };
 
     res.status(200).json(formattedResponse);

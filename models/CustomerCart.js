@@ -12,8 +12,8 @@ const cartItemSchema = mongoose.Schema(
       required: true,
     },
     itemName: {
-      type: Number,
-      required: true,
+      type: String,
+      required: false,
     },
     price: {
       type: Number,
@@ -84,22 +84,18 @@ const cartDetailSchema = mongoose.Schema(
     startDate: {
       type: Date,
       default: null,
-      required: true,
     },
     endDate: {
       type: Date,
       default: null,
-      required: true,
     },
     time: {
       type: Date,
       default: null,
-      required: true,
     },
     numOfDays: {
       type: Number,
       default: null,
-      required: true,
     },
   },
   {

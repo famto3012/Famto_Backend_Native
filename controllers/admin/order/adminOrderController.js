@@ -689,8 +689,8 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           })) || [],
         dropInstructions:
           orderFound.drops?.map((instruction) => ({
-            instruction: instruction?.instructionInDelivery || null,
-            voiceInstruction: instruction?.voiceInstructionInDelivery || null,
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
           })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
@@ -1944,7 +1944,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       vehicleType,
       customPickupLocation,
       instructionInPickup = "",
-      instructionInDelivery = "",
+      instructionInDrop = "",
       // For all orders (Optional)
       addedTip = 0,
     } = req.body;
@@ -2073,7 +2073,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       instructionToMerchant,
       instructionToDeliveryAgent,
       instructionInPickup,
-      instructionInDelivery
+      instructionInDrop
     );
 
     console.log("Cart created successfully:", cart);
@@ -2546,8 +2546,8 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
           })) || [],
         dropInstructions:
           orderFound.drops?.map((instruction) => ({
-            instruction: instruction?.instructionInDelivery || null,
-            voiceInstruction: instruction?.voiceInstructionInDelivery || null,
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
           })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
@@ -2718,6 +2718,7 @@ const createOrderByAdminController = async (req, res, next) => {
     let newOrderCreated;
     let OrderModelToUse;
     if (isScheduledOrder && !isPickOrCustomOrder) {
+       console.log("Creating Scheduled Pick and Custom Order", orderOptions);
       newOrderCreated = await ScheduledOrder.create({
         ...orderOptions,
         startDate: cartFound.cartDetail.startDate,
