@@ -11,7 +11,7 @@ const cartItemSchema = mongoose.Schema(
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     unit: { type: String, default: null },
-    weight: { type: Number, default: 1 },
+    weight: { type: Number, default: null },
     numOfUnits: { type: Number, default: null },
     quantity: { type: Number, default: null },
     itemImageURL: { type: String, default: null },
@@ -102,6 +102,9 @@ const pickAndCustomCartSchema = mongoose.Schema(
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },
     numOfDays: { type: Number, default: null },
+    purchasedItems : [cartItemSchema],
+    weight : { type: Number, default: null },
+  
   },
   {
     timestamps: true,

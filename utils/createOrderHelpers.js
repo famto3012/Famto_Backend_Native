@@ -1439,6 +1439,7 @@ const saveCustomerCart = async (
     endDate: scheduledDetails?.endDate,
     time: scheduledDetails?.time,
     numOfDays: scheduledDetails?.numOfDays,
+    purchasedItems : updatedItems,
   };
 
   if (["Take Away", "Home Delivery"].includes(deliveryMode)) {

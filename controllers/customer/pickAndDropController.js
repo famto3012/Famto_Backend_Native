@@ -1253,6 +1253,8 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const pickups = parsedData.pickups;
     const drops = parsedData.drops;
+    const purchasedItems = parsedData.purchasedItems;
+    const weight = parsedData.weight;
 
     console.log("pickups, drops", pickups, drops);
 
@@ -1301,8 +1303,10 @@ const addPickUpAddressController = async (req, res, next) => {
         deliveryOption: "On-demand",
         pickups,
         drops,
+        purchasedItems,
         distance: distanceInKM,
         duration,
+        weight,
       },
       {
         new: true,
@@ -1359,10 +1363,18 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     const items = getCartItems(cartFound);
 
-    const totalItemWeight = items.reduce((total, item) => {
+    let totalItemWeight;
+
+    if(cartFound.weight != null) {
+      console.log("Weight", {cartFound});
+totalItemWeight = cartFound.weight;
+    } else {
+
+    totalItemWeight = items.reduce((total, item) => {
       const weight = (item.weight || 1) * (item.quantity || 1);
       return total + weight;
     }, 0);
+  }
 
     const agents = await Agent.find({}).select("vehicleDetail");
     const vehicleTypes = agents.flatMap((agent) =>
@@ -2321,6 +2333,7 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
 
 const getCartItems = (cart) => {
   let items = [];
+
 
   cart.pickups.forEach((pickup) => {
     pickup.items.forEach((pickupItem) => {

@@ -2699,7 +2699,9 @@ const createOrderByAdminController = async (req, res, next) => {
       paymentMode,
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
-      purchasedItems: orderDetails.purchasedItems,
+      purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.pickups[0].items,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
         date: new Date(),
