@@ -1536,6 +1536,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       deliveryOption: customerCart.cartDetail.deliveryOption,
     });
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };
@@ -2692,7 +2693,7 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
 
     if (orderFound.paymentMode === "Famto-cash") {
       const orderAmount = orderFound.billDetail.grandTotal;
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
@@ -2718,12 +2719,12 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
       const paymentId = orderFound.paymentId;
 
       let refundAmount;
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         refundAmount = orderFound.billDetail.grandTotal;
         updatedTransactionDetail.transactionAmount = refundAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         refundAmount =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         updatedTransactionDetail.transactionAmount = refundAmount;
       }
 
@@ -2904,12 +2905,13 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
     const formattedResponse = latestOrder?.map((order) => ({
       _id: order._id,
       orderId: order.orderId,
-      deliveryMode: order.orderDetail.deliveryMode,
+      deliveryMode: order.deliveryMode,
       createdAt: order.createdAt,
     }));
 
     res.status(200).json(formattedResponse);
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };

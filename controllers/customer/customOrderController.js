@@ -393,11 +393,11 @@ const addDeliveryAddressController = async (req, res, next) => {
     let deliveryLocation = [];
 
     const havePickupLocation =
-      cartFound?.pickupDropDetails[0]?.pickups[0]?.pickupLocation?.length === 2;
+      cartFound?.pickups[0]?.pickupLocation?.length === 2;
 
     if (havePickupLocation) {
       pickupLocation =
-        cartFound?.pickupDropDetails[0]?.pickups[0]?.pickupLocation;
+        cartFound?.pickups[0]?.pickupLocation;
       deliveryLocation = deliveryCoordinates;
 
       const { distanceInKM, durationInMinutes } =
@@ -423,14 +423,14 @@ const addDeliveryAddressController = async (req, res, next) => {
 
     let detail = {
       deliveryOption: "On-demand",
-      pickups: [...cartFound?.pickupDropDetails[0]?.pickups],
+      pickups: [...cartFound?.pickups],
       drops: [
         {
           location: deliveryLocation,
           address: deliveryAddress,
           instructionInDelivery,
           voiceInstructionInDelivery: voiceInstructionToAgentURL,
-          items: [...cartFound?.pickupDropDetails[0]?.drops[0].items],
+          items: [...cartFound?.drops[0].items],
         },
       ],
       distance,
@@ -509,7 +509,7 @@ const getCustomCartBill = async (req, res, next) => {
     }
 
     const havePickupLocation =
-      cart?.pickupDropDetails[0]?.pickups[0]?.pickupLocation?.length === 2;
+      cart?.pickups[0]?.pickupLocation?.length === 2;
 
     const billDetail = {
       deliveryCharge: havePickupLocation
@@ -633,7 +633,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       success: true,
       orderId,
       createdAt: tempOrder.createdAt,
-      deliveryMode: tempOrder.orderDetail.deliveryMode,
+      deliveryMode: tempOrder.deliveryMode,
     });
 
     // After 60 seconds, create the order if it is not cancelled
@@ -748,6 +748,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       }
     }, 60000);
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };
