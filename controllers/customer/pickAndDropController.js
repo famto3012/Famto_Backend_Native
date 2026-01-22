@@ -1365,16 +1365,15 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
 
     let totalItemWeight;
 
-    if(cartFound.weight != null) {
-      console.log("Weight", {cartFound});
-totalItemWeight = cartFound.weight;
+    if (cartFound.weight != null) {
+      console.log("Weight", { cartFound });
+      totalItemWeight = cartFound.weight;
     } else {
-
-    totalItemWeight = items.reduce((total, item) => {
-      const weight = (item.weight || 1) * (item.quantity || 1);
-      return total + weight;
-    }, 0);
-  }
+      totalItemWeight = items.reduce((total, item) => {
+        const weight = (item.weight || 1) * (item.quantity || 1);
+        return total + weight;
+      }, 0);
+    }
 
     const agents = await Agent.find({}).select("vehicleDetail");
     const vehicleTypes = agents.flatMap((agent) =>
@@ -1645,11 +1644,9 @@ const confirmPickAndDropController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Scheduled Pick & Drop (#${
-              newOrder._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Scheduled Pick & Drop (#${newOrder._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
           PromoCode.findOneAndUpdate(
             { promoCode: newOrder.billDetail.promoCodeUsed },
@@ -1826,11 +1823,9 @@ const confirmPickAndDropController = async (req, res, next) => {
             ActivityLog.create({
               userId: req.userAuth,
               userType: req.userRole,
-              description: `Pick & Drop Order (#${
-                newOrder._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${
-                req.userAuth
-              } )`,
+              description: `Pick & Drop Order (#${newOrder._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                } )`,
             }),
           ]);
 
@@ -1928,6 +1923,8 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       return next(appError("Cart not found", 404));
     }
 
+console.log("Payment Details",paymentDetails);
+
     const isPaymentValid = await verifyPayment(paymentDetails);
     if (!isPaymentValid) {
       return next(appError("Invalid payment", 400));
@@ -1952,6 +1949,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       addedTip: cart.billDetail.addedTip,
     };
 
+   const deliveryTime = new Date();
+      deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
+
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
@@ -1960,8 +1960,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       type: "Debit",
     };
 
+
     let newOrder;
-    if (cart.cartDetail.deliveryOption === "Scheduled") {
+    if (cart.deliveryOption === "Scheduled") {
       // Create scheduled Pick and Drop
       newOrder = await ScheduledPickAndCustom.create({
         customerId,
@@ -1984,11 +1985,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
-          description: `Scheduled Pick & Drop Order (#${
-            newOrder._id
-          }) from customer app by ${req?.userName || "N/A"} ( ${
-            req.userAuth
-          } )`,
+          description: `Scheduled Pick & Drop Order (#${newOrder._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+            } )`,
         }),
         PromoCode.findOneAndUpdate(
           { promoCode: newOrder.billDetail.promoCodeUsed },
@@ -2008,34 +2007,66 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         },
       };
 
-      const socketData = {
-        ...data,
+   const socketData = {
+            ...data,
 
-        orderId: newOrder._id,
-        orderDetail: newOrder.orderDetail,
-        billDetail: newOrder.billDetail,
+            orderId: newOrder._id,
+            billDetail: newOrder.billDetail,
+            orderDetailStepper: newOrder.orderDetailStepper.created,
 
-        //? Data for displaying detail in all orders table
-        _id: newOrder._id,
-        orderStatus: newOrder.status,
-        merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          newOrder?.orderDetail?.deliveryAddress?.fullName ||
-          newOrder?.customerId?.fullName ||
-          "-",
-        deliveryMode: newOrder?.orderDetail?.deliveryMode,
-        orderDate: formatDate(newOrder.createdAt),
-        orderTime: formatTime(newOrder.createdAt),
-        deliveryDate: newOrder?.orderDetail?.deliveryTime
-          ? formatDate(newOrder.orderDetail.deliveryTime)
-          : "-",
-        deliveryTime: newOrder?.orderDetail?.deliveryTime
-          ? formatTime(newOrder.orderDetail.deliveryTime)
-          : "-",
-        paymentMethod: newOrder.paymentMode,
-        deliveryOption: newOrder.orderDetail.deliveryOption,
-        amount: newOrder.billDetail.grandTotal,
-      };
+            //? Data for displaying detail in all orders table
+            _id: newOrder._id,
+            orderStatus: newOrder.status,
+            merchantName:
+              newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+            customerName:
+              newOrder?.drops[0]?.deliveryAddress
+                ?.fullName ||
+              newOrder?.customerId?.fullName ||
+              "-",
+            deliveryMode: newOrder?.deliveryMode,
+            orderDate: formatDate(newOrder.createdAt),
+            orderTime: formatTime(newOrder.createdAt),
+            deliveryDate: newOrder?.deliveryTime
+              ? formatDate(newOrder.deliveryTime)
+              : "-",
+            deliveryTime: newOrder?.deliveryTime
+              ? formatTime(newOrder.deliveryTime)
+              : "-",
+            paymentMethod: newOrder.paymentMode,
+            deliveryOption: newOrder.deliveryOption,
+            amount: newOrder.billDetail.grandTotal,
+          };
+
+
+      // const socketData = {
+      //   ...data,
+
+      //   orderId: newOrder._id,
+      //   orderDetail: newOrder.orderDetail,
+      //   billDetail: newOrder.billDetail,
+
+      //   //? Data for displaying detail in all orders table
+      //   _id: newOrder._id,
+      //   orderStatus: newOrder.status,
+      //   merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+      //   customerName:
+      //     newOrder?.deliveryAddress?.fullName ||
+      //     newOrder?.customerId?.fullName ||
+      //     "-",
+      //   deliveryMode: newOrder?.deliveryMode,
+      //   orderDate: formatDate(newOrder.createdAt),
+      //   orderTime: formatTime(newOrder.createdAt),
+      //   deliveryDate: newOrder?.deliveryTime
+      //     ? formatDate(newOrder.deliveryTime)
+      //     : "-",
+      //   deliveryTime: newOrder?.deliveryTime
+      //     ? formatTime(newOrder.deliveryTime)
+      //     : "-",
+      //   paymentMethod: newOrder.paymentMode,
+      //   deliveryOption: newOrder.deliveryOption,
+      //   amount: newOrder.billDetail.grandTotal,
+      // };
 
       const userIds = {
         admin: process.env.ADMIN_ID,
@@ -2136,7 +2167,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
           time: storedOrderData.time,
           numOfDays: storedOrderData.numOfDays,
 
-          totalAmount: storedData.totalAmount,
+          // totalAmount: storedData.totalAmount,
           paymentMode: storedOrderData.paymentMode,
           paymentStatus: storedOrderData.paymentStatus,
           paymentId: storedOrderData.paymentId,
@@ -2160,11 +2191,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Pick & Drop Order (#${
-              newOrder._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Pick & Drop Order (#${newOrder._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
         ]);
 
@@ -2209,12 +2238,16 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
           amount: newOrder.billDetail.grandTotal,
         };
 
+        console.log("Merchant", socketData);
+
         const userIds = {
           admin: process.env.ADMIN_ID,
           merchant: newOrder?.merchantId?._id,
           agent: newOrder?.agentId,
           customer: newOrder?.customerId,
         };
+
+        console.log(userIds);
 
         await sendSocketDataAndNotification({
           rolesToNotify,
