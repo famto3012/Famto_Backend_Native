@@ -737,7 +737,7 @@ const getCustomerOrdersController = async (req, res, next) => {
       customerId: currentCustomer,
     })
       .sort({ createdAt: -1 })
-      .select("merchantId status createdAt billDetail orderDetail")
+      .select("merchantId status createdAt billDetail orderDetail deliveryMode")
       .populate({
         path: "merchantId",
         select: "merchantDetail.merchantName merchantDetail.displayAddress",
@@ -752,7 +752,7 @@ const getCustomerOrdersController = async (req, res, next) => {
           order?.merchantId?.merchantDetail?.displayAddress ||
           order?.orderDetail?.pickupAddress?.area ||
           null,
-        deliveryMode: order?.orderDetail?.deliveryMode || null,
+        deliveryMode: order?.deliveryMode || null,
         orderStatus: order.status,
         orderDate: formatDate(order.createdAt),
         orderTime: formatTime(order.createdAt),
@@ -760,6 +760,7 @@ const getCustomerOrdersController = async (req, res, next) => {
       };
     });
 
+    console.log(formattedResponse);
     res.status(200).json({
       data: formattedResponse,
     });
@@ -1451,7 +1452,7 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId orderDetail.deliveryTime orderDetail.pickupLocation orderDetail.deliveryLocation billDetail orderDetailStepper detailAddedByAgent paymentStatus"
+        "agentId merchantId deliveryTime pickups drops billDetail orderDetailStepper detailAddedByAgent paymentStatus"
       );
 
     const formattedResponse = {
@@ -1464,22 +1465,23 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
         orderFound?.merchantId?.merchantDetail?.merchantName || null,
       merchantPhone: orderFound?.merchantId?.phoneNumber || null,
       agentPhone: orderFound?.agentId?.phoneNumber || null,
-      deliveryTime: formatTime(orderFound.orderDetail.deliveryTime),
+      deliveryTime: formatTime(orderFound.deliveryTime),
       paymentStatus: orderFound?.paymentStatus || null,
       orderDetail: {
-        pickupLocation: orderFound?.orderDetail?.pickupLocation || null,
-        deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+        pickupLocation: orderFound?.pickups || null,
+        deliveryLocation: orderFound?.drops || null,
       },
       orderDetailStepper: orderFound?.orderDetailStepper || null,
       detailAddedByAgent: {
-        notes: orderFound?.detailAddedByAgent.notes || null,
+        notes: orderFound?.detailAddedByAgent?.notes || null,
         signatureImageURL:
-          orderFound?.detailAddedByAgent.signatureImageURL || null,
-        imageURL: orderFound?.detailAddedByAgent.imageURL || null,
+          orderFound?.detailAddedByAgent?.signatureImageURL || null,
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || null,
       },
       billDetail: orderFound?.billDetail || null,
     };
 
+    console.log(formattedResponse);
     res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));

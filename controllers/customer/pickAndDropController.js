@@ -1233,6 +1233,9 @@ const addPickUpAddressController = async (req, res, next) => {
   try {
     const { cartData } = req.body;
 
+    console.log(req.file);
+    console.log(req.files);
+
     if (!cartData) {
       return next(appError("Invalid cart data", 400));
     }
@@ -1260,9 +1263,15 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const files = req.files;
 
+    console.log("Files", files);
+    console.log("Files length:", files?.length);
+
+
     for (const file of files) {
       const matchPickup = file.fieldname.match(/^pickupVoice(\d+)$/);
       const matchDrop = file.fieldname.match(/^dropVoice(\d+)$/);
+
+      console.log("Voices", matchPickup, matchDrop);
 
       if (matchPickup) {
         const index = parseInt(matchPickup[1]);
@@ -1284,13 +1293,13 @@ const addPickUpAddressController = async (req, res, next) => {
         const drop = drops?.[index];
 
         if (drop) {
-          const existingUrl = drop.voiceInstructionInDelivery;
+          const existingUrl = drop.voiceInstructionInDrop;
           if (existingUrl) {
             await deleteFromFirebase(existingUrl);
           }
 
           const url = await uploadToFirebase(file, "VoiceInstructions");
-          drop.voiceInstructionInDelivery = url;
+          drop.voiceInstructionInDrop = url;
         }
       }
     }
@@ -1923,7 +1932,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       return next(appError("Cart not found", 404));
     }
 
-console.log("Payment Details",paymentDetails);
+    console.log("Payment Details", paymentDetails);
 
     const isPaymentValid = await verifyPayment(paymentDetails);
     if (!isPaymentValid) {
@@ -1949,8 +1958,8 @@ console.log("Payment Details",paymentDetails);
       addedTip: cart.billDetail.addedTip,
     };
 
-   const deliveryTime = new Date();
-      deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
+    const deliveryTime = new Date();
+    deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
 
     let customerTransaction = {
       customerId,
@@ -2007,36 +2016,36 @@ console.log("Payment Details",paymentDetails);
         },
       };
 
-   const socketData = {
-            ...data,
+      const socketData = {
+        ...data,
 
-            orderId: newOrder._id,
-            billDetail: newOrder.billDetail,
-            orderDetailStepper: newOrder.orderDetailStepper.created,
+        orderId: newOrder._id,
+        billDetail: newOrder.billDetail,
+        orderDetailStepper: newOrder.orderDetailStepper.created,
 
-            //? Data for displaying detail in all orders table
-            _id: newOrder._id,
-            orderStatus: newOrder.status,
-            merchantName:
-              newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-            customerName:
-              newOrder?.drops[0]?.deliveryAddress
-                ?.fullName ||
-              newOrder?.customerId?.fullName ||
-              "-",
-            deliveryMode: newOrder?.deliveryMode,
-            orderDate: formatDate(newOrder.createdAt),
-            orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.deliveryTime
-              ? formatDate(newOrder.deliveryTime)
-              : "-",
-            deliveryTime: newOrder?.deliveryTime
-              ? formatTime(newOrder.deliveryTime)
-              : "-",
-            paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.deliveryOption,
-            amount: newOrder.billDetail.grandTotal,
-          };
+        //? Data for displaying detail in all orders table
+        _id: newOrder._id,
+        orderStatus: newOrder.status,
+        merchantName:
+          newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+        customerName:
+          newOrder?.drops[0]?.deliveryAddress
+            ?.fullName ||
+          newOrder?.customerId?.fullName ||
+          "-",
+        deliveryMode: newOrder?.deliveryMode,
+        orderDate: formatDate(newOrder.createdAt),
+        orderTime: formatTime(newOrder.createdAt),
+        deliveryDate: newOrder?.deliveryTime
+          ? formatDate(newOrder.deliveryTime)
+          : "-",
+        deliveryTime: newOrder?.deliveryTime
+          ? formatTime(newOrder.deliveryTime)
+          : "-",
+        paymentMethod: newOrder.paymentMode,
+        deliveryOption: newOrder.deliveryOption,
+        amount: newOrder.billDetail.grandTotal,
+      };
 
 
       // const socketData = {

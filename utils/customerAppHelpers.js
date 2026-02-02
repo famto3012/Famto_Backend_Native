@@ -653,6 +653,8 @@ const filterProductIdAndQuantity = async (items) => {
       items.map(async (item) => {
         if (!item.productId) return null;
 
+        console.log("ITEMs",items);
+
         const product = await Product.findById(item?.productId).lean();
         if (!product) return null;
 
@@ -681,7 +683,7 @@ const filterProductIdAndQuantity = async (items) => {
         return {
           productId: item?.productId,
           productName: product?.productName || "",
-          variantId: item?.variantTypeId || null,
+          variantId: item?.variantTypeId?._id || null,
           price,
           costPrice,
           quantity: item?.quantity,

@@ -2435,20 +2435,20 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderStatus: newOrder.status,
         merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
         customerName:
-          newOrder?.orderDetail?.deliveryAddress?.fullName ||
+          newOrder?.deliveryAddress?.fullName ||
           newOrder?.customerId?.fullName ||
           "-",
-        deliveryMode: newOrder?.orderDetail?.deliveryMode,
+        deliveryMode: newOrder?.deliveryMode,
         orderDate: formatDate(newOrder.createdAt),
         orderTime: formatTime(newOrder.createdAt),
-        deliveryDate: newOrder?.orderDetail?.deliveryTime
-          ? formatDate(newOrder.orderDetail.deliveryTime)
+        deliveryDate: newOrder?.deliveryTime
+          ? formatDate(newOrder.deliveryTime)
           : "-",
-        deliveryTime: newOrder?.orderDetail?.deliveryTime
-          ? formatTime(newOrder.orderDetail.deliveryTime)
+        deliveryTime: newOrder?.deliveryTime
+          ? formatTime(newOrder.deliveryTime)
           : "-",
         paymentMethod: newOrder.paymentMode,
-        deliveryOption: newOrder.orderDetail.deliveryOption,
+        deliveryOption: newOrder.deliveryOption,
         amount: newOrder.billDetail.grandTotal,
       };
 
@@ -2464,7 +2464,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId: newOrder._id,
         createdAt: null,
         merchantName: null,
-        deliveryMode: newOrder.orderDetail.deliveryMode,
+        deliveryMode: newOrder.deliveryMode,
       });
 
       await sendSocketDataAndNotification({
@@ -2660,6 +2660,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       }, 60000);
     }
   } catch (err) {
+    console.error(err);
     next(appError(err.message));
   }
 };
