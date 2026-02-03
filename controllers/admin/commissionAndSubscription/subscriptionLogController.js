@@ -108,14 +108,16 @@ const createSubscriptionLog = async (req, res, next) => {
 
 const verifyRazorpayPayment = async (req, res, next) => {
   try {
-    const paymentDetails = req.body;
+     const { paymentDetails, paymentMode, currentPlan, userId } = req.body;
+
+    console.log("paymentDetails:", req.body);
 
     const isValidPayment = verifyPayment(paymentDetails);
+    if (!isValidPayment) {
+      return next(appError("Invalid payment details", 400));
+    }
 
-    if (!isValidPayment) return next(appError("Invalid payment details", 400));
-
-    const { razorpay_order_id, currentPlan, userId, paymentMode } =
-      paymentDetails;
+    const { razorpay_order_id } = paymentDetails;
 
     const merchant = await Merchant.findById(userId);
     const subscriptionPlan = merchant

@@ -1491,11 +1491,17 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
 //
 const getAllNotificationsOfCustomerController = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
     const customerId = req.userAuth;
 
     const getAllNotifications = await CustomerNotificationLogs.find({
       customerId,
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const formattedResponse = getAllNotifications?.map((notification) => {
       return {
@@ -1506,9 +1512,19 @@ const getAllNotificationsOfCustomerController = async (req, res, next) => {
       };
     });
 
+    const totalDocuments = await CustomerNotificationLogs.countDocuments({
+      customerId,
+    });
+
+    const totalPages = Math.ceil(totalDocuments / limit);
+
     res.status(200).json({
-      message: "All notifications",
       data: formattedResponse,
+      totalDocuments,
+      totalPages,
+      currentPage: page,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
     });
   } catch (err) {
     next(appError(err.message));
@@ -1551,14 +1567,14 @@ const getCurrentOngoingOrders = async (req, res, next) => {
       $or: [{ status: "Pending" }, { status: "On-going" }],
     })
       .populate("merchantId", "merchantDetail.merchantName")
-      .select("merchantId orderDetail.deliveryTime orderDetail.deliveryMode")
+      .select("merchantId deliveryTime deliveryMode")
       .sort({ createdAt: -1 });
 
     const formattedResponse = orders?.map((order) => ({
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
-      deliveryMode: order?.orderDetail?.deliveryMode || null,
-      deliveryTime: formatTime(order?.orderDetail?.deliveryTime) || null,
+      deliveryMode: order?.deliveryMode || null,
+      deliveryTime: formatTime(order?.deliveryTime) || null,
     }));
 
     res.status(200).json(formattedResponse);

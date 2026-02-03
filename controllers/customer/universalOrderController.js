@@ -1676,7 +1676,7 @@ const orderPaymentController = async (req, res, next) => {
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
-      transactionType: "Bill",
+      transactionType: "Order Created",
       transactionAmount: orderAmount,
       type: "Debit",
     };
@@ -2328,7 +2328,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
-      transactionType: "Bill",
+      transactionType: "Order Created",
       transactionAmount: orderAmount,
       type: "Debit",
     };
@@ -2900,7 +2900,7 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
 
     // Find the latest order for the given customerId
     const latestOrder = await TemporaryOrder.find({ customerId })
-      .select("createdAt orderDetail.deliveryMode orderId")
+      .select("createdAt deliveryMode orderId")
       .sort({ createdAt: -1 });
 
     const formattedResponse = latestOrder?.map((order) => ({

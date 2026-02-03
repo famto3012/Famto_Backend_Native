@@ -1619,7 +1619,7 @@ const confirmPickAndDropController = async (req, res, next) => {
 
       let customerTransaction = {
         madeOn: new Date(),
-        transactionType: "Bill",
+        transactionType: "Pick & Drop Order Created",
         transactionAmount: orderAmount,
         type: "Debit",
         customerId,
@@ -1964,7 +1964,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
-      transactionType: "Bill",
+      transactionType: "Pick and Drop Order",
       transactionAmount: orderAmount,
       type: "Debit",
     };
