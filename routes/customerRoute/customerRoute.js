@@ -8,6 +8,8 @@ const {
 } = require("../../middlewares/validators/customerAppValidations/customerAppValidations");
 
 const {
+  sendOtp,
+  verifyOtp,
   registerAndLoginController,
   getCustomerProfileController,
   updateCustomerProfileController,
@@ -114,6 +116,17 @@ const {
 const isLooselyAuthenticated = require("../../middlewares/isLooselyAuthenticated");
 
 const customerRoute = express.Router();
+
+//send-otp for authentifcation
+customerRoute.post(
+  "/send-otp",
+  sendOtp
+);
+
+customerRoute.post(
+  "verify-otp",
+  verifyOtp
+)
 
 // Authenticate route
 customerRoute.post(

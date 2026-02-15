@@ -1,7 +1,7 @@
 const { validationResult } = require("express-validator");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
-
+const axios = require("axios");
 const Customer = require("../../models/Customer");
 const PromoCode = require("../../models/PromoCode");
 const Order = require("../../models/Order");
@@ -50,6 +50,51 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
 const Task = require("../../models/Task");
+
+
+//For OTP Services -- SMS Provider 2factor.in
+
+const sendOtp = async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  try {
+    const response = await axios.get(
+      `https://2factor.in/API/V1/${process.env.TWO_FACTOR_API_KEY}/SMS/${phoneNumber}/AUTOGEN`
+    );
+
+    res.json({
+      success: true,
+      sessionId: response.data.Details, // IMPORTANT
+      message: "OTP sent successfully"
+    });
+  } catch (error) {
+
+    console.log(error);
+    
+    res.status(500).json({
+      success: false,
+      message: "Failed to send OTP"
+    });
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const { sessionId, otp } = req.body;
+
+  try {
+    const response = await axios.get(
+      `https://2factor.in/API/V1/${process.env.TWO_FACTOR_API_KEY}/SMS/VERIFY/${sessionId}/${otp}`
+    );
+
+    if (response.data.Status === "Success") {
+      return res.json({ success: true, message: "OTP verified" });
+    }
+
+    res.json({ success: false, message: "Invalid OTP" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "OTP verification failed" });
+  }
+};
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -2039,6 +2084,8 @@ const deleteCustomerAccount = async (req, res, next) => {
 };
 
 module.exports = {
+  sendOtp,
+  verifyOtp,
   registerAndLoginController,
   setSelectedGeofence,
   getCustomerProfileController,

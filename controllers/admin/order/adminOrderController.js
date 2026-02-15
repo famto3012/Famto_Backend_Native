@@ -467,11 +467,11 @@ const rejectOrderByAdminController = async (req, res, next) => {
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;
 
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         orderAmount =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         customerFound.customerDetails.walletBalance += orderAmount;
       }
 
@@ -495,11 +495,11 @@ const rejectOrderByAdminController = async (req, res, next) => {
 
       if (paymentId) {
         let refundAmount;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        if (orderFound.deliveryOption === "On-demand") {
           refundAmount = orderFound.billDetail.grandTotal;
-        } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+        } else if (orderFound.deliveryOption === "Scheduled") {
           refundAmount =
-            orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+            orderFound.billDetail.grandTotal / orderFound.numOfDays;
         }
 
         refundResponse = await razorpayRefund(paymentId, refundAmount);
@@ -2701,7 +2701,7 @@ const createOrderByAdminController = async (req, res, next) => {
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
                 ? orderDetails.formattedItems
-                : cartFound.pickups[0].items,
+                : cartFound.drops[0].items,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
         date: new Date(),

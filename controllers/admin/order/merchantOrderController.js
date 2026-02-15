@@ -1267,24 +1267,79 @@ const getOrderDetailController = async (req, res, next) => {
         orderFound.paymentMode === "Cash-on-delivery"
           ? "Pay-on-delivery"
           : orderFound.paymentMode || "-",
-      deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-      deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+      deliveryMode: orderFound.deliveryMode || "-",
+      deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.createdAt)} | ${formatTime(
         orderFound.createdAt
       )}`,
       deliveryTime: `${formatDate(
-        orderFound.orderDetail.deliveryTime
-      )} | ${formatTime(orderFound.orderDetail.deliveryTime)}`,
+        orderFound.deliveryTime
+      )} | ${formatTime(orderFound.deliveryTime)}`,
       customerDetail: {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.orderDetail.deliveryAddress.fullName ||
+          orderFound.drops?.[0]?.address.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        dropAddress: orderFound.orderDetail.deliveryAddress || "-",
-        pickAddress: orderFound.orderDetail.pickupAddress || "-",
+         pickAddress:
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+
+        dropAddress:
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+        pickInstructions:
+          orderFound.pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
+          })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
@@ -1309,15 +1364,21 @@ const getOrderDetailController = async (req, res, next) => {
         avatar: orderFound?.agentId?.agentImageURL || "-",
         team: orderFound?.agentId?.workStructure?.managerId?.name || "-",
         instructionsByCustomer:
-          orderFound?.orderDetail?.instructionToDeliveryAgent || "-",
-        distanceTravelled: orderFound?.orderDetail?.distance,
-        timeTaken: formatToHours(orderFound?.orderDetail?.timeTaken) || "-",
-        delayedBy: formatToHours(orderFound?.orderDetail?.delayedBy) || "-",
+          orderFound?.instructionToDeliveryAgent || "-",
+        distanceTravelled: orderFound?.distance,
+        timeTaken: formatToHours(orderFound?.timeTaken) || "-",
+        delayedBy: formatToHours(orderFound?.delayedBy) || "-",
       },
       items: orderFound.items || null,
       billDetail: orderFound.billDetail || null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+      pickUpLocation: orderFound?.pickups?.[0]?.address || null,
+      deliveryLocation: orderFound?.drops?.[0]?.address || null,
+      detailAddedByAgent: {
+        notes: orderFound?.detailAddedByAgent?.notes || "-",
+        signatureImageURL:
+          orderFound?.detailAddedByAgent?.signatureImageURL || "-",
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || "-",
+      },
       agentLocation: orderFound?.agentId?.location || null,
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper

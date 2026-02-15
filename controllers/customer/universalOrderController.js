@@ -381,6 +381,8 @@ const getMerchantData = async (req, res, next) => {
 
     let distanceInKM = 0;
 
+    console.log("Lat Lng", latitude , longitude);
+
     if (latitude && longitude) {
       const merchantLocation = merchantFound.merchantDetail.location;
       const customerLocation =
@@ -397,6 +399,8 @@ const getMerchantData = async (req, res, next) => {
         distanceInKM = distance.distanceInKM;
       }
     }
+
+    console.log('Distance',distanceInKM);
 
     let distanceWarning = false;
     if (distanceInKM > 12) distanceWarning = true;

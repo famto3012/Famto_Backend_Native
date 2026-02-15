@@ -326,11 +326,12 @@ const addDeliveryAddressController = async (req, res, next) => {
       deliveryAddressOtherAddressId,
       newDeliveryAddress,
       addNewDeliveryToAddressBook,
-      instructionInDelivery,
+      instructionInDrop,
     } = req.body;
 
     const customerId = req.userAuth;
-
+    console.log(req.body);
+    console.log(req.file);
     const [customer, cartFound] = await Promise.all([
       Customer.findById(customerId),
       PickAndCustomCart.findOne({
@@ -376,7 +377,7 @@ const addDeliveryAddressController = async (req, res, next) => {
         deliveryAddress = { ...customer.customerDetails.workAddress };
       } else {
         const otherAddress = customer.customerDetails.otherAddress.find(
-          (addr) => addr.id.toString() === deliveryAddressOtherAddressId
+          (addr) => addr.id.toString() === deliveryAddressOtherAddressId,
         );
         if (otherAddress) {
           deliveryCoordinates = otherAddress.coordinates;
@@ -396,8 +397,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       cartFound?.pickups[0]?.pickupLocation?.length === 2;
 
     if (havePickupLocation) {
-      pickupLocation =
-        cartFound?.pickups[0]?.pickupLocation;
+      pickupLocation = cartFound?.pickups[0]?.pickupLocation;
       deliveryLocation = deliveryCoordinates;
 
       const { distanceInKM, durationInMinutes } =
@@ -417,7 +417,7 @@ const addDeliveryAddressController = async (req, res, next) => {
 
       voiceInstructionToAgentURL = await uploadToFirebase(
         req.file,
-        "VoiceInstructions"
+        "VoiceInstructions",
       );
     }
 
@@ -428,8 +428,8 @@ const addDeliveryAddressController = async (req, res, next) => {
         {
           location: deliveryLocation,
           address: deliveryAddress,
-          instructionInDelivery,
-          voiceInstructionInDelivery: voiceInstructionToAgentURL,
+          instructionInDrop,
+          voiceInstructionInDrop: voiceInstructionToAgentURL,
           items: [...cartFound?.drops[0].items],
         },
       ],
@@ -445,14 +445,14 @@ const addDeliveryAddressController = async (req, res, next) => {
       const { deliveryCharges, surgeCharges } = await getDeliveryAndSurgeCharge(
         cartFound.customerId,
         cartFound.deliveryMode,
-        distance
+        distance,
       );
 
       updatedDeliveryCharges = deliveryCharges;
       updatedSurgeCharges = surgeCharges;
 
       const tax = await CustomerAppCustomization.findOne({}).select(
-        "customOrderCustomization"
+        "customOrderCustomization",
       );
 
       taxFound = await Tax.findById(tax.customOrderCustomization.taxId);
@@ -487,7 +487,7 @@ const addDeliveryAddressController = async (req, res, next) => {
         ...detail,
         billDetail: updatedBillDetail,
       },
-      { new: true }
+      { new: true },
     );
 
     res.status(200).json({
@@ -617,7 +617,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       CustomerTransaction.create({
         customerId,
         madeOn: new Date(),
-        transactionType: "Bill",
+        transactionType: "Order Created",
         transactionAmount: orderAmount,
         type: "Debit",
       }),

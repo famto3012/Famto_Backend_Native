@@ -1509,6 +1509,8 @@ const prepareOrderDetails = async (cart, paymentMode) => {
       .populate("items.variantTypeId");
 
     formattedItems = populatedCartWithVariantNames.items.map((item) => ({
+      productId: item.productId,
+      variantId : item.variantTypeId,
       itemName: item.productId?.productName || "Unnamed",
       itemImageURL: item.productId?.productImageURL || null,
       quantity: item.quantity,
