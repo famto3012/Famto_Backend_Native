@@ -106,17 +106,17 @@ const getDistanceFromMultipleCoordinates = async (
     .map((coord) => `${coord.lng},${coord.lat}`)
     .join(";");
 
-  if (process.env.NODE_ENV === "development") {
-    const getRandomFloat = (min, max) => {
-      const random = Math.random() * (max - min) + min;
-      return Number(random.toFixed(2));
-    };
+  // if (process.env.NODE_ENV === "development") {
+  //   const getRandomFloat = (min, max) => {
+  //     const random = Math.random() * (max - min) + min;
+  //     return Number(random.toFixed(2));
+  //   };
 
-    return {
-      distanceInKM: getRandomFloat(2, 10),
-      durationInMinutes: getRandomFloat(5.5, 30),
-    };
-  }
+  //   return {
+  //     distanceInKM: getRandomFloat(2, 10),
+  //     durationInMinutes: getRandomFloat(5.5, 30),
+  //   };
+  // }
 
   const { data } = await axios.get(
     `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${joined}`

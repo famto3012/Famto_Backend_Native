@@ -1220,7 +1220,7 @@ const initializePickAndDrop = async (req, res, next) => {
 
     await PickAndCustomCart.findOneAndDelete({
       customerId,
-      "cartDetail.deliveryMode": "Pick and Drop",
+      "deliveryMode": "Pick and Drop",
     });
 
     res.status(200).json({ message: "Cart is cleared" });

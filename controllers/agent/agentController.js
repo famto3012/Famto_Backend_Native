@@ -1543,19 +1543,19 @@ const getDeliveryDetailController = async (req, res, next) => {
       orderId: taskFound.orderId?._id || taskFound.orderId,
       messageReceiverId: taskFound?.orderId?.customerId || null,
       type: "Delivery",
-      date: formatDate(taskFound.orderId.orderDetail?.deliveryTime),
-      time: formatTime(taskFound.orderId.orderDetail?.deliveryTime),
+      date: formatDate(taskFound.orderId.deliveryTime),
+      time: formatTime(taskFound.orderId.deliveryTime),
       taskStatus: deliveryDetail?.status || null,
       customerName: deliveryDetail?.address?.fullName || null,
       deliveryAddress: deliveryDetail?.address || null,
       customerPhoneNumber: deliveryDetail?.address?.phoneNumber || null,
       instructions:
-        taskFound?.orderId?.orderDetail?.instructionInDelivery ||
-        taskFound?.orderId?.orderDetail?.instructionToDeliveryAgent ||
+        taskFound?.orderId?.instructionInDelivery ||
+        taskFound?.orderId?.instructionToDeliveryAgent ||
         null,
       voiceInstructions:
-        taskFound?.orderId?.orderDetail?.voiceInstructionInDelivery ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+        taskFound?.orderId?.voiceInstructionInDelivery ||
+        taskFound?.orderId?.voiceInstructionToDeliveryAgent ||
         null,
       deliveryLocation: deliveryDetail?.location || null,
       deliveryMode: taskFound?.deliveryMode || null,
@@ -2862,31 +2862,54 @@ const getAllAnnouncementsController = async (req, res, next) => {
 // Get pocket balance (un-settled balance)
 const getPocketBalanceForAgent = async (req, res, next) => {
   try {
-    // Find the agent by ID
-    const agent = await Agent.findById(req.userAuth);
+    const agent = await Agent.findById(req.userAuth).select("appDetailHistory");
 
-    // Check if the agent exists
     if (!agent) return next(appError("Agent not found", 404));
 
-    // Calculate total earnings where paymentSettled is false
-    let totalEarnings = 0;
-
-    const unsettledEarnings = agent.appDetailHistory.filter(
-      (detail) => detail.details.paymentSettled === false
-    );
-
-    unsettledEarnings.forEach((detail) => {
-      totalEarnings += detail.details.totalEarning || 0;
-    });
+    const totalEarnings = (agent.appDetailHistory || [])
+      .filter(detail => detail?.details?.paymentSettled === false)
+      .reduce((sum, detail) => {
+        return sum + (detail?.details?.totalEarning || 0);
+      }, 0);
 
     return res.status(200).json({
       success: true,
       totalEarnings,
     });
+
   } catch (error) {
-    next(appError(err.message));
+    next(appError(error.message));
   }
 };
+
+
+// const getPocketBalanceForAgent = async (req, res, next) => {
+//   try {
+//     // Find the agent by ID
+//     const agent = await Agent.findById(req.userAuth);
+
+//     // Check if the agent exists
+//     if (!agent) return next(appError("Agent not found", 404));
+
+//     // Calculate total earnings where paymentSettled is false
+//     let totalEarnings = 0;
+
+//     const unsettledEarnings = agent.appDetailHistory.filter(
+//       (detail) => detail.details.paymentSettled === false
+//     );
+
+//     unsettledEarnings.forEach((detail) => {
+//       totalEarnings += detail.details.totalEarning || 0;
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       totalEarnings,
+//     });
+//   } catch (error) {
+//     next(appError(error.message));
+//   }
+// };
 
 const getTimeSlotsForAgent = async (req, res, next) => {
   try {

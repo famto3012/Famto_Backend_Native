@@ -124,7 +124,7 @@ customerRoute.post(
 );
 
 customerRoute.post(
-  "verify-otp",
+  "/verify-otp",
   verifyOtp
 )
 

@@ -59,7 +59,7 @@ const sendOtp = async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://2factor.in/API/V1/${process.env.TWO_FACTOR_API_KEY}/SMS/${phoneNumber}/AUTOGEN`
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/${phoneNumber}/AUTOGEN`
     );
 
     res.json({
@@ -69,7 +69,6 @@ const sendOtp = async (req, res) => {
     });
   } catch (error) {
 
-    console.log(error);
     
     res.status(500).json({
       success: false,
@@ -79,18 +78,20 @@ const sendOtp = async (req, res) => {
 };
 
 const verifyOtp = async (req, res) => {
-  const { sessionId, otp } = req.body;
+  const { phoneNumber, otp } = req.body;
 
   try {
     const response = await axios.get(
-      `https://2factor.in/API/V1/${process.env.TWO_FACTOR_API_KEY}/SMS/VERIFY/${sessionId}/${otp}`
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/VERIFY3/${phoneNumber}/${otp}`
     );
 
+    console.log(response.data.Details);
+
     if (response.data.Status === "Success") {
-      return res.json({ success: true, message: "OTP verified" });
+      return res.status(200).json({ success: true, message: "OTP verified" });
     }
 
-    res.json({ success: false, message: "Invalid OTP" });
+    res.status(500).json({ success: false, message: "Invalid OTP" });
   } catch (error) {
     res.status(500).json({ success: false, message: "OTP verification failed" });
   }
@@ -178,6 +179,8 @@ const registerAndLoginController = async (req, res, next) => {
 
     await customer.save();
 
+
+    console.log("Authenticated");
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,
       id: customer?.id,
