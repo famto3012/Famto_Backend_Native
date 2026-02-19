@@ -754,4 +754,115 @@ const prepareOrderDetailsInPayout = async () => {
   }
 };
 
+const migrateOrdersToNewSchema = async () => {
+  try {
+    // Use a cursor to handle large datasets
+    const cursor = Order.find({}).lean().cursor();
+    let migratedCount = 0;
+
+    for await (const order of cursor) {
+
+      const mapItem = (item) => ({
+        itemId: item.itemId && item.itemId !== "" ? item.itemId : null,
+        itemName: item.itemName || null,
+        length: item.length || null,
+        width: item.width || null,
+        height: item.height || null,
+        unit: item.unit || null,
+        weight: item.weight || null,
+        numOfUnits: item.numOfUnits || null,
+        quantity: item.quantity || null,
+        itemImageURL: item.itemImageURL || null,
+        price: item.price || null,
+        variantTypeName: item.variantTypeName || null,
+      });
+
+      // ----- Prepare pickups -----
+      const pickups = order.orderDetail?.pickupLocation
+        ? [{
+          location: order.orderDetail.pickupLocation || [0, 0],
+          address: order.orderDetail.pickupAddress || {},
+          instructionInPickup: order.orderDetail.instructionInPickup || null,
+          voiceInstructionInPickup: order.orderDetail.voiceInstructionInPickup || null,
+          items: order.items?.map(mapItem) || [],
+        }]
+        : [];
+
+      const drops = order.orderDetail?.deliveryLocation
+        ? [{
+          location: order.orderDetail.deliveryLocation || [0, 0],
+          address: order.orderDetail.deliveryAddress || {},
+          instructionInDrop: order.orderDetail.instructionInDelivery || null,
+          voiceInstructionInDrop: order.orderDetail.voiceInstructionInDelivery || null,
+          items: order.items?.map(mapItem) || [],
+        }]
+        : [];
+
+      // ----- Purchased Items -----
+      const purchasedItems = order.purchasedItems?.map(item => ({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        price: item.price || null,
+        productName: item.productName || null,
+        costPrice: item.costPrice || null,
+        quantity: item.quantity || null,
+      })) || [];
+
+      // ----- Build updated order -----
+      const updatedOrder = {
+        pickups,
+        drops,
+        purchasedItems,
+        totalAmount: order.billDetail?.grandTotal || 0,
+        deliveryMode: order.orderDetail?.deliveryMode || "",
+        deliveryOption: order.orderDetail?.deliveryOption || null,
+        distance: order.orderDetail?.distance || 0,
+        deliveryTime: order.orderDetail?.deliveryTime || null,
+        startDate: order.createdAt || null,
+        endDate: order.orderDetail?.deliveryTime || null,
+        time: order.orderDetail?.deliveryTime || null,
+        numOfDays: order.orderDetail?.numOfDays || null,
+        billDetail: order.billDetail || {},
+        detailAddedByAgent: order.detailAddedByAgent || {},
+        orderDetailStepper: order.orderDetailStepper || {},
+        orderRating: order.orderRating || {},
+        commissionDetail: order.commissionDetail || {},
+        status: order.status || "Pending",
+        paymentMode: order.paymentMode || "Famto-cash",
+        paymentId: order.paymentId || null,
+        refundId: order.refundId || null,
+        paymentStatus: order.paymentStatus || "Pending",
+        paymentCollectedFromCustomer: order.paymentCollectedFromCustomer || "Pending",
+        cancellationReason: order.cancellationReason || null,
+        cancellationDescription: order.cancellationDescription || null,
+        isReady: order.orderDetail?.isReady || false,
+        // ✅ Delete old fields after migration
+        $unset: {
+          orderDetail: "",
+          items: "",
+        },
+      };
+
+      // ----- Update DB -----
+      await Order.updateOne(
+        { _id: order._id },
+        {
+          $set: updatedOrder,
+          $unset: { orderDetail: "", items: "" } // ensure deletion
+        }
+      );
+
+      migratedCount++;
+      console.log(`✅ Migrated order ${order._id}`);
+    }
+
+    console.log(`🎉 Total orders migrated: ${migratedCount}`);
+  } catch (err) {
+    console.error("❌ Error migrating orders:", err);
+  }
+};
+
+
+  
+// migrateOrdersToNewSchema();
 // prepareOrderDetailsInPayout();
