@@ -98,51 +98,93 @@ console.log("Cordinated", pickupCoordinates , deliveryCoordinates , profile);
   }
 };
 
+
 const getDistanceFromMultipleCoordinates = async (
   coordinates,
   profile = "biking"
 ) => {
-  const joined = coordinates
-    .map((coord) => `${coord.lng},${coord.lat}`)
-    .join(";");
+  if (!coordinates || coordinates.length < 2) {
+    throw new Error("At least 2 coordinates required");
+  }
 
-  // if (process.env.NODE_ENV === "development") {
-  //   const getRandomFloat = (min, max) => {
-  //     const random = Math.random() * (max - min) + min;
-  //     return Number(random.toFixed(2));
-  //   };
+  let totalDistanceMeters = 0;
+  let totalDurationSeconds = 0;
 
-  //   return {
-  //     distanceInKM: getRandomFloat(2, 10),
-  //     durationInMinutes: getRandomFloat(5.5, 30),
-  //   };
-  // }
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const from = `${coordinates[i].lng},${coordinates[i].lat}`;
+    const to = `${coordinates[i + 1].lng},${coordinates[i + 1].lat}`;
 
-  const { data } = await axios.get(
-    `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${joined}`
+    const { data } = await axios.get(
+      `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${from};${to}`
+    );
+
+    const distance = data?.results?.distances?.[0]?.[1];
+    const duration = data?.results?.durations?.[0]?.[1];
+
+    if (!distance || !duration) {
+      throw new Error("Distance API failed");
+    }
+
+    totalDistanceMeters += distance;
+    totalDurationSeconds += duration;
+  }
+
+  const distanceInKM = parseFloat(
+    (totalDistanceMeters / 1000).toFixed(2)
   );
 
-  if (
-    data &&
-    data.results &&
-    data.results.distances &&
-    data.results.distances.length > 0
-  ) {
-    const finalDistance = data.results.distances[0]?.length - 1;
-    const finalDuration = data.results.distances[0]?.length - 1;
-    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
-      2
-    );
+  const durationInMinutes = Math.ceil(
+    totalDurationSeconds / 60
+  );
 
-    const durationInMinutes = Math.ceil(
-      data.results.durations[0][finalDuration] / 60
-    );
-
-    const distanceInKM = parseFloat(distance);
-
-    return { distanceInKM, durationInMinutes };
-  }
+  return { distanceInKM, durationInMinutes };
 };
+
+// const getDistanceFromMultipleCoordinates = async (
+//   coordinates,
+//   profile = "biking"
+// ) => {
+//   const joined = coordinates
+//     .map((coord) => `${coord.lng},${coord.lat}`)
+//     .join(";");
+
+//   // if (process.env.NODE_ENV === "development") {
+//   //   const getRandomFloat = (min, max) => {
+//   //     const random = Math.random() * (max - min) + min;
+//   //     return Number(random.toFixed(2));
+//   //   };
+
+//   //   return {
+//   //     distanceInKM: getRandomFloat(2, 10),
+//   //     durationInMinutes: getRandomFloat(5.5, 30),
+//   //   };
+//   // }
+
+//   const { data } = await axios.get(
+//     `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${joined}`
+//   );
+
+//   if (
+//     data &&
+//     data.results &&
+//     data.results.distances &&
+//     data.results.distances.length > 0
+//   ) {
+//     const finalDistance = data.results.distances[0]?.length - 1;
+//     const finalDuration = data.results.distances[0]?.length - 1;
+//     const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
+//       2
+//     );
+
+//     const durationInMinutes = Math.ceil(
+//       data.results.durations[0][finalDuration] / 60
+//     );
+
+//     const distanceInKM = parseFloat(distance);
+
+//     return { distanceInKM, durationInMinutes };
+//   }
+// };
 
 const calculateDeliveryCharges = (
   distance,

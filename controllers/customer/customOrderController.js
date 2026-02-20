@@ -426,7 +426,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       pickups: [...cartFound?.pickups],
       drops: [
         {
-          location: deliveryLocation,
+          location: deliveryCoordinates,
           address: deliveryAddress,
           instructionInDrop,
           voiceInstructionInDrop: voiceInstructionToAgentURL,

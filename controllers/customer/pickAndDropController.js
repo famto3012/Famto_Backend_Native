@@ -1384,6 +1384,8 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
       }, 0);
     }
 
+    console.log("Total Weight",totalItemWeight);
+
     const agents = await Agent.find({}).select("vehicleDetail");
     const vehicleTypes = agents.flatMap((agent) =>
       agent.vehicleDetail.map((vehicle) => vehicle.type)
