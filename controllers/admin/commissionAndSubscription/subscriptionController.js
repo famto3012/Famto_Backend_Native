@@ -210,40 +210,49 @@ const currentSubscriptionDetailOfMerchant = async (req, res, next) => {
     );
 
     if (!subscriptionPlan) {
+      console.log("No subscription found");
       return res.status(200).json({ planName: null, daysLeft: 0 });
     }
 
-    const planLog = await SubscriptionLog.aggregate([
-      { $match: { _id: subscriptionPlan.modelId } },
-      {
-        $lookup: {
-          from: "merchantsubscriptions",
-          localField: "planId",
-          foreignField: "_id",
-          as: "planDetails",
-        },
-      },
-      { $unwind: "$planDetails" },
-    ]);
+    // const planLog = await SubscriptionLog.aggregate([
+    //   { $match: { _id: subscriptionPlan.modelId } },
+    //   {
+    //     $lookup: {
+    //       from: "merchantsubscriptions",
+    //       localField: "planId",
+    //       foreignField: "_id",
+    //       as: "planDetails",
+    //     },
+    //   },
+    //   { $unwind: "$planDetails" },
+    // ]);
 
-    if (!planLog.length) {
+    const planLog = await SubscriptionLog.findById(
+      subscriptionPlan.modelId
+    ).populate("planId");
+
+    if (!planLog) {
+      console.log("Plan log length is null");
       return res.status(200).json({ planName: null, daysLeft: 0 });
     }
 
     const currentDate = new Date();
-    const endDate = new Date(planLog[0].endDate);
+    const endDate = new Date(planLog.endDate);
     const daysLeft = Math.max(
       Math.ceil((endDate - currentDate) / (1000 * 60 * 60 * 24)),
       0
     );
 
+    const planDetails = await MerchantSubscription.findById(planLog.planId);
+
     const formattedResponse = {
-      planName: planLog[0].planDetails.name,
+      planName: planDetails?.name || null,
       daysLeft: daysLeft,
     };
 
     res.status(200).json(formattedResponse);
   } catch (err) {
+    console.log("Error", err);
     next(appError(err.message || "Server Error"));
   }
 };

@@ -97,7 +97,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     }
 
     if (deliveryMode && deliveryMode?.trim()?.toLowerCase() !== "all") {
-      filterCriteria["orderDetail.deliveryMode"] = {
+      filterCriteria["deliveryMode"] = {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
@@ -1328,7 +1328,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
                     }
                     <!-- GST -->
                     <tr>
-                        <td colspan="3">GST</td>
+                        <td colspan="3">Taxes & Feeses</td>
                         <td>${taxAmount?.toFixed(2) || 0}</td>
                     </tr>
                     <!-- Grand Total -->
@@ -1691,7 +1691,7 @@ const downloadOrderBillController = async (req, res, next) => {
                     }
                     <!-- GST -->
                     <tr>
-                        <td colspan="3">GST</td>
+                        <td colspan="3">Taxes & Feeses</td>
                         <td>${taxAmount?.toFixed(2) || 0}</td>
                     </tr>
                     <!-- Grand Total -->
