@@ -43,6 +43,7 @@ const {
   updateAgentDetails,
   updateNotificationStatus,
   updateCustomerSubscriptionCount,
+  updateAgentDetailsForBatch,
 } = require("../../utils/agentAppHelpers");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const {
@@ -54,6 +55,7 @@ const {
   createRazorpayQrCode,
 } = require("../../utils/razorpayPayment");
 const AgentPricing = require("../../models/AgentPricing");
+const BatchOrder = require("../../models/BatchOrder");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -973,8 +975,8 @@ const getHistoryOfAppDetailsController = async (req, res, next) => {
         orders: history.orders || 0,
         cancelledOrders: history.cancelledOrders || 0,
         totalDistance: `${(history.totalDistance || 0).toFixed(2)} km`,
-        totalSurge: Number(totalSurge?.toFixed(2)) || 0,
-        deduction: Number(deduction?.toFixed(2)) || 0,
+        totalSurge: Number(history.totalSurge?.toFixed(2)) || 0,
+        deduction: Number(history.deduction?.toFixed(2)) || 0,
         loginHours: formatToHours(history.loginDuration) || "0:00 hr",
         orderDetail:
           history?.orderDetail?.map((order) => ({
@@ -1034,12 +1036,17 @@ const getRatingsOfAgentController = async (req, res, next) => {
 
 // Get task previews
 const getTaskPreviewController = async (req, res, next) => {
+  console.log("Preview", req.body);
   try {
     const agentId = req.userAuth;
-
+    const { orderId, batchOrder } = req.body;
     const agentFound = await Agent.findById(agentId);
-
     if (!agentFound) return next(appError("Agent not found", 404));
+
+    let currentTasks = [];
+    let nextTasks = [];
+
+    const groupedTasks = {};
 
     const taskFound = await Task.find({
       agentId,
@@ -1047,138 +1054,463 @@ const getTaskPreviewController = async (req, res, next) => {
     })
       .populate("orderId")
       .sort({ createdAt: 1 });
+    console.log("task found", taskFound);
+    //###########################################
+    if (batchOrder) {
+      const batchOrder = await BatchOrder.findById(orderId);
 
-    let currentTasks = [];
-    let nextTasks = [];
+      // const rawIds = (batchOrder.dropDetails || [])
+      //   .map((d) => d?.taskId)
+      //   .filter(Boolean);
 
-    const groupedTasks = {};
+      // const uniqueIds = [...new Set(rawIds.map(String))] // dedupe
+      //   .map((id) => new mongoose.Types.ObjectId(id)); // ensure ObjectId
 
-    taskFound.forEach((task) => {
-      const orderId = task.orderId?._id;
+      // if (uniqueIds.length === 0) return [];
 
-      // Initialize grouped task for the order if it doesn't exist
-      if (!groupedTasks[orderId]) {
-        groupedTasks[orderId] = {
-          orderId: orderId,
-          orderType: task?.orderId?.orderDetail?.deliveryMode || null,
-          tasks: {
-            pickup: null,
-            delivery: null,
-          },
-        };
-      }
+      // // Fetch only Assigned tasks
+      // const taskFound = await Task.find({
+      //   _id: { $in: uniqueIds },
+      //   status: "Assigned",
+      // }).lean();
 
-      // Construct pickup task
-      const pickupTask = {
+      console.log("batchOrder", batchOrder);
+      const pickupValue = {
         type: "Pickup",
-        taskId: task._id,
-        taskStatus: task.pickupDetail.pickupStatus,
-        date: formatDate(task?.orderId?.orderDetail?.deliveryTime),
-        time: formatTime(task.createdAt),
+        // taskId: task._id,
+        taskStatus: batchOrder.pickupAddress.status,
+        // date: formatDate(task?.orderId?.deliveryTime),
+        // time: formatTime(task.createdAt),
         address: {
-          fullName: task?.pickupDetail?.pickupAddress?.fullName || null,
-          flat: task?.pickupDetail?.pickupAddress?.flat || null,
-          area: task?.pickupDetail?.pickupAddress?.area || null,
-          phoneNumber: task?.pickupDetail?.pickupAddress?.phoneNumber || null,
-          location: task?.pickupDetail?.pickupLocation || null,
+          fullName: batchOrder.pickupAddress?.fullName || null,
+          // flat: batchOrder.pickupAddress?.flat || null,
+          area: batchOrder.pickupAddress?.area || null,
+          phoneNumber: batchOrder.pickupAddress?.phoneNumber || null,
+          location: batchOrder.pickupAddress?.location || null,
         },
         agentLocation: getUserLocationFromSocket(agentId),
       };
-
-      // Construct delivery task
-      const deliveryTask = {
-        type: "Delivery",
-        taskId: task._id,
-        taskStatus: task.deliveryDetail.deliveryStatus,
-        date: formatDate(task.createdAt),
-        time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
-        name: task.deliveryDetail.deliveryAddress.fullName,
-        address: {
-          fullName: task.deliveryDetail.deliveryAddress.fullName,
-          flat: task?.deliveryDetail?.deliveryAddress?.flat,
-          area: task.deliveryDetail.deliveryAddress.area,
-          phoneNumber: task.deliveryDetail.deliveryAddress.phoneNumber,
-          location: task.deliveryDetail.deliveryLocation,
+      const response = {
+        orderId: batchOrder._id,
+        orderType: batchOrder.deliveryMode,
+        tasks: {
+          pickups: pickupValue,
+          deliveries: [],
         },
-        agentLocation: getUserLocationFromSocket(agentId),
       };
+      console.log("response value 1", response);
+      batchOrder?.dropDetails?.forEach((dropDetails) => {
+        console.log("dropDetails value", dropDetails);
+        const taskFound = Task.findById(dropDetails.taskId)
+          .populate("orderId")
+          .lean();
+        response?.tasks?.deliveries.push({
+          type: "Delivery",
+          taskId: dropDetails.taskId,
+          taskStatus: dropDetails?.drops.status,
+          date: formatDate(taskFound.createdAt),
+          time: formatTime(taskFound?.orderId?.orderDetail?.deliveryTime),
+          address: {
+            fullName: dropDetails?.drops?.address.fullName || null,
+            flat: dropDetails?.drops?.address.flat || null,
+            area: dropDetails?.drops?.address.area || null,
+            phoneNumber: dropDetails?.drops?.address.phoneNumber || null,
+            location: dropDetails?.drops.location || null,
+          },
+          agentLocation: getUserLocationFromSocket(agentId),
+        });
+      });
+      console.log("response value", response);
 
-      // Add tasks to grouped object based on type
-      groupedTasks[orderId].tasks.pickup = pickupTask;
-      groupedTasks[orderId].tasks.delivery = deliveryTask;
-    });
+      //   Object.values(response).forEach((order) => {
+      //   currentTasks.push(order);
+      // });
 
-    // Separate tasks into currentTasks and nextTasks
-    Object.values(groupedTasks).forEach((order) => {
-      currentTasks.push(order);
-    });
+      res.status(200).json({
+        message: "Task preview",
+        data: {
+          response,
+          //nextTasks, // keep empty for now until we add scheduling logic
+        },
+      });
+    } else {
+      taskFound.forEach((task) => {
+        const orderId = task.orderId?._id;
+        // const orderId = task.orderId;
 
-    res.status(200).json({
-      message: "Task preview",
-      data: {
-        currentTasks,
-        nextTasks,
-      },
-    });
+        if (!groupedTasks[orderId]) {
+          groupedTasks[orderId] = {
+            orderId,
+            orderType: task?.orderId?.deliveryMode || null,
+            tasks: {
+              pickups: [],
+              deliveries: [],
+            },
+          };
+        }
+
+        // Loop through each pickup
+        task?.pickupDropDetails?.forEach((detailBlock) => {
+          detailBlock?.pickups?.forEach((pickup) => {
+            groupedTasks[orderId].tasks.pickups.push({
+              type: "Pickup",
+              taskId: task._id,
+              taskStatus: pickup.status,
+              date: formatDate(task?.orderId?.deliveryTime),
+              time: formatTime(task.createdAt),
+              address: {
+                fullName: pickup.address?.fullName || null,
+                flat: pickup.address?.flat || null,
+                area: pickup.address?.area || null,
+                phoneNumber: pickup.address?.phoneNumber || null,
+                location: pickup.location || null,
+              },
+              agentLocation: getUserLocationFromSocket(agentId),
+            });
+          });
+
+          // Loop through each drop
+          detailBlock?.drops?.forEach((drop) => {
+            groupedTasks[orderId].tasks.deliveries.push({
+              type: "Delivery",
+              taskId: task._id,
+              taskStatus: drop.status,
+              date: formatDate(task.createdAt),
+              time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
+              address: {
+                fullName: drop.address?.fullName || null,
+                flat: drop.address?.flat || null,
+                area: drop.address?.area || null,
+                phoneNumber: drop.address?.phoneNumber || null,
+                location: drop.location || null,
+              },
+              agentLocation: getUserLocationFromSocket(agentId),
+            });
+          });
+        });
+      });
+
+      // Push into currentTasks
+      Object.values(groupedTasks).forEach((order) => {
+        currentTasks.push(order);
+      });
+
+      res.status(200).json({
+        message: "Task preview",
+        data: {
+          currentTasks,
+          nextTasks, // keep empty for now until we add scheduling logic
+        },
+      });
+    }
+
+    //###########################################
   } catch (err) {
     next(appError(err.message));
   }
 };
 
+// const getTaskPreviewController = async (req, res, next) => {
+//   try {
+//     const agentId = req.userAuth;
+
+//     const agentFound = await Agent.findById(agentId);
+
+//     if (!agentFound) return next(appError("Agent not found", 404));
+
+//     const taskFound = await Task.find({
+//       agentId,
+//       taskStatus: "Assigned",
+//     })
+//       .populate("orderId")
+//       .sort({ createdAt: 1 });
+
+//     let currentTasks = [];
+//     let nextTasks = [];
+
+//     const groupedTasks = {};
+
+//     taskFound.forEach((task) => {
+//       const orderId = task.orderId?._id;
+
+//       // Initialize grouped task for the order if it doesn't exist
+//       if (!groupedTasks[orderId]) {
+//         groupedTasks[orderId] = {
+//           orderId: orderId,
+//           orderType: task?.orderId?.deliveryMode || null,
+//           tasks: {
+//             pickup: null,
+//             delivery: null,
+//           },
+//         };
+//       }
+
+//       // Construct pickup task
+//       const pickupTask = {
+//         type: "Pickup",
+//         taskId: task._id,
+//         taskStatus: task.pickupDropDetails?.pickups?.[0].status,
+//         date: formatDate(task?.orderId?.deliveryTime),
+//         time: formatTime(task.createdAt),
+//         address: {
+//           fullName:
+//             task?.pickupDropDetails?.[0]?.pickups?.[0].address.fullName || null,
+//           flat: task?.pickupDropDetails?.pickups?.[0].address.flat || null,
+//           area: task?.pickupDropDetails?.pickups?.[0].address.area || null,
+//           phoneNumber:
+//             task?.pickupDropDetails?.pickups?.[0].address.phoneNumber || null,
+//           location: task.pickupDropDetails?.pikcups?.[0]?.location || null,
+//         },
+//         agentLocation: getUserLocationFromSocket(agentId),
+//       };
+
+//       // Construct delivery task
+//       const deliveryTask = {
+//         type: "Delivery",
+//         taskId: task._id,
+//         taskStatus: task.pickupDropDetails?.drops?.[0].status,
+//         date: formatDate(task.createdAt),
+//         time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
+//         name: task.pickupDropDetails?.drops?.[0]?.address.fullName,
+//         address: {
+//           fullName: task.pickupDropDetails?.drops?.[0]?.address.fullName,
+//           flat: task?.deliveryDetail?.deliveryAddress?.flat,
+//           area: task.pickupDropDetails?.drops?.[0]?.address.area,
+//           phoneNumber: task.pickupDropDetails?.drops?.[0]?.address.phoneNumber,
+//           location: task.pickupDropDetails?.drops?.[0]?.location || null,
+//         },
+//         agentLocation: getUserLocationFromSocket(agentId),
+//       };
+
+//       // Add tasks to grouped object based on type
+//       groupedTasks[orderId].tasks.pickup = pickupTask;
+//       groupedTasks[orderId].tasks.delivery = deliveryTask;
+//     });
+
+//     // Separate tasks into currentTasks and nextTasks
+//     Object.values(groupedTasks).forEach((order) => {
+//       currentTasks.push(order);
+//     });
+
+//     res.status(200).json({
+//       message: "Task preview",
+//       data: {
+//         currentTasks,
+//         nextTasks,
+//       },
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 // Get pickup details
+
+// const getPickUpDetailController = async (req, res, next) => {
+//   try {
+//     const { taskId, stepIndex } = req.params;
+
+//     const taskFound = await Task.findById(taskId).populate("orderId");
+//     if (!taskFound) {
+//       return next(appError("Task not found", 404));
+//     }
+
+//     let merchantFound;
+//     if (taskFound?.orderId?.merchantId) {
+//       merchantFound = await Merchant.findById(taskFound.orderId.merchantId); // Update here if needed
+//     }
+
+//     const formattedResponse = {
+//       taskId: taskFound._id,
+//       orderId: taskFound.orderId._id,
+//       merchantId: merchantFound?._id || null,
+//       merchantName: merchantFound?.merchantDetail?.merchantName || null,
+//       customerId: taskFound?.orderId?.customerId || null,
+//       customerName:
+//         taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+//       customerPhoneNumber:
+//         taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
+//       type: "Pickup",
+//       date: formatDate(taskFound?.orderId?.createdAt) || null,
+//       time: formatTime(taskFound?.orderId?.createdAt) || null,
+//       taskStatus: taskFound.pickupDetail?.pickupStatus || null,
+//       pickupName: taskFound?.pickupDetail?.pickupAddress?.fullName || null,
+//       pickupAddress: taskFound?.pickupDetail?.pickupAddress?.area || null,
+//       pickupPhoneNumber:
+//         taskFound?.pickupDetail?.pickupAddress?.phoneNumber || null,
+//       instructions:
+//         taskFound?.orderId?.orderDetail?.instructionToMerchant ||
+//         taskFound?.orderId?.orderDetail?.instructionInPickup ||
+//         null,
+//       voiceInstructions:
+//         taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
+//         taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
+//         taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+//         null,
+//       pickupLocation: taskFound?.pickupDetail?.pickupLocation,
+//       deliveryMode: taskFound?.orderId?.orderDetail?.deliveryMode || null,
+//       orderItems: taskFound?.orderId?.items || [],
+//       billDetail: taskFound?.orderId?.billDetail || {},
+//       paymentMode: taskFound?.orderId?.paymentMode || null,
+//       paymentStatus: taskFound?.orderId?.paymentStatus || null,
+//     };
+
+//     res.status(200).json({
+//       message: "Pick up details.",
+//       data: formattedResponse,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const getPickUpDetailController = async (req, res, next) => {
+  console.log("DATa", req.body);
   try {
-    const { taskId } = req.params;
+    const { taskId, stepIndex } = req.params; // stepIndex from route param
+    // If you prefer query: const { stepIndex } = req.query;
+    const { batchOrderId, batchOrder } = req.body;
 
-    const taskFound = await Task.findById(taskId).populate("orderId");
-    if (!taskFound) {
-      return next(appError("Task not found", 404));
+    if (batchOrder) {
+      const batchOrderFound = await BatchOrder.findById(batchOrderId);
+      const taskIds = batchOrderFound.dropDetails.map(
+        (detail) => detail.taskId
+      );
+      const taskFound = await Task.find({
+        _id: { $in: taskIds },
+      }).populate("orderId");
+      if (!taskFound) {
+        return next(appError("Task not found", 404));
+      }
+      console.log("taskFound", taskFound);
+
+      let merchantFound;
+      if (taskFound[0]?.orderId?.merchantId) {
+        merchantFound = await Merchant.findById(
+          taskFound[0].orderId.merchantId
+        );
+      }
+      console.log("merchantFound", merchantFound);
+      console.log(
+        "taskFound.pickupDropDetails",
+        taskFound[0].pickupDropDetails[0]?.pickups
+      );
+
+      // ✅ Find the pickup matching the stepIndex
+      const pickupDetail = taskFound[0].pickupDropDetails[0]?.pickups?.find(
+        (p) => p.stepIndex === parseInt(0)
+      );
+
+      if (!pickupDetail) {
+        return next(
+          appError("Pickup detail not found for this stepIndex", 404)
+        );
+      }
+
+      const formattedResponse = {
+        taskId: taskFound[0]._id,
+        orderId: taskFound[0].orderId?._id || taskFound.orderId, // handle string ID
+        merchantId: merchantFound?._id || null,
+        merchantName: merchantFound?.merchantDetail?.merchantName || null,
+        customerId: taskFound[0]?.orderId?.customerId || null,
+        customerName:
+          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+        customerPhoneNumber:
+          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.phoneNumber ||
+          null,
+        type: "Pickup",
+        date: formatDate(taskFound[0]?.orderId?.createdAt) || null,
+        time: formatTime(taskFound[0]?.orderId?.createdAt) || null,
+        taskStatus: pickupDetail?.status || null,
+        pickupName: pickupDetail?.address?.fullName || null,
+        items: pickupDetail?.items || [],
+        pickupAddress: pickupDetail?.address?.area || null,
+        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
+        instructions:
+          taskFound[0]?.orderId?.orderDetail?.instructionToMerchant ||
+          taskFound[0]?.orderId?.orderDetail?.instructionInPickup ||
+          null,
+        voiceInstructions:
+          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          null,
+        pickupLocation: pickupDetail?.location || null,
+        deliveryMode: taskFound[0]?.deliveryMode || null,
+        orderItems: taskFound.flatMap(
+          (task) => task?.orderId?.purchasedItems || []
+        ),
+        billDetail: taskFound?.orderId?.billDetail || {},
+        paymentMode: taskFound[0]?.orderId?.paymentMode || null,
+        paymentStatus: taskFound[0]?.orderId?.paymentStatus || null,
+      };
+
+      res.status(200).json({
+        message: "Pickup detail fetched successfully.",
+        data: formattedResponse,
+      });
+    } else {
+      const taskFound = await Task.findById(taskId).populate("orderId");
+      if (!taskFound) {
+        return next(appError("Task not found", 404));
+      }
+
+      let merchantFound;
+      if (taskFound?.orderId?.merchantId) {
+        merchantFound = await Merchant.findById(taskFound.orderId.merchantId);
+      }
+
+      // ✅ Find the pickup matching the stepIndex
+      const pickupDetail = taskFound.pickupDropDetails?.[0]?.pickups?.find(
+        (p) => p.stepIndex === parseInt(stepIndex)
+      );
+
+      if (!pickupDetail) {
+        return next(
+          appError("Pickup detail not found for this stepIndex", 404)
+        );
+      }
+
+      const formattedResponse = {
+        taskId: taskFound._id,
+        orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
+        merchantId: merchantFound?._id || null,
+        merchantName: merchantFound?.merchantDetail?.merchantName || null,
+        customerId: taskFound?.orderId?.customerId || null,
+        customerName:
+          taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+        customerPhoneNumber:
+          taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
+        type: "Pickup",
+        date: formatDate(taskFound?.orderId?.createdAt) || null,
+        time: formatTime(taskFound?.orderId?.createdAt) || null,
+        taskStatus: pickupDetail?.status || null,
+        pickupName: pickupDetail?.address?.fullName || null,
+        items: pickupDetail?.items || [],
+        pickupAddress: pickupDetail?.address?.area || null,
+        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
+        instructions:
+          taskFound?.orderId?.orderDetail?.instructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.instructionInPickup ||
+          null,
+        voiceInstructions:
+          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
+          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          null,
+        pickupLocation: pickupDetail?.location || null,
+        deliveryMode: taskFound?.deliveryMode || null,
+        orderItems: taskFound?.orderId?.purchasedItems || [],
+        billDetail: taskFound?.orderId?.billDetail || {},
+        paymentMode: taskFound?.orderId?.paymentMode || null,
+        paymentStatus: taskFound?.orderId?.paymentStatus || null,
+      };
+
+      res.status(200).json({
+        message: "Pickup detail fetched successfully.",
+        data: formattedResponse,
+      });
     }
-
-    let merchantFound;
-    if (taskFound?.orderId?.merchantId) {
-      merchantFound = await Merchant.findById(taskFound.orderId.merchantId); // Update here if needed
-    }
-
-    const formattedResponse = {
-      taskId: taskFound._id,
-      orderId: taskFound.orderId._id,
-      merchantId: merchantFound?._id || null,
-      merchantName: merchantFound?.merchantDetail?.merchantName || null,
-      customerId: taskFound?.orderId?.customerId || null,
-      customerName:
-        taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
-      customerPhoneNumber:
-        taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
-      type: "Pickup",
-      date: formatDate(taskFound?.orderId?.createdAt) || null,
-      time: formatTime(taskFound?.orderId?.createdAt) || null,
-      taskStatus: taskFound.pickupDetail?.pickupStatus || null,
-      pickupName: taskFound?.pickupDetail?.pickupAddress?.fullName || null,
-      pickupAddress: taskFound?.pickupDetail?.pickupAddress?.area || null,
-      pickupPhoneNumber:
-        taskFound?.pickupDetail?.pickupAddress?.phoneNumber || null,
-      instructions:
-        taskFound?.orderId?.orderDetail?.instructionToMerchant ||
-        taskFound?.orderId?.orderDetail?.instructionInPickup ||
-        null,
-      voiceInstructions:
-        taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
-        null,
-      pickupLocation: taskFound?.pickupDetail?.pickupLocation,
-      deliveryMode: taskFound?.orderId?.orderDetail?.deliveryMode || null,
-      orderItems: taskFound?.orderId?.items || [],
-      billDetail: taskFound?.orderId?.billDetail || {},
-      paymentMode: taskFound?.orderId?.paymentMode || null,
-      paymentStatus: taskFound?.orderId?.paymentStatus || null,
-    };
-
-    res.status(200).json({
-      message: "Pick up details.",
-      data: formattedResponse,
-    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -1187,36 +1519,50 @@ const getPickUpDetailController = async (req, res, next) => {
 // Get delivery details
 const getDeliveryDetailController = async (req, res, next) => {
   try {
-    const { taskId } = req.params;
+    const { taskId, stepIndex } = req.params; // ✅ get stepIndex
+    // If you prefer query: const { stepIndex } = req.query;
 
     const taskFound = await Task.findById(taskId).populate("orderId");
+    if (!taskFound) {
+      return next(appError("Task not found", 404));
+    }
+
+    // ✅ Find drop by stepIndex
+    const deliveryDetail = taskFound.pickupDropDetails?.[0]?.drops?.find(
+      (d) => d.stepIndex === parseInt(stepIndex)
+    );
+
+    if (!deliveryDetail) {
+      return next(
+        appError("Delivery detail not found for this stepIndex", 404)
+      );
+    }
 
     const formattedResponse = {
       taskId: taskFound._id,
-      orderId: taskFound.orderId._id,
+      orderId: taskFound.orderId?._id || taskFound.orderId,
       messageReceiverId: taskFound?.orderId?.customerId || null,
       type: "Delivery",
-      date: formatDate(taskFound.orderId.orderDetail?.deliveryTime),
-      time: formatTime(taskFound.orderId.orderDetail?.deliveryTime),
-      taskStatus: taskFound.deliveryDetail?.deliveryStatus,
-      customerName: taskFound?.deliveryDetail?.deliveryAddress?.fullName,
-      deliveryAddress: taskFound?.deliveryDetail?.deliveryAddress,
-      customerPhoneNumber:
-        taskFound?.deliveryDetail?.deliveryAddress?.phoneNumber,
+      date: formatDate(taskFound.orderId.deliveryTime),
+      time: formatTime(taskFound.orderId.deliveryTime),
+      taskStatus: deliveryDetail?.status || null,
+      customerName: deliveryDetail?.address?.fullName || null,
+      deliveryAddress: deliveryDetail?.address || null,
+      customerPhoneNumber: deliveryDetail?.address?.phoneNumber || null,
       instructions:
-        taskFound?.orderId?.orderDetail?.instructionInDelivery ||
-        taskFound?.orderId?.orderDetail?.instructionToDeliveryAgent ||
+        taskFound?.orderId?.instructionInDelivery ||
+        taskFound?.orderId?.instructionToDeliveryAgent ||
         null,
       voiceInstructions:
-        taskFound?.orderId?.orderDetail?.voiceInstructionInDelivery ||
-        taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+        taskFound?.orderId?.voiceInstructionInDelivery ||
+        taskFound?.orderId?.voiceInstructionToDeliveryAgent ||
         null,
-      deliveryLocation: taskFound?.deliveryDetail?.deliveryLocation,
-      deliveryMode: taskFound.orderId.orderDetail.deliveryMode,
-      orderItems: taskFound.orderId.items,
-      billDetail: taskFound.orderId.billDetail,
-      paymentMode: taskFound.orderId.paymentMode,
-      paymentStatus: taskFound.orderId.paymentStatus,
+      deliveryLocation: deliveryDetail?.location || null,
+      deliveryMode: taskFound?.deliveryMode || null,
+      orderItems: taskFound?.orderId?.purchasedItems || [],
+      billDetail: taskFound?.orderId?.billDetail || {},
+      paymentMode: taskFound?.orderId?.paymentMode || null,
+      paymentStatus: taskFound?.orderId?.paymentStatus || null,
       isnoteAdded: taskFound?.orderId?.detailAddedByAgent?.notes ? true : false,
       isSignatureAdded: taskFound?.orderId?.detailAddedByAgent
         ?.signatureImageURL
@@ -1228,7 +1574,7 @@ const getDeliveryDetailController = async (req, res, next) => {
     };
 
     res.status(200).json({
-      message: "Delivery details",
+      message: "Delivery detail fetched successfully.",
       data: formattedResponse,
     });
   } catch (err) {
@@ -1464,16 +1810,196 @@ const confirmCashReceivedController = async (req, res, next) => {
   }
 };
 
-// Complete order after confirming the cash
+// // Complete order after confirming the cash
+// const completeOrderController = async (req, res, next) => {
+//   try {
+//     const { orderId } = req.body;
+//     const agentId = req.userAuth;
+
+//     console.log("orderId", orderId);
+
+//     const [agentFound, orderFound] = await Promise.all([
+//       Agent.findById(agentId),
+//       Order.findById(orderId),
+//     ]);
+
+//     console.log("✅ Agent found:", agentFound?._id);
+//     console.log("✅ Order found:", orderFound?._id);
+
+//     if (!agentFound) return next(appError("Agent not found", 404));
+//     if (!orderFound) return next(appError("Order not found", 404));
+
+//     if (orderFound.status === "Completed")
+//       return next(appError("Order already completed", 400));
+
+//     const customerFound = await Customer.findById(orderFound.customerId);
+
+//     if (!customerFound) return next(appError("Customer not found", 404));
+
+//     const { itemTotal } = orderFound.billDetail;
+
+//     // Calculate loyalty points for customer
+//     const loyaltyPointCriteria = await LoyaltyPoint.findOne({ status: true });
+//     if (
+//       loyaltyPointCriteria &&
+//       itemTotal >= loyaltyPointCriteria.minOrderAmountForEarning
+//     ) {
+//       updateLoyaltyPoints(
+//         customerFound,
+//         loyaltyPointCriteria,
+//         orderFound.billDetail.grandTotal
+//       );
+//     }
+
+//     // Calculate referral rewards for customer
+//     if (!customerFound?.referralDetail?.processed) {
+//       await processReferralRewards(customerFound, itemTotal);
+//     }
+
+//     // Calculate earnings for agent
+//     const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
+//       agentFound,
+//       orderFound
+//     );
+
+//     console.log("✅ Calculated Salary:", calculatedSalary);
+//     console.log("✅ Calculated Surge:", calculatedSurge);
+
+//     // Update order details
+//     updateOrderDetails(orderFound, calculatedSalary);
+
+//     const isOrderCompleted = true;
+
+//     console.log("✅ Order details updated.");
+
+//     await Promise.all([
+//       updateCustomerSubscriptionCount(customerFound._id),
+//       updateNotificationStatus(orderId),
+//       updateAgentDetails(
+//         agentFound,
+//         orderFound,
+//         calculatedSalary,
+//         calculatedSurge,
+//         isOrderCompleted
+//       ),
+//     ]);
+
+//     console.log("✅ Order, Customer, and Agent details updated.");
+
+//     const stepperDetail = {
+//       by: agentFound.fullName,
+//       date: new Date(),
+//     };
+
+//     console.log("✅ Stepper Detail:", stepperDetail);
+
+//     orderFound.orderDetailStepper.completed = stepperDetail;
+//     agentFound.taskCompleted += 1;
+//     agentFound.markModified("appDetail");
+
+//     await Promise.all([
+//       orderFound.save(),
+//       customerFound.save(),
+//       agentFound.save(),
+//       // Agent.findByIdAndUpdate(agentId, {
+//       //   $inc: { taskCompleted: 1 },
+//       // }),
+//     ]);
+
+//     const eventName = "orderCompleted";
+
+//     const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+//     let manager;
+//     // Send notifications to each role dynamically
+//     for (const role of rolesToNotify) {
+//       let roleId;
+
+//       if (role === "admin") {
+//         roleId = process.env.ADMIN_ID;
+//       } else if (role === "merchant") {
+//         roleId = orderFound?.merchantId;
+//       } else if (role === "driver") {
+//         roleId = orderFound?.agentId;
+//       } else if (role === "customer") {
+//         roleId = orderFound?.customerId;
+//       } else {
+//         const roleValue = await ManagerRoles.findOne({ roleName: role });
+//         if (roleValue) {
+//           manager = await Manager.findOne({ role: roleValue._id });
+//         } // Assuming `role` is the role field to match in Manager model
+//         if (manager) {
+//           roleId = manager._id; // Set roleId to the Manager's ID
+//         }
+//       }
+
+//       if (roleId) {
+//         const notificationData = {
+//           fcm: {
+//             orderId: orderFound._id,
+//             customerId: customerFound._id,
+//             merchantId: orderFound?.merchantId,
+//           },
+//         };
+
+//         await sendNotification(
+//           roleId,
+//           eventName,
+//           notificationData,
+//           role.charAt(0).toUpperCase() + role.slice(1)
+//         );
+//       }
+//     }
+
+//     const socketData = {
+//       ...data,
+//       orderDetailStepper: stepperDetail,
+//     };
+
+//     sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+//     sendSocketData(orderFound.customerId, eventName, socketData);
+//     if (orderFound?.merchantId) {
+//       sendSocketData(orderFound.merchantId, eventName, socketData);
+//     }
+//     if (manager?._id) {
+//       sendSocketData(manager._id, eventName, socketData);
+//     }
+
+//     res.status(200).json({
+//       message: "Order completed successfully",
+//       data: calculatedSalary,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
+
 const completeOrderController = async (req, res, next) => {
   try {
-    const { orderId } = req.body;
+    const { orderId, isBatchOrder, batchOrderId } = req.body;
     const agentId = req.userAuth;
+
+    console.log("👉 Incoming request:", {
+      orderId,
+      agentId,
+      isBatchOrder,
+      batchOrderId,
+    });
 
     const [agentFound, orderFound] = await Promise.all([
       Agent.findById(agentId),
       Order.findById(orderId),
+      // BatchOrder.findById(batchOrderId),
     ]);
+
+    if (isBatchOrder) {
+      const [batchOrderFound] = await Promise.all([
+        BatchOrder.findById(batchOrderId),
+      ]);
+    }
+
+    console.log("✅ Agent found:", agentFound?._id);
+    console.log("✅ Order found:", orderFound?._id);
 
     if (!agentFound) return next(appError("Agent not found", 404));
     if (!orderFound) return next(appError("Order not found", 404));
@@ -1482,17 +2008,19 @@ const completeOrderController = async (req, res, next) => {
       return next(appError("Order already completed", 400));
 
     const customerFound = await Customer.findById(orderFound.customerId);
-
     if (!customerFound) return next(appError("Customer not found", 404));
+
+    console.log("✅ Customer found:", customerFound._id);
 
     const { itemTotal } = orderFound.billDetail;
 
-    // Calculate loyalty points for customer
+    // Loyalty points
     const loyaltyPointCriteria = await LoyaltyPoint.findOne({ status: true });
     if (
       loyaltyPointCriteria &&
       itemTotal >= loyaltyPointCriteria.minOrderAmountForEarning
     ) {
+      console.log("📌 Updating loyalty points...");
       updateLoyaltyPoints(
         customerFound,
         loyaltyPointCriteria,
@@ -1500,114 +2028,271 @@ const completeOrderController = async (req, res, next) => {
       );
     }
 
-    // Calculate referral rewards for customer
+    // Referral rewards
     if (!customerFound?.referralDetail?.processed) {
+      console.log("📌 Processing referral rewards...");
       await processReferralRewards(customerFound, itemTotal);
     }
 
-    // Calculate earnings for agent
+    // Agent earnings
     const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
       agentFound,
       orderFound
     );
 
-    // Update order details
+    console.log("✅ Calculated Salary:", calculatedSalary);
+    console.log("✅ Calculated Surge:", calculatedSurge);
+
+    // Update order
     updateOrderDetails(orderFound, calculatedSalary);
+    console.log("✅ Order details updated.");
 
     const isOrderCompleted = true;
 
-    await Promise.all([
-      updateCustomerSubscriptionCount(customerFound._id),
-      updateNotificationStatus(orderId),
-      updateAgentDetails(
-        agentFound,
-        orderFound,
-        calculatedSalary,
-        calculatedSurge,
-        isOrderCompleted
-      ),
-    ]);
+    // Update customer, notification, and agent
+    const updates = [updateCustomerSubscriptionCount(customerFound._id)];
 
-    const stepperDetail = {
-      by: agentFound.fullName,
-      date: new Date(),
-    };
+    // Only push notification update if it's a batch order
+    if (!isBatchOrder) {
+      updates.push(
+        updateNotificationStatus(orderId),
+        updateAgentDetails(
+          agentFound,
+          orderFound,
+          calculatedSalary,
+          calculatedSurge,
+          isOrderCompleted
+        )
+      );
+    }
 
+    await Promise.all(updates);
+
+    console.log("✅ Order, Customer, and Agent (in-memory) updated.");
+
+    // Stepper detail
+    const stepperDetail = { by: agentFound.fullName, date: new Date() };
     orderFound.orderDetailStepper.completed = stepperDetail;
+
+    console.log("📌 Saving documents...");
+    agentFound.taskCompleted += 1;
+    agentFound.markModified("appDetail");
+
+    console.log("👉 Agent before save:", agentFound.appDetail);
 
     await Promise.all([
       orderFound.save(),
       customerFound.save(),
       agentFound.save(),
-      Agent.findByIdAndUpdate(agentId, {
-        $inc: { taskCompleted: 1 },
-      }),
     ]);
 
-    const eventName = "orderCompleted";
+    console.log("✅ Agent after save check...");
+    const verifyAgent = await Agent.findById(agentId);
+    console.log("👉 Agent from DB after save:", verifyAgent.appDetail);
 
+    // Notifications
+    const eventName = "orderCompleted";
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
     let manager;
-    // Send notifications to each role dynamically
     for (const role of rolesToNotify) {
       let roleId;
-
-      if (role === "admin") {
-        roleId = process.env.ADMIN_ID;
-      } else if (role === "merchant") {
-        roleId = orderFound?.merchantId;
-      } else if (role === "driver") {
-        roleId = orderFound?.agentId;
-      } else if (role === "customer") {
-        roleId = orderFound?.customerId;
-      } else {
+      if (role === "admin") roleId = process.env.ADMIN_ID;
+      else if (role === "merchant") roleId = orderFound?.merchantId;
+      else if (role === "driver") roleId = orderFound?.agentId;
+      else if (role === "customer") roleId = orderFound?.customerId;
+      else {
         const roleValue = await ManagerRoles.findOne({ roleName: role });
-        if (roleValue) {
-          manager = await Manager.findOne({ role: roleValue._id });
-        } // Assuming `role` is the role field to match in Manager model
-        if (manager) {
-          roleId = manager._id; // Set roleId to the Manager's ID
-        }
+        if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
+        if (manager) roleId = manager._id;
       }
 
       if (roleId) {
-        const notificationData = {
-          fcm: {
-            orderId: orderFound._id,
-            customerId: customerFound._id,
-            merchantId: orderFound?.merchantId,
-          },
-        };
-
+        console.log(`📌 Sending notification to ${role}:`, roleId);
         await sendNotification(
           roleId,
           eventName,
-          notificationData,
+          {
+            fcm: {
+              orderId: orderFound._id || batchOrderFound?._id,
+              customerId: customerFound._id,
+              merchantId: orderFound?.merchantId || batchOrderFound?.merchantId,
+            },
+          },
           role.charAt(0).toUpperCase() + role.slice(1)
         );
       }
     }
 
-    const socketData = {
-      ...data,
-      orderDetailStepper: stepperDetail,
-    };
-
+    const socketData = { ...data, orderDetailStepper: stepperDetail };
     sendSocketData(process.env.ADMIN_ID, eventName, socketData);
     sendSocketData(orderFound.customerId, eventName, socketData);
-    if (orderFound?.merchantId) {
+    if (orderFound?.merchantId)
       sendSocketData(orderFound.merchantId, eventName, socketData);
-    }
-    if (manager?._id) {
-      sendSocketData(manager._id, eventName, socketData);
-    }
+    if (manager?._id) sendSocketData(manager._id, eventName, socketData);
 
     res.status(200).json({
       message: "Order completed successfully",
       data: calculatedSalary,
     });
   } catch (err) {
+    console.error("❌ Error in completeOrderController:", err);
+    next(appError(err.message));
+  }
+};
+
+const completeBatchOrderController = async (req, res, next) => {
+  try {
+    const { orderId, isBatchOrder, batchOrderId } = req.body;
+    const agentId = req.userAuth;
+
+    console.log("👉 Incoming request:", {
+      orderId,
+      agentId,
+      isBatchOrder,
+      batchOrderId,
+    });
+
+    const [agentFound, orderFound] = await Promise.all([
+      Agent.findById(agentId),
+      Order.findById(orderId),
+      // BatchOrder.findById(batchOrderId),
+    ]);
+
+    const [batchOrderFound] = await Promise.all([
+      BatchOrder.findById(batchOrderId),
+    ]);
+
+    // console.log("✅ Agent found:", agentFound?._id);
+    // console.log("✅ Order found:", orderFound?._id);
+
+    // if (!agentFound) return next(appError("Agent not found", 404));
+    // if (!orderFound) return next(appError("Order not found", 404));
+
+    // if (orderFound.status === "Completed")
+    //   return next(appError("Order already completed", 400));
+
+    // const customerFound = await Customer.findById(batchOrderFound.customerId);
+    // if (!customerFound) return next(appError("Customer not found", 404));
+
+    // console.log("✅ Customer found:", customerFound._id);
+
+    // const { itemTotal } = orderFound.billDetail;
+
+    // Loyalty points
+    // const loyaltyPointCriteria = await LoyaltyPoint.findOne({ status: true });
+    // if (
+    //   loyaltyPointCriteria &&
+    //   itemTotal >= loyaltyPointCriteria.minOrderAmountForEarning
+    // ) {
+    //   console.log("📌 Updating loyalty points...");
+    //   updateLoyaltyPoints(
+    //     customerFound,
+    //     loyaltyPointCriteria,
+    //     orderFound.billDetail.grandTotal
+    //   );
+    // }
+
+    // Referral rewards
+    // if (!customerFound?.referralDetail?.processed) {
+    //   console.log("📌 Processing referral rewards...");
+    //   await processReferralRewards(customerFound, itemTotal);
+    // }
+
+    // Agent earnings
+    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
+      agentFound,
+      batchOrderFound
+    );
+
+    // console.log("✅ Calculated Salary:", calculatedSalary);
+    // console.log("✅ Calculated Surge:", calculatedSurge);
+
+    // // Update order
+    // updateOrderDetails(orderFound, calculatedSalary);
+    // console.log("✅ Order details updated.");
+
+    const isOrderCompleted = true;
+
+    // // Update customer, notification, and agent
+    const updates = [];
+
+    // Only push notification update if it's a batch order
+    if (isBatchOrder) {
+      // Fetch all child orders of this batch
+      const batchOrders = await Order.find({
+        _id: { $in: batchOrderFound.dropDetails.map((d) => d.orderId) },
+      });
+
+      console.log("📌 Updating batch order and agent details...", batchOrders);
+
+      updates.push(
+        updateAgentDetailsForBatch(
+          agentFound,
+          batchOrders,
+          calculatedSalary,
+          calculatedSurge
+        ),
+        updateNotificationStatus(orderId)
+      );
+    }
+
+    await Promise.all(updates);
+
+    // console.log("✅ Order, Customer, and Agent (in-memory) updated.");
+
+    // // Stepper detail
+    // const stepperDetail = { by: agentFound.fullName, date: new Date() };
+    // orderFound.orderDetailStepper.completed = stepperDetail;
+
+    // console.log("📌 Saving documents...");
+    // agentFound.taskCompleted += 1;
+    // agentFound.markModified("appDetail");
+
+    // console.log("👉 Agent before save:", agentFound.appDetail);
+
+    // await Promise.all([
+    //   orderFound.save(),
+    //   customerFound.save(),
+    //   agentFound.save(),
+    // ]);
+
+    // console.log("✅ Agent after save check...");
+    // const verifyAgent = await Agent.findById(agentId);
+    // console.log("👉 Agent from DB after save:", verifyAgent.appDetail);
+
+    // // Notifications
+    // const eventName = "orderCompleted";
+    // const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+    // let manager;
+    // for (const role of rolesToNotify) {
+    //   let roleId;
+    //   if (role === "admin") roleId = process.env.ADMIN_ID;
+    //   else if (role === "merchant") roleId = orderFound?.merchantId;
+    //   else if (role === "driver") roleId = orderFound?.agentId;
+    //   else if (role === "customer") roleId = orderFound?.customerId;
+    //   else {
+    //     const roleValue = await ManagerRoles.findOne({ roleName: role });
+    //     if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
+    //     if (manager) roleId = manager._id;
+    //   }
+
+    // }
+
+    // const socketData = { ...data, orderDetailStepper: stepperDetail };
+    // sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+    // sendSocketData(orderFound.customerId, eventName, socketData);
+    // if (orderFound?.merchantId)
+    //   sendSocketData(orderFound.merchantId, eventName, socketData);
+    // if (manager?._id) sendSocketData(manager._id, eventName, socketData);
+
+    res.status(200).json({
+      message: "Order completed successfully",
+      data: calculatedSalary,
+    });
+  } catch (err) {
+    console.error("❌ Error in completeOrderController:", err);
     next(appError(err.message));
   }
 };
@@ -1980,32 +2665,86 @@ const getAllNotificationsController = async (req, res, next) => {
   try {
     const agentId = req.userAuth;
 
-    // Set start and end of the day correctly
-    const startOfDay = new Date();
-    startOfDay.setDate(startOfDay.getDate() - 1);
-    startOfDay.setUTCHours(18, 30, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setUTCHours(18, 29, 59, 999);
+    // Current date in IST
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5h30m in ms
 
+    // Convert current UTC time to IST
+    const nowIST = new Date(now.getTime() + istOffset);
+
+    // Start of day in IST (00:00)
+    const startOfDayIST = new Date(
+      nowIST.getFullYear(),
+      nowIST.getMonth(),
+      nowIST.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+
+    // End of day in IST (23:59:59.999)
+    const endOfDayIST = new Date(
+      nowIST.getFullYear(),
+      nowIST.getMonth(),
+      nowIST.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+    // Convert back to UTC (Mongo stores in UTC)
+    const startOfDayUTC = new Date(startOfDayIST.getTime() - istOffset);
+    const endOfDayUTC = new Date(endOfDayIST.getTime() - istOffset);
+
+    console.log("startOfDay (IST)", startOfDayIST);
+    console.log("endOfDay (IST)", endOfDayIST);
+    console.log("startOfDay (UTC)", startOfDayUTC);
+    console.log("endOfDay (UTC)", endOfDayUTC);
+
+    // // Set start and end of the day correctly
+    // const startOfDay = new Date();
+    // startOfDay.setDate(startOfDay.getDate() - 1);
+    // startOfDay.setUTCHours(18, 30, 0, 0);
+    // const endOfDay = new Date();
+    // endOfDay.setUTCHours(18, 29, 59, 999);
+    // console.log("startOfDay", startOfDay);
+    // console.log("endOfDay", endOfDay);
     // Retrieve notifications within the day for the given agent, sorted by date
     const notifications = await AgentNotificationLogs.find({
       agentId,
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      createdAt: { $gte: startOfDayUTC, $lte: endOfDayUTC },
     })
-      .populate("orderId", "orderDetail")
+      // .populate("orderDetail")
       .sort({ createdAt: -1 })
       .lean();
+
+    console.log("notifications", notifications);
+
+    //   const notifications = await AgentNotificationLogs.find({
+    //   agentId,
+    //   createdAt: { $gte: startOfDay, $lte: endOfDay },
+    // })
+    //   .populate("orderId", "orderDetail")
+    //   .sort({ createdAt: -1 })
+    //   .lean();
 
     // Format response
     const formattedResponse = notifications.map((notification) => ({
       notificationId: notification?._id || null,
-      orderId: notification?.orderId?._id || null,
+      // orderId: notification?.orderId || null,
+      orderId: notification?.orderId, //?.map((o) => o._id || o),
       pickupDetail: notification?.pickupDetail?.address || null,
-      deliveryDetail: notification?.deliveryDetail?.address || null,
+      // deliveryDetail: notification?.deliveryDetail?.address || null,
+      deliveryDetail: Array.isArray(notification?.deliveryDetail)
+        ? notification.deliveryDetail.map((d) => d.address || null)
+        : [],
       orderType: notification?.orderType || null,
       status: notification?.status || null,
       taskDate: formatDate(notification?.orderId?.orderDetail?.deliveryTime),
       taskTime: formatTime(notification?.orderId?.orderDetail?.deliveryTime),
+      isBatchOrder: notification.isBatchOrder || false,
     }));
 
     res.status(200).json({
@@ -2035,25 +2774,27 @@ const getAllAgentTaskController = async (req, res, next) => {
       createdAt: { $gte: startOfDay, $lte: endOfDay },
       status: "Pending",
     })
-      .populate("orderId", "orderDetail")
+      // .populate("orderId", "orderDetail")
+      .populate("orderId", "_id pickups drops deliveryMode deliveryTime")
       .sort({ createdAt: -1 })
       .lean();
 
     // Format response
     const formattedResponse = notifications.map((notification) => {
       const order = notification?.orderId;
-      const deliveryAddress = order?.orderDetail?.deliveryAddress;
 
+      const pickupAddress = order?.pickups?.[0]?.address || null;
+      const deliveryAddress = order?.drops?.[0]?.address || null;
       return {
-        orderId: order?._id || null,
-        merchantName: order?.orderDetail?.pickupAddress?.fullName || null,
-        pickAddress: order?.orderDetail?.pickupAddress || null,
+        orderId: order || null,
+        merchantName: pickupAddress?.fullName || null,
+        pickAddress: pickupAddress?.fullAddress || null,
         customerName: deliveryAddress?.fullName || null,
-        customerAddress: deliveryAddress || null,
+        customerAddress: deliveryAddress?.fullAddress || null,
         agentId: agentId,
-        orderType: order?.orderDetail?.deliveryMode || null,
-        taskDate: formatDate(order?.orderDetail?.deliveryTime),
-        taskTime: formatTime(order?.orderDetail?.deliveryTime),
+        orderType: order?.deliveryMode || null,
+        taskDate: formatDate(order?.deliveryTime),
+        taskTime: formatTime(order?.deliveryTime),
         timer: autoAllocation?.expireTime || null,
         createdAt: notification?.createdAt,
       };
@@ -2121,31 +2862,54 @@ const getAllAnnouncementsController = async (req, res, next) => {
 // Get pocket balance (un-settled balance)
 const getPocketBalanceForAgent = async (req, res, next) => {
   try {
-    // Find the agent by ID
-    const agent = await Agent.findById(req.userAuth);
+    const agent = await Agent.findById(req.userAuth).select("appDetailHistory");
 
-    // Check if the agent exists
     if (!agent) return next(appError("Agent not found", 404));
 
-    // Calculate total earnings where paymentSettled is false
-    let totalEarnings = 0;
-
-    const unsettledEarnings = agent.appDetailHistory.filter(
-      (detail) => detail.details.paymentSettled === false
-    );
-
-    unsettledEarnings.forEach((detail) => {
-      totalEarnings += detail.details.totalEarning || 0;
-    });
+    const totalEarnings = (agent.appDetailHistory || [])
+      .filter(detail => detail?.details?.paymentSettled === false)
+      .reduce((sum, detail) => {
+        return sum + (detail?.details?.totalEarning || 0);
+      }, 0);
 
     return res.status(200).json({
       success: true,
       totalEarnings,
     });
+
   } catch (error) {
-    next(appError(err.message));
+    next(appError(error.message));
   }
 };
+
+
+// const getPocketBalanceForAgent = async (req, res, next) => {
+//   try {
+//     // Find the agent by ID
+//     const agent = await Agent.findById(req.userAuth);
+
+//     // Check if the agent exists
+//     if (!agent) return next(appError("Agent not found", 404));
+
+//     // Calculate total earnings where paymentSettled is false
+//     let totalEarnings = 0;
+
+//     const unsettledEarnings = agent.appDetailHistory.filter(
+//       (detail) => detail.details.paymentSettled === false
+//     );
+
+//     unsettledEarnings.forEach((detail) => {
+//       totalEarnings += detail.details.totalEarning || 0;
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       totalEarnings,
+//     });
+//   } catch (error) {
+//     next(appError(error.message));
+//   }
+// };
 
 const getTimeSlotsForAgent = async (req, res, next) => {
   try {
@@ -2239,6 +3003,7 @@ module.exports = {
   addOrderDetailsController,
   confirmCashReceivedController,
   completeOrderController,
+  completeBatchOrderController,
   addRatingsToCustomer,
   getCashInHandController,
   depositCashToFamtoController,

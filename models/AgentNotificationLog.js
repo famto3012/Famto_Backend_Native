@@ -26,21 +26,27 @@ const AgentNotificationLogSchema = new mongoose.Schema(
       ref: "Agent",
       required: true,
     },
-    orderId: {
-      type: String,
-      ref: "Order",
-      required: true,
-    },
+    orderId: [
+      {
+        type: String,
+        ref: "Order",
+        required: true,
+      },
+    ],
     pickupDetail: {
       type: DetailSchema,
     },
     deliveryDetail: {
-      type: DetailSchema,
+      type: [DetailSchema],
       required: true,
     },
     orderType: {
       type: String,
       required: true,
+    },
+    isBatchOrder: {
+      type: Boolean,
+      required: false,
     },
     status: {
       type: String,

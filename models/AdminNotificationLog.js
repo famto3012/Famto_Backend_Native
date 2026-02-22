@@ -2,11 +2,12 @@ const mongoose = require("mongoose");
 
 const AdminNotificationLogSchema = new mongoose.Schema(
   {
-    orderId: {
-      type: String,
-      ref: "Order",
-      default: null,
-    },
+    orderId: [
+      {
+        type: String,
+        ref: "Order",
+      },
+    ],
     imageUrl: {
       type: String,
       default: null,

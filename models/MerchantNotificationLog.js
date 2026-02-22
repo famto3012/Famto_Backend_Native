@@ -2,11 +2,13 @@ const mongoose = require("mongoose");
 
 const MerchantNotificationLogSchema = new mongoose.Schema(
   {
-    orderId: {
-      type: String,
-      ref: "Order",
-      default: null,
-    },
+    orderId: [
+      {
+        type: String,
+        ref: "Order",
+        default: null,
+      },
+    ],
     merchantId: {
       type: String,
       ref: "Merchant",

@@ -1,7 +1,7 @@
 const { validationResult } = require("express-validator");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
-
+const axios = require("axios");
 const Customer = require("../../models/Customer");
 const PromoCode = require("../../models/PromoCode");
 const Order = require("../../models/Order");
@@ -50,6 +50,52 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
 const Task = require("../../models/Task");
+
+
+//For OTP Services -- SMS Provider 2factor.in
+
+const sendOtp = async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  try {
+    const response = await axios.get(
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/${phoneNumber}/AUTOGEN`
+    );
+
+    res.json({
+      success: true,
+      sessionId: response.data.Details, // IMPORTANT
+      message: "OTP sent successfully"
+    });
+  } catch (error) {
+
+    
+    res.status(500).json({
+      success: false,
+      message: "Failed to send OTP"
+    });
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const { phoneNumber, otp } = req.body;
+
+  try {
+    const response = await axios.get(
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/VERIFY3/${phoneNumber}/${otp}`
+    );
+
+    console.log(response.data.Details);
+
+    if (response.data.Status === "Success") {
+      return res.status(200).json({ success: true, message: "OTP verified" });
+    }
+
+    res.status(500).json({ success: false, message: "Invalid OTP" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "OTP verification failed" });
+  }
+};
 
 // Register or login customer
 const registerAndLoginController = async (req, res, next) => {
@@ -133,6 +179,8 @@ const registerAndLoginController = async (req, res, next) => {
 
     await customer.save();
 
+
+    console.log("Authenticated");
     res.status(200).json({
       success: `User ${isNewCustomer ? "created" : "logged in"} successfully`,
       id: customer?.id,
@@ -737,7 +785,7 @@ const getCustomerOrdersController = async (req, res, next) => {
       customerId: currentCustomer,
     })
       .sort({ createdAt: -1 })
-      .select("merchantId status createdAt billDetail orderDetail")
+      .select("merchantId status createdAt billDetail orderDetail deliveryMode")
       .populate({
         path: "merchantId",
         select: "merchantDetail.merchantName merchantDetail.displayAddress",
@@ -752,7 +800,7 @@ const getCustomerOrdersController = async (req, res, next) => {
           order?.merchantId?.merchantDetail?.displayAddress ||
           order?.orderDetail?.pickupAddress?.area ||
           null,
-        deliveryMode: order?.orderDetail?.deliveryMode || null,
+        deliveryMode: order?.deliveryMode || null,
         orderStatus: order.status,
         orderDate: formatDate(order.createdAt),
         orderTime: formatTime(order.createdAt),
@@ -760,6 +808,7 @@ const getCustomerOrdersController = async (req, res, next) => {
       };
     });
 
+    console.log(formattedResponse);
     res.status(200).json({
       data: formattedResponse,
     });
@@ -781,22 +830,28 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
       scheduledPickAndCustom.find({ customerId }),
     ]);
 
+    console.log("Initalizing all orders");
+
     const allOrders = [...universalOrders, ...pickAndCustomOrders].sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
+
+    console.log("All Orders",allOrders);
 
     const formattedResponse = allOrders?.map((order) => ({
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
       displayAddress: order?.merchantId?.merchantDetail?.displayAddress || null,
-      deliveryMode: order.orderDetail.deliveryMode || null,
+      deliveryMode: order.deliveryMode || null,
       startDate: formatDate(order?.startDate),
       endDate: formatDate(order?.endDate),
       time: formatTime(order.time) || null,
-      numberOfDays: order?.orderDetail?.numOfDays || null,
+      numberOfDays: order?.numOfDays || null,
       grandTotal: order.billDetail.grandTotal || null,
       orderStatus: order?.status,
     }));
+
+    console.log("Formatted Response",formattedResponse);
 
     res.status(200).json({ data: formattedResponse });
   } catch (err) {
@@ -817,13 +872,13 @@ const getSingleOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status"
+        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status deliveryMode pickups drops purchasedItems"
       );
 
     if (!orderFound) return next(appError("Order not found", 404));
 
     let showBill = true;
-    if (orderFound.orderDetail.deliveryMode === "Custom Order") {
+    if (orderFound?.deliveryMode === "Custom Order") {
       const task = await Task.findOne({ orderId }).select("deliveryDetail");
 
       showBill = false;
@@ -838,6 +893,8 @@ const getSingleOrderDetailController = async (req, res, next) => {
       }
     }
 
+    console.log("Order Response",orderFound);
+
     // Construct the response object
     const formattedResponse = {
       orderId: orderFound?._id,
@@ -850,19 +907,21 @@ const getSingleOrderDetailController = async (req, res, next) => {
       merchantName:
         orderFound?.merchantId?.merchantDetail?.merchantName || null,
       merchantPhone: orderFound?.merchantId?.phoneNumber || null,
-      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
+      deliveryTime: formatTime(orderFound?.deliveryTime),
       paymentStatus: orderFound?.paymentStatus || null,
-      pickUpAddress:
-        orderFound?.orderDetail?.pickupAddress ||
-        orderFound?.orderDetail?.pickupLocation ||
-        null,
-      deliveryAddress:
-        orderFound?.orderDetail?.deliveryAddress ||
-        orderFound?.orderDetail?.deliveryLocation ||
-        null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
-      items: orderFound?.items || null,
+      // pickUpAddress:
+      //   orderFound?.pickups?.[0]?.address?.flat ||
+      //   orderFound?.orderDetail?.area ||
+      //   null,  
+    pickUpAddress: orderFound?.pickups?.[0]?.address || null,
+    deliveryAddress: orderFound?.drops?.[0]?.address || null,
+    // deliveryAddress:
+      //   orderFound?.drops?.[0]?.address?.flat ||
+      //   orderFound?.drops?.[0]?.address?.area ||
+      //   null,
+      pickUpLocation: orderFound?.pickups?.[0]?.address?.area || null,
+      deliveryLocation: orderFound?.drops?.[0]?.address?.area || null,
+      items: orderFound?.purchasedItems || null,
       billDetail: showBill
         ? {
             deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
@@ -880,7 +939,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
       orderDate: formatDate(orderFound?.createdAt),
       orderTime: formatTime(orderFound?.createdAt),
       paymentMode: orderFound?.paymentMode || null,
-      deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
+      deliveryMode: orderFound?.deliveryMode || null,
       vehicleType: orderFound?.billDetail?.vehicleType || null,
       orderDetailStepper: orderFound?.orderDetailStepper || null,
       detailAddedByAgent: {
@@ -917,9 +976,9 @@ const getScheduledOrderDetailController = async (req, res, next) => {
 
     const formattedResponse = {
       orderId: orderFound._id,
-      pickUpAddress: orderFound?.orderDetail?.pickupAddress || null,
-      deliveryAddress: orderFound?.orderDetail?.deliveryAddress || null,
-      items: orderFound?.items || null,
+      pickUpAddress: orderFound?.pickups?.[0]?.address || null,
+      deliveryAddress: orderFound?.drops?.[0]?.address || null,
+      items: orderFound?.purchasedItems || null,
       billDetail: {
         deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
         taxAmount: orderFound?.billDetail?.taxAmount || null,
@@ -935,13 +994,13 @@ const getScheduledOrderDetailController = async (req, res, next) => {
       orderDate: formatDate(orderFound?.createdAt),
       orderTime: formatTime(orderFound?.createdAt),
       paymentMode: orderFound?.paymentMode || null,
-      deliveryMode: orderFound?.orderDetail?.deliveryMode || null,
+      deliveryMode: orderFound?.deliveryMode || null,
       vehicleType: orderFound?.billDetail?.vehicleType || null,
       startDate: formatDate(orderFound?.startDate),
       endDate: formatDate(orderFound?.endDate),
       time: formatTime(orderFound.time) || null,
-      numberOfDays: orderFound?.orderDetail?.numOfDays || null,
-      deliveryTime: formatTime(orderFound?.orderDetail?.deliveryTime),
+      numberOfDays: orderFound?.numOfDays || null,
+      deliveryTime: formatTime(orderFound?.deliveryTime),
     };
 
     res.status(200).json(formattedResponse);
@@ -1441,7 +1500,7 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId orderDetail.deliveryTime orderDetail.pickupLocation orderDetail.deliveryLocation billDetail orderDetailStepper detailAddedByAgent paymentStatus"
+        "agentId merchantId deliveryTime pickups drops billDetail orderDetailStepper detailAddedByAgent paymentStatus"
       );
 
     const formattedResponse = {
@@ -1454,22 +1513,23 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
         orderFound?.merchantId?.merchantDetail?.merchantName || null,
       merchantPhone: orderFound?.merchantId?.phoneNumber || null,
       agentPhone: orderFound?.agentId?.phoneNumber || null,
-      deliveryTime: formatTime(orderFound.orderDetail.deliveryTime),
+      deliveryTime: formatTime(orderFound.deliveryTime),
       paymentStatus: orderFound?.paymentStatus || null,
       orderDetail: {
-        pickupLocation: orderFound?.orderDetail?.pickupLocation || null,
-        deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+        pickupLocation: orderFound?.pickups || null,
+        deliveryLocation: orderFound?.drops || null,
       },
       orderDetailStepper: orderFound?.orderDetailStepper || null,
       detailAddedByAgent: {
-        notes: orderFound?.detailAddedByAgent.notes || null,
+        notes: orderFound?.detailAddedByAgent?.notes || null,
         signatureImageURL:
-          orderFound?.detailAddedByAgent.signatureImageURL || null,
-        imageURL: orderFound?.detailAddedByAgent.imageURL || null,
+          orderFound?.detailAddedByAgent?.signatureImageURL || null,
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || null,
       },
       billDetail: orderFound?.billDetail || null,
     };
 
+    console.log(formattedResponse);
     res.status(200).json(formattedResponse);
   } catch (err) {
     next(appError(err.message));
@@ -1479,11 +1539,17 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
 //
 const getAllNotificationsOfCustomerController = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
     const customerId = req.userAuth;
 
     const getAllNotifications = await CustomerNotificationLogs.find({
       customerId,
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const formattedResponse = getAllNotifications?.map((notification) => {
       return {
@@ -1494,9 +1560,19 @@ const getAllNotificationsOfCustomerController = async (req, res, next) => {
       };
     });
 
+    const totalDocuments = await CustomerNotificationLogs.countDocuments({
+      customerId,
+    });
+
+    const totalPages = Math.ceil(totalDocuments / limit);
+
     res.status(200).json({
-      message: "All notifications",
       data: formattedResponse,
+      totalDocuments,
+      totalPages,
+      currentPage: page,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
     });
   } catch (err) {
     next(appError(err.message));
@@ -1539,14 +1615,14 @@ const getCurrentOngoingOrders = async (req, res, next) => {
       $or: [{ status: "Pending" }, { status: "On-going" }],
     })
       .populate("merchantId", "merchantDetail.merchantName")
-      .select("merchantId orderDetail.deliveryTime orderDetail.deliveryMode")
+      .select("merchantId deliveryTime deliveryMode")
       .sort({ createdAt: -1 });
 
     const formattedResponse = orders?.map((order) => ({
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
-      deliveryMode: order?.orderDetail?.deliveryMode || null,
-      deliveryTime: formatTime(order?.orderDetail?.deliveryTime) || null,
+      deliveryMode: order?.deliveryMode || null,
+      deliveryTime: formatTime(order?.deliveryTime) || null,
     }));
 
     res.status(200).json(formattedResponse);
@@ -2011,6 +2087,8 @@ const deleteCustomerAccount = async (req, res, next) => {
 };
 
 module.exports = {
+  sendOtp,
+  verifyOtp,
   registerAndLoginController,
   setSelectedGeofence,
   getCustomerProfileController,

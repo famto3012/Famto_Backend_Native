@@ -381,6 +381,8 @@ const getMerchantData = async (req, res, next) => {
 
     let distanceInKM = 0;
 
+    console.log("Lat Lng", latitude , longitude);
+
     if (latitude && longitude) {
       const merchantLocation = merchantFound.merchantDetail.location;
       const customerLocation =
@@ -397,6 +399,8 @@ const getMerchantData = async (req, res, next) => {
         distanceInKM = distance.distanceInKM;
       }
     }
+
+    console.log('Distance',distanceInKM);
 
     let distanceWarning = false;
     if (distanceInKM > 12) distanceWarning = true;
@@ -1398,10 +1402,15 @@ const confirmOrderDetailController = async (req, res, next) => {
       next
     );
 
+    console.log(req.body);
+    console.log(ifScheduled?.startDate);
+
     let deliveryOption = "On-demand";
     if (ifScheduled?.startDate && ifScheduled?.endDate && ifScheduled?.time) {
       deliveryOption = "Scheduled";
     }
+
+    console.log(deliveryOption);
 
     validateDeliveryOption(merchant, deliveryOption, next);
 
@@ -1531,6 +1540,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       deliveryOption: customerCart.cartDetail.deliveryOption,
     });
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };
@@ -1670,10 +1680,35 @@ const orderPaymentController = async (req, res, next) => {
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
-      transactionType: "Bill",
+      transactionType: "Order Created",
       transactionAmount: orderAmount,
       type: "Debit",
     };
+
+    const pickups = [
+      {
+        location: cart.cartDetail.pickupLocation,
+        address: cart.cartDetail.pickupAddress,
+        instructionInPickup: cart.cartDetail.instructionToMerchant,
+        voiceInstructionInPickup: cart.cartDetail.voiceInstructionToMerchant,
+        items: [],
+      },
+    ];
+    const drops = [
+      {
+        location: cart.cartDetail.deliveryLocation,
+        address: cart.cartDetail.deliveryAddress,
+        instructionInDrop: cart.cartDetail.instructionToDeliveryAgent,
+        voiceInstructionInDrop:
+          cart.cartDetail.voiceInstructionToDeliveryAgent,
+        items: cart.items?.map((item) => ({
+          itemName: item.productId.productName,
+          quantity: item.quantity,
+          price: item.price,
+          variantTypeId: item.variantTypeId,
+        })),
+      },
+    ];
 
     let newOrder;
     if (paymentMode === "Famto-cash") {
@@ -1696,6 +1731,8 @@ const orderPaymentController = async (req, res, next) => {
           orderDetail: cart.cartDetail,
           billDetail: orderBill,
           totalAmount: orderAmount,
+          deliveryMode: cart.cartDetail.deliveryMode,
+          deliveryOption : cart.cartDetail.deliveryOption,
           status: "Pending",
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
@@ -1704,6 +1741,8 @@ const orderPaymentController = async (req, res, next) => {
           time: cart.cartDetail.time,
           purchasedItems,
         });
+
+        console.log("Scheduled Order Created", newOrderCreated);
 
         walletTransaction.orderId = newOrderCreated._id;
 
@@ -1719,11 +1758,9 @@ const orderPaymentController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Scheduled order (#${
-              newOrderCreated._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Scheduled order (#${newOrderCreated._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
         ]);
 
@@ -1759,7 +1796,7 @@ const orderPaymentController = async (req, res, next) => {
             newOrder?.orderDetail?.deliveryAddress?.fullName ||
             newOrder?.customerId?.fullName ||
             "-",
-          deliveryMode: newOrder?.orderDetail?.deliveryMode,
+          deliveryMode: newOrder?.deliveryMode,
           orderDate: formatDate(newOrder.createdAt),
           orderTime: formatTime(newOrder.createdAt),
           deliveryDate: newOrder?.orderDetail?.deliveryTime
@@ -1769,7 +1806,7 @@ const orderPaymentController = async (req, res, next) => {
             ? formatTime(newOrder.orderDetail.deliveryTime)
             : "-",
           paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.orderDetail.deliveryOption,
+          deliveryOption: newOrder?.deliveryOption,
           amount: newOrder.billDetail.grandTotal,
         };
 
@@ -1785,7 +1822,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId: newOrder._id,
           createdAt: newOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
-          deliveryMode: newOrder.orderDetail.deliveryMode,
+          deliveryMode: newOrder.deliveryMode,
         });
 
         // Send notifications to each role dynamically
@@ -1807,14 +1844,18 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           customerId,
           merchantId: cart.merchantId,
-          items: formattedItems,
-          orderDetail: {
-            ...cart.cartDetail,
-            deliveryTime,
-          },
+          deliveryMode: cart.cartDetail.deliveryMode,
+          deliveryOption: cart.cartDetail.deliveryOption,
+          pickups,
+          drops,
           billDetail: orderBill,
+          distance: cart.cartDetail.distance,
+          deliveryTime,
+          startDate: cart.cartDetail.startDate,
+          endDate: cart.cartDetail.endDate,
+          time: cart.cartDetail.time,
+          numOfDays: cart.cartDetail.numOfDays,
           totalAmount: orderAmount,
-          status: "Pending",
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
           purchasedItems,
@@ -1845,7 +1886,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
-          deliveryMode: tempOrder.orderDetail.deliveryMode,
+          deliveryMode: tempOrder.deliveryMode,
         });
 
         // After 60 seconds, create the order if not canceled
@@ -1856,22 +1897,27 @@ const orderPaymentController = async (req, res, next) => {
             let newOrderCreated = await Order.create({
               customerId: storedOrderData.customerId,
               merchantId: storedOrderData.merchantId,
-              items: storedOrderData.items,
-              orderDetail: storedOrderData.orderDetail,
+              pickups: storedOrderData.pickups,
+              drops: storedOrderData.drops,
               billDetail: storedOrderData.billDetail,
+              distance: storedOrderData.distance,
+              deliveryTime: storedOrderData.deliveryTime,
+              startDate: storedOrderData.startDate,
+              endDate: storedOrderData.endDate,
+              time: storedOrderData.time,
+              numOfDays: storedOrderData.numOfDays,
+              deliveryMode: storedOrderData.deliveryMode,
+              deliveryOption: storedOrderData.deliveryOption,
               totalAmount: storedOrderData.totalAmount,
               status: storedOrderData.status,
               paymentMode: storedOrderData.paymentMode,
               paymentStatus: storedOrderData.paymentStatus,
-              purchasedItems: storedOrderData.purchasedItems,
               "orderDetailStepper.created": {
-                by:
-                  storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                  customer?.fullName ||
-                  "-",
+                by: "Customer",
                 userId: storedOrderData.customerId,
                 date: new Date(),
               },
+              purchasedItems: storedOrderData.purchasedItems,
             });
 
             if (!newOrderCreated)
@@ -1901,11 +1947,9 @@ const orderPaymentController = async (req, res, next) => {
               ActivityLog.create({
                 userId: req.userAuth,
                 userType: req.userRole,
-                description: `Order (#${
-                  newOrderCreated._id
-                }) from customer app by ${req?.userName || "N/A"} ( ${
-                  req.userAuth
-                } )`,
+                description: `Order (#${newOrderCreated._id
+                  }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                  } )`,
               }),
             ]);
 
@@ -1925,7 +1969,6 @@ const orderPaymentController = async (req, res, next) => {
               ...data,
 
               orderId: newOrder._id,
-              orderDetail: newOrder.orderDetail,
               billDetail: newOrder.billDetail,
               orderDetailStepper: newOrder.orderDetailStepper.created,
 
@@ -1935,20 +1978,21 @@ const orderPaymentController = async (req, res, next) => {
               merchantName:
                 newOrder?.merchantId?.merchantDetail?.merchantName || "-",
               customerName:
-                newOrder?.orderDetail?.deliveryAddress?.fullName ||
+                newOrder?.drops[0]?.deliveryAddress
+                  ?.fullName ||
                 newOrder?.customerId?.fullName ||
                 "-",
-              deliveryMode: newOrder?.orderDetail?.deliveryMode,
+              deliveryMode: newOrder?.deliveryMode,
               orderDate: formatDate(newOrder.createdAt),
               orderTime: formatTime(newOrder.createdAt),
-              deliveryDate: newOrder?.orderDetail?.deliveryTime
-                ? formatDate(newOrder.orderDetail.deliveryTime)
+              deliveryDate: newOrder?.deliveryTime
+                ? formatDate(newOrder.deliveryTime)
                 : "-",
-              deliveryTime: newOrder?.orderDetail?.deliveryTime
-                ? formatTime(newOrder.orderDetail.deliveryTime)
+              deliveryTime: newOrder?.deliveryTime
+                ? formatTime(newOrder.deliveryTime)
                 : "-",
               paymentMethod: newOrder.paymentMode,
-              deliveryOption: newOrder.orderDetail.deliveryOption,
+              deliveryOption: newOrder.deliveryOption,
               amount: newOrder.billDetail.grandTotal,
             };
 
@@ -1986,14 +2030,18 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         customerId,
         merchantId: cart.merchantId,
-        items: formattedItems,
-        orderDetail: {
-          ...cart.cartDetail,
-          deliveryTime,
-        },
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickups,
+        drops,
         billDetail: orderBill,
+        distance: cart.cartDetail.distance,
+        deliveryTime,
+        startDate: cart.cartDetail.startDate,
+        endDate: cart.cartDetail.endDate,
+        time: cart.cartDetail.time,
+        numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
-        status: "Pending",
         paymentMode: "Cash-on-delivery",
         paymentStatus: "Pending",
         purchasedItems,
@@ -2019,34 +2067,47 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
-        deliveryMode: tempOrder.orderDetail.deliveryMode,
+        deliveryMode: tempOrder.deliveryMode,
       });
 
       // After 60 seconds, create the order if not canceled
       setTimeout(async () => {
+        console.log('⏱️ setTimeout triggered for orderId:', orderId);
+
         const storedOrderData = await TemporaryOrder.findOne({ orderId });
+
+        console.log('Stored temp order:', storedOrderData?._id);
+
+        if (!storedOrderData) {
+          console.log('⚠️ Temporary order not found, probably cancelled');
+          return;
+        }
 
         if (storedOrderData) {
           let newOrderCreated = await Order.create({
-            customerId: storedOrderData?.customerId,
-            merchantId: storedOrderData?.merchantId,
-            items: storedOrderData?.items,
-            orderDetail: storedOrderData?.orderDetail,
-            billDetail: storedOrderData?.billDetail,
-            totalAmount: storedOrderData?.totalAmount,
-            status: storedOrderData?.status,
-            paymentMode: storedOrderData?.paymentMode,
-            paymentStatus: storedOrderData?.paymentStatus,
-            paymentId: storedOrderData.paymentId,
-            purchasedItems: storedOrderData?.purchasedItems,
+            customerId: storedOrderData.customerId,
+            merchantId: storedOrderData.merchantId,
+            pickups: storedOrderData.pickups,
+            drops: storedOrderData.drops,
+            billDetail: storedOrderData.billDetail,
+            distance: storedOrderData.distance,
+            deliveryTime: storedOrderData.deliveryTime,
+            startDate: storedOrderData.startDate,
+            endDate: storedOrderData.endDate,
+            time: storedOrderData.time,
+            numOfDays: storedOrderData.numOfDays,
+            deliveryMode: storedOrderData.deliveryMode,
+            totalAmount: storedOrderData.totalAmount,
+            deliveryOption: storedOrderData.deliveryOption,
+            status: storedOrderData.status,
+            paymentMode: storedOrderData.paymentMode,
+            paymentStatus: storedOrderData.paymentStatus,
             "orderDetailStepper.created": {
-              by:
-                storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                customer.fullName ||
-                "-",
-              userId: storedOrderData?.customerId,
+              by: "Customer",
+              userId: storedOrderData.customerId,
               date: new Date(),
             },
+            purchasedItems: storedOrderData.purchasedItems,
           });
 
           if (!newOrderCreated) {
@@ -2070,11 +2131,9 @@ const orderPaymentController = async (req, res, next) => {
             ActivityLog.create({
               userId: req.userAuth,
               userType: req.userRole,
-              description: `Order (#${
-                newOrderCreated._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${
-                req.userAuth
-              } )`,
+              description: `Order (#${newOrderCreated._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                } )`,
             }),
           ]);
 
@@ -2093,7 +2152,6 @@ const orderPaymentController = async (req, res, next) => {
             ...data,
 
             orderId: newOrder._id,
-            orderDetail: newOrder.orderDetail,
             billDetail: newOrder.billDetail,
             orderDetailStepper: newOrder.orderDetailStepper.created,
 
@@ -2103,20 +2161,21 @@ const orderPaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.orderDetail?.deliveryAddress?.fullName ||
+              newOrder?.drops[0]?.address
+                ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
-            deliveryMode: newOrder?.orderDetail?.deliveryMode,
+            deliveryMode: newOrder?.deliveryMode,
             orderDate: formatDate(newOrder.createdAt),
             orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.orderDetail?.deliveryTime
-              ? formatDate(newOrder.orderDetail.deliveryTime)
+            deliveryDate: newOrder?.deliveryTime
+              ? formatDate(newOrder.deliveryTime)
               : "-",
-            deliveryTime: newOrder?.orderDetail?.deliveryTime
-              ? formatTime(newOrder.orderDetail.deliveryTime)
+            deliveryTime: newOrder?.deliveryTime
+              ? formatTime(newOrder.deliveryTime)
               : "-",
             paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.orderDetail.deliveryOption,
+            deliveryOption: newOrder.deliveryOption,
             amount: newOrder.billDetail.grandTotal,
           };
 
@@ -2302,7 +2361,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     let customerTransaction = {
       customerId,
       madeOn: new Date(),
-      transactionType: "Bill",
+      transactionType: "Order Created",
       transactionAmount: orderAmount,
       type: "Debit",
     };
@@ -2325,6 +2384,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         items: formattedItems,
         orderDetail: cart.cartDetail,
         billDetail: orderBill,
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
         totalAmount: orderAmount,
         status: "Pending",
         paymentMode: "Online-payment",
@@ -2349,11 +2410,9 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
-          description: `Scheduled order (#${
-            newOrderCreated._id
-          }) from customer app by ${req?.userName || "N/A"} ( ${
-            req.userAuth
-          } )`,
+          description: `Scheduled order (#${newOrderCreated._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+            } )`,
         }),
       ]);
       console.log("🧾 Post-order updates done");
@@ -2383,20 +2442,20 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderStatus: newOrder.status,
         merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
         customerName:
-          newOrder?.orderDetail?.deliveryAddress?.fullName ||
+          newOrder?.deliveryAddress?.fullName ||
           newOrder?.customerId?.fullName ||
           "-",
-        deliveryMode: newOrder?.orderDetail?.deliveryMode,
+        deliveryMode: newOrder?.deliveryMode,
         orderDate: formatDate(newOrder.createdAt),
         orderTime: formatTime(newOrder.createdAt),
-        deliveryDate: newOrder?.orderDetail?.deliveryTime
-          ? formatDate(newOrder.orderDetail.deliveryTime)
+        deliveryDate: newOrder?.deliveryTime
+          ? formatDate(newOrder.deliveryTime)
           : "-",
-        deliveryTime: newOrder?.orderDetail?.deliveryTime
-          ? formatTime(newOrder.orderDetail.deliveryTime)
+        deliveryTime: newOrder?.deliveryTime
+          ? formatTime(newOrder.deliveryTime)
           : "-",
         paymentMethod: newOrder.paymentMode,
-        deliveryOption: newOrder.orderDetail.deliveryOption,
+        deliveryOption: newOrder.deliveryOption,
         amount: newOrder.billDetail.grandTotal,
       };
 
@@ -2413,7 +2472,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId: newOrder._id,
         createdAt: null,
         merchantName: null,
-        deliveryMode: newOrder.orderDetail.deliveryMode,
+        deliveryMode: newOrder.deliveryMode,
       });
 
       console.log("📢 Sending socket and notification...");
@@ -2435,17 +2494,20 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId,
         customerId,
         merchantId: cart.merchantId,
-        items: formattedItems,
-        orderDetail: {
-          ...cart.cartDetail,
-          deliveryTime,
-        },
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickups,
+        drops,
         billDetail: orderBill,
+        distance: cart.cartDetail.distance,
+        deliveryTime,
+        startDate: cart.cartDetail.startDate,
+        endDate: cart.cartDetail.endDate,
+        time: cart.cartDetail.time,
+        numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
-        status: "Pending",
         paymentMode: "Online-payment",
-        paymentStatus: "Completed",
-        paymentId: paymentDetails.razorpay_payment_id,
+        paymentStatus: "Pending",
         purchasedItems,
       });
 
@@ -2473,7 +2535,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
-        deliveryMode: tempOrder.orderDetail.deliveryMode,
+        deliveryMode: tempOrder.deliveryMode,
       });
 
       console.log("🕑 Scheduling permanent order creation after 60s...");
@@ -2513,10 +2575,18 @@ const verifyOnlinePaymentController = async (req, res, next) => {
           console.log("🧱 Creating final order from temporary data...");
           let newOrderCreated = await Order.create({
             customerId: storedOrderData.customerId,
-            merchantId: storedOrderData?.merchantId,
-            items: storedOrderData.items,
-            orderDetail: storedOrderData.orderDetail,
+            merchantId: storedOrderData.merchantId,
+            pickups: storedOrderData.pickups,
+            drops: storedOrderData.drops,
             billDetail: storedOrderData.billDetail,
+            distance: storedOrderData.distance,
+            deliveryTime: storedOrderData.deliveryTime,
+            startDate: storedOrderData.startDate,
+            endDate: storedOrderData.endDate,
+            deliveryMode: storedOrderData.deliveryMode,
+            deliveryOption : storedOrderData.deliveryOption,
+            time: storedOrderData.time,
+            numOfDays: storedOrderData.numOfDays,
             totalAmount: storedOrderData.totalAmount,
             status: storedOrderData.status,
             paymentMode: storedOrderData.paymentMode,
@@ -2524,13 +2594,11 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             paymentId: storedOrderData.paymentId,
             purchasedItems: fixedPurchasedItems,
             "orderDetailStepper.created": {
-              by:
-                storedOrderData?.orderDetail?.deliveryAddress?.fullName ||
-                customer?.fullName ||
-                "-",
+              by: "Customer",
               userId: storedOrderData.customerId,
               date: new Date(),
             },
+            purchasedItems: storedOrderData.purchasedItems,
           });
 
           console.log("✅ Final order created:", newOrderCreated?._id);
@@ -2550,11 +2618,9 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             ActivityLog.create({
               userId: req.userAuth,
               userType: req.userRole,
-              description: `Order (#${
-                newOrderCreated._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${
-                req.userAuth
-              } )`,
+              description: `Order (#${newOrderCreated._id
+                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+                } )`,
             }),
           ]);
 
@@ -2573,7 +2639,6 @@ const verifyOnlinePaymentController = async (req, res, next) => {
           const socketData = {
             ...data,
             orderId: newOrder._id,
-            orderDetail: newOrder.orderDetail,
             billDetail: newOrder.billDetail,
             orderDetailStepper: newOrder.orderDetailStepper.created,
             _id: newOrder._id,
@@ -2581,20 +2646,21 @@ const verifyOnlinePaymentController = async (req, res, next) => {
             merchantName:
               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
             customerName:
-              newOrder?.orderDetail?.deliveryAddress?.fullName ||
+              newOrder?.drops[0]?.deliveryAddress
+                ?.fullName ||
               newOrder?.customerId?.fullName ||
               "-",
-            deliveryMode: newOrder?.orderDetail?.deliveryMode,
+            deliveryMode: newOrder?.deliveryMode,
             orderDate: formatDate(newOrder.createdAt),
             orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.orderDetail?.deliveryTime
-              ? formatDate(newOrder.orderDetail.deliveryTime)
+            deliveryDate: newOrder?.deliveryTime
+              ? formatDate(newOrder.deliveryTime)
               : "-",
-            deliveryTime: newOrder?.orderDetail?.deliveryTime
-              ? formatTime(newOrder.orderDetail.deliveryTime)
+            deliveryTime: newOrder?.deliveryTime
+              ? formatTime(newOrder.deliveryTime)
               : "-",
             paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.orderDetail.deliveryOption,
+            deliveryOption: newOrder.deliveryOption,
             amount: newOrder.billDetail.grandTotal,
           };
 
@@ -3065,7 +3131,7 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
 
     if (orderFound.paymentMode === "Famto-cash") {
       const orderAmount = orderFound.billDetail.grandTotal;
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
@@ -3091,12 +3157,12 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
       const paymentId = orderFound.paymentId;
 
       let refundAmount;
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         refundAmount = orderFound.billDetail.grandTotal;
         updatedTransactionDetail.transactionAmount = refundAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         refundAmount =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         updatedTransactionDetail.transactionAmount = refundAmount;
       }
 
@@ -3173,9 +3239,9 @@ const getOrderTrackingDetail = async (req, res, next) => {
       },
       inTransit:
         task.pickupDetail.pickupStatus === "Started" ||
-        task.pickupDetail.pickupStatus === "Completed" ||
-        task.deliveryDetail.deliveryStatus === "Started" ||
-        task.deliveryDetail.deliveryStatus === "Completed"
+          task.pickupDetail.pickupStatus === "Completed" ||
+          task.deliveryDetail.deliveryStatus === "Started" ||
+          task.deliveryDetail.deliveryStatus === "Completed"
           ? true
           : false,
       completeStatus: order.status === "Completed" ? true : false,
@@ -3271,18 +3337,19 @@ const fetchTemporaryOrderOfCustomer = async (req, res, next) => {
 
     // Find the latest order for the given customerId
     const latestOrder = await TemporaryOrder.find({ customerId })
-      .select("createdAt orderDetail.deliveryMode orderId")
+      .select("createdAt deliveryMode orderId")
       .sort({ createdAt: -1 });
 
     const formattedResponse = latestOrder?.map((order) => ({
       _id: order._id,
       orderId: order.orderId,
-      deliveryMode: order.orderDetail.deliveryMode,
+      deliveryMode: order.deliveryMode,
       createdAt: order.createdAt,
     }));
 
     res.status(200).json(formattedResponse);
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };

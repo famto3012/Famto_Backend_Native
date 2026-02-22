@@ -386,7 +386,7 @@ const getSingleCustomerController = async (req, res, next) => {
           orderDeliveryTime
         )}`,
         paymentMethod: order.paymentMode,
-        deliveryOption: order.orderDetail.deliveryOption,
+        deliveryOption: order?.orderDetail?.deliveryOption,
         amount: order?.billDetail?.grandTotal,
         paymentStatus: order.paymentStatus,
       };

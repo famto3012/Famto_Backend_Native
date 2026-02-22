@@ -23,18 +23,40 @@ const createRazorpayOrderId = async (amount) => {
   }
 };
 
-const verifyPayment = async (paymentDetails) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-    paymentDetails;
+const verifyPayment = (paymentDetails) => {
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+  } = paymentDetails;
 
-  const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+
   const expectedSignature = crypto
-    .createHmac("sha256", razorpay.key_secret)
-    .update(body.toString())
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(body)
     .digest("hex");
+
+  console.log("Expected :", expectedSignature);
+  console.log("Received :", razorpay_signature);
 
   return expectedSignature === razorpay_signature;
 };
+
+// const verifyPayment = async (paymentDetails) => {
+//   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+//     paymentDetails;
+
+//   const body = razorpay_order_id + "|" + razorpay_payment_id;
+//   const expectedSignature = crypto
+//     .createHmac("sha256", razorpay.key_secret)
+//     .update(body.toString())
+//     .digest("hex");
+
+//     console.log("Signature", expectedSignature);
+
+//   return expectedSignature === razorpay_signature;
+// };
 
 const razorpayRefund = async (paymentId, amount) => {
   try {

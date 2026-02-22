@@ -55,6 +55,7 @@ const {
 const { geoLocation } = require("../../../utils/getGeoLocation");
 
 const { findRolesToNotify } = require("../../../socket/socket");
+const { default: mongoose } = require("mongoose");
 
 // TODO: Remove after panel V2
 const getAllOrdersOfMerchantController = async (req, res, next) => {
@@ -446,26 +447,26 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
         return {
           orderId: order._id,
           orderStatus: order.status,
-          isReady: order.orderDetail?.isReady || false,
+          isReady: order?.isReady || false,
           merchantName: order.merchantId?.merchantDetail?.merchantName || "-",
           customerName:
             order.customerId?.fullName ||
             order.orderDetail?.deliveryAddress?.fullName ||
             "-",
-          deliveryMode: order.orderDetail?.deliveryMode || null,
+          deliveryMode: order?.deliveryMode || null,
           orderDate: formatDate(order.createdAt),
           orderTime: formatTime(order.createdAt),
-          deliveryDate: order.orderDetail?.deliveryTime
-            ? formatDate(order.orderDetail.deliveryTime)
+          deliveryDate: order?.deliveryTime
+            ? formatDate(order.deliveryTime)
             : "-",
-          deliveryTime: order.orderDetail?.deliveryTime
-            ? formatTime(order.orderDetail.deliveryTime)
+          deliveryTime: order?.deliveryTime
+            ? formatTime(order?.deliveryTime)
             : "-",
           paymentMethod:
             order.paymentMode === "Cash-on-delivery"
               ? "Pay-on-delivery"
               : order.paymentMode,
-          deliveryOption: order.orderDetail?.deliveryOption || null,
+          deliveryOption: order?.deliveryOption || null,
           amount: order.billDetail?.grandTotal || 0,
           items: formattedItems,
         };
@@ -545,9 +546,9 @@ const getAllScheduledOrdersOfMerchantController = async (req, res, next) => {
       merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
         order?.customerId?.fullName ||
-        order?.orderDetail?.deliveryAddress?.fullName ||
+        order?.pickups[0]?.address.fullName ||
         "-",
-      deliveryMode: order?.orderDetail?.deliveryMode,
+      deliveryMode: order?.deliveryMode,
       orderDate: formatDate(order.createdAt),
       orderTime: formatTime(order.createdAt),
       deliveryDate: order?.time ? formatDate(order.time) : "",
@@ -556,7 +557,7 @@ const getAllScheduledOrdersOfMerchantController = async (req, res, next) => {
         order.paymentMode === "Cash-on-delivery"
           ? "Pay-on-delivery"
           : order.paymentMode,
-      deliveryOption: order.orderDetail.deliveryOption,
+      deliveryOption: order?.deliveryOption,
       amount: order.billDetail.grandTotal,
       isViewed: order?.isViewed || false,
     }));
@@ -590,6 +591,7 @@ const getAllScheduledOrdersOfMerchantController = async (req, res, next) => {
       ...(isPaginated && { notSeen: totalUnSeenDocuments }),
     });
   } catch (err) {
+    console.error("Error fetching scheduled orders:", err);
     next(appError(err.message));
   }
 };
@@ -833,7 +835,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
     }
 
     if (deliveryMode && deliveryMode.trim().toLowerCase() !== "all") {
-      filterCriteria["orderDetail.deliveryMode"] = {
+      filterCriteria["deliveryMode"] = {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
@@ -924,9 +926,8 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName ||
-          order?.orderDetail?.deliveryAddress?.fullName,
-        deliveryMode: order?.orderDetail?.deliveryMode,
+          order?.customerId?.fullName || order?.pickups[0]?.address?.fullName,
+        deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
@@ -935,7 +936,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
           order.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
             : order.paymentMode,
-        deliveryOption: order.orderDetail.deliveryOption,
+        deliveryOption: order?.deliveryOption,
         amount: order.billDetail.grandTotal,
         isViewed: order?.isViewed || false,
       };
@@ -1266,24 +1267,79 @@ const getOrderDetailController = async (req, res, next) => {
         orderFound.paymentMode === "Cash-on-delivery"
           ? "Pay-on-delivery"
           : orderFound.paymentMode || "-",
-      deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-      deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+      deliveryMode: orderFound.deliveryMode || "-",
+      deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.createdAt)} | ${formatTime(
         orderFound.createdAt
       )}`,
       deliveryTime: `${formatDate(
-        orderFound.orderDetail.deliveryTime
-      )} | ${formatTime(orderFound.orderDetail.deliveryTime)}`,
+        orderFound.deliveryTime
+      )} | ${formatTime(orderFound.deliveryTime)}`,
       customerDetail: {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.orderDetail.deliveryAddress.fullName ||
+          orderFound.drops?.[0]?.address.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        dropAddress: orderFound.orderDetail.deliveryAddress || "-",
-        pickAddress: orderFound.orderDetail.pickupAddress || "-",
+         pickAddress:
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+
+        dropAddress:
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+        pickInstructions:
+          orderFound.pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
+          })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
@@ -1308,15 +1364,21 @@ const getOrderDetailController = async (req, res, next) => {
         avatar: orderFound?.agentId?.agentImageURL || "-",
         team: orderFound?.agentId?.workStructure?.managerId?.name || "-",
         instructionsByCustomer:
-          orderFound?.orderDetail?.instructionToDeliveryAgent || "-",
-        distanceTravelled: orderFound?.orderDetail?.distance,
-        timeTaken: formatToHours(orderFound?.orderDetail?.timeTaken) || "-",
-        delayedBy: formatToHours(orderFound?.orderDetail?.delayedBy) || "-",
+          orderFound?.instructionToDeliveryAgent || "-",
+        distanceTravelled: orderFound?.distance,
+        timeTaken: formatToHours(orderFound?.timeTaken) || "-",
+        delayedBy: formatToHours(orderFound?.delayedBy) || "-",
       },
       items: orderFound.items || null,
       billDetail: orderFound.billDetail || null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+      pickUpLocation: orderFound?.pickups?.[0]?.address || null,
+      deliveryLocation: orderFound?.drops?.[0]?.address || null,
+      detailAddedByAgent: {
+        notes: orderFound?.detailAddedByAgent?.notes || "-",
+        signatureImageURL:
+          orderFound?.detailAddedByAgent?.signatureImageURL || "-",
+        imageURL: orderFound?.detailAddedByAgent?.imageURL || "-",
+      },
       agentLocation: orderFound?.agentId?.location || null,
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper
@@ -1493,31 +1555,116 @@ const createOrderController = async (req, res, next) => {
       paymentMode
     );
 
+    const isPickAndCustomCart =
+      Array.isArray(cartFound.pickups) && Array.isArray(cartFound.drops);
+    const isCustomerCart = !!cartFound.cartDetail;
+
     const orderOptions = {
       customerId: cartFound.customerId,
-      merchantId: cartFound?.merchantId && cartFound.merchantId,
-      items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-        ? orderDetails.formattedItems
-        : cartFound.items,
-      orderDetail: {
-        ...cartFound.cartDetail,
-        deliveryTime,
-      },
+      merchantId: cartFound.merchantId,
+      deliveryMode,
+      deliveryOption:
+        cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,
+
+      pickups: isCustomerCart
+        ? [
+            {
+              location: cartFound.cartDetail.pickupLocation,
+              address: cartFound.cartDetail.pickupAddress,
+              instructionInPickup:
+                cartFound.cartDetail.instructionToMerchant || null,
+              voiceInstructionInPickup:
+                cartFound.cartDetail.voiceInstructionToMerchant || null,
+              items: [], // Fill if needed
+            },
+          ]
+        : isPickAndCustomCart
+        ? cartFound.pickups.map((p) => ({
+            location: p.location || [],
+            address: p.address || {},
+            instructionInPickup:
+              p.instructionInPickup ||
+              cartFound.cartDetail?.instructionToDeliveryAgent,
+            voiceInstructionInDrop: p.voiceInstructionInPickup || null,
+            voiceInstructionInDrop: p.voiceInstructionInDrop || null,
+            items: p.items || [],
+          }))
+        : [],
+
+      drops: isCustomerCart
+        ? [
+            {
+              location: cartFound.cartDetail.deliveryLocation,
+              address: cartFound.cartDetail.deliveryAddress,
+              instructionInDrop:
+                cartFound.cartDetail?.instructionToDeliveryAgent || null,
+              voiceInstructionInDrop:
+                cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
+              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.items,
+              orderDetail: {
+                ...cartFound.cartDetail,
+                deliveryTime,
+              },
+            },
+          ]
+        : isPickAndCustomCart
+        ? cartFound.drops.map((d) => ({
+            location: d.location || [],
+            address: d.address || {},
+            instructionInDrop: d.instructionInDrop || null,
+            voiceInstructionInDrop: d.voiceInstructionInDrop || null,
+            items: d.items || [],
+          }))
+        : [],
+
       billDetail: orderDetails.billDetail,
+      distance: cartFound.cartDetail?.distance || cartFound.distance || 0,
+
+      deliveryTime,
+      startDate: cartFound.cartDetail?.startDate || cartFound.startDate || null,
+      endDate: cartFound.cartDetail?.endDate || cartFound.endDate || null,
+      time: cartFound.cartDetail?.time || cartFound.time || null,
+      numOfDays: cartFound.cartDetail?.numOfDays || cartFound.numOfDays || null,
+
       totalAmount: orderDetails.billDetail.grandTotal,
-      status: "Pending",
       paymentMode,
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: orderDetails.purchasedItems,
       "orderDetailStepper.created": {
-        by: "Admin",
+        by: `${req.userRole} - ${req.userName}`,
         date: new Date(),
       },
     };
 
+    // const orderOptions = {
+    //   customerId: cartFound.customerId,
+    //   merchantId: cartFound?.merchantId && cartFound.merchantId,
+    //   items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+    //     ? orderDetails.formattedItems
+    //     : cartFound.items,
+    //   orderDetail: {
+    //     ...cartFound.cartDetail,
+    //     deliveryTime,
+    //   },
+    //   billDetail: orderDetails.billDetail,
+    //   totalAmount: orderDetails.billDetail.grandTotal,
+    //   status: "Pending",
+    //   paymentMode,
+    //   paymentStatus:
+    //     paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
+    //   purchasedItems: orderDetails.purchasedItems,
+    //   "orderDetailStepper.created": {
+    //     by: "Admin",
+    //     date: new Date(),
+    //   },
+    // };
+
     const isScheduledOrder =
-      cartFound.cartDetail.deliveryOption === "Scheduled";
+      (cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption) ===
+      "Scheduled";
     const isPickOrCustomOrder = ["Pick and Drop", "Custom Order"].includes(
       deliveryMode
     );
@@ -1525,19 +1672,21 @@ const createOrderController = async (req, res, next) => {
     let newOrderCreated;
     let OrderModelToUse;
     if (isScheduledOrder && !isPickOrCustomOrder) {
-      newOrderCreated = await ScheduledOrder.create({
-        ...orderOptions,
-        startDate: cartFound.cartDetail.startDate,
-        endDate: cartFound.cartDetail.endDate,
-        time: cartFound.cartDetail.time,
-      });
+      console.log("Creating Scheduled Order", cartFound),
+        (newOrderCreated = await ScheduledOrder.create({
+          ...orderOptions,
+          startDate: cartFound.cartDetail?.startDate || cartFound.startDate,
+          endDate: cartFound.cartDetail?.endDate || cartFound.endDate,
+          time: cartFound.cartDetail?.time || cartFound.time,
+        }));
       OrderModelToUse = ScheduledOrder;
     } else if (isScheduledOrder && isPickOrCustomOrder) {
+      console.log("Creating Scheduled Pick and Custom Order", cartFound);
       newOrderCreated = await scheduledPickAndCustom.create({
         ...orderOptions,
-        startDate: cartFound.cartDetail.startDate,
-        endDate: cartFound.cartDetail.endDate,
-        time: cartFound.cartDetail.time,
+        startDate: cartFound.cartDetail?.startDate || cartFound.startDate,
+        endDate: cartFound.cartDetail?.endDate || cartFound.endDate,
+        time: cartFound.cartDetail?.time || cartFound.time,
       });
       OrderModelToUse = scheduledPickAndCustom;
     } else {
@@ -1571,20 +1720,20 @@ const createOrderController = async (req, res, next) => {
       orderStatus: newOrder?.status,
       merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
-        newOrder?.orderDetail?.deliveryAddress?.fullName ||
+        newOrder?.pickups[0]?.address?.fullName ||
         newOrder?.customerId?.fullName ||
         "-",
-      deliveryMode: newOrder?.orderDetail?.deliveryMode,
+      deliveryMode: newOrder?.deliveryMode,
       orderDate: formatDate(newOrder?.createdAt),
       orderTime: formatTime(newOrder?.createdAt),
-      deliveryDate: newOrder?.orderDetail?.deliveryTime
-        ? formatDate(newOrder?.orderDetail?.deliveryTime)
+      deliveryDate: newOrder?.deliveryTime
+        ? formatDate(newOrder?.deliveryTime)
         : "-",
-      deliveryTime: newOrder?.orderDetail?.deliveryTime
-        ? formatTime(newOrder?.orderDetail?.deliveryTime)
+      deliveryTime: newOrder?.deliveryTime
+        ? formatTime(newOrder?.deliveryTime)
         : "-",
       paymentMethod: newOrder?.paymentMode,
-      deliveryOption: newOrder?.orderDetail?.deliveryOption,
+      deliveryOption: newOrder?.deliveryOption,
       amount: newOrder?.billDetail?.grandTotal,
     };
 
@@ -2081,35 +2230,109 @@ const createInvoiceController = async (req, res, next) => {
 
     let customerCart;
 
-    if (deliveryMode === "Pick and Drop") {
+    // if (deliveryMode === "Pick and Drop") {
+    //   console.log("Creating Pick and Custom Cart", scheduledDetails?.startDate);
+    //   customerCart = await PickAndCustomCart.findOneAndUpdate(
+    //     { customerId: customer._id },
+    //     {
+    //       customerId: customer._id,
+    //       merchantId,
+    //       items,
+    //       deliveryOption,
+    //       cartDetail: {
+    //         ...req.body,
+    //         pickupLocation,
+    //         pickupAddress,
+    //         deliveryLocation,
+    //         deliveryAddress,
+    //         instructionInPickup,
+    //         instructionInDelivery,
+    //         distance: distanceInKM,
+    //         startDate: scheduledDetails?.startDate,
+    //         endDate: scheduledDetails?.endDate,
+    //         time: scheduledDetails?.time,
+    //         numOfDays: scheduledDetails?.numOfDays,
+    //       },
+    //       billDetail: {
+    //         ...billDetail,
+    //         deliveryChargePerDay: oneTimeDeliveryCharge,
+    //       },
+    //     },
+    //     { new: true, upsert: true }
+    //   );
+    // } else {
+    //   customerCart = await CustomerCart.findOneAndUpdate(
+    //     { customerId: customer._id },
+    //     {
+    //       customerId: customer._id,
+    //       merchantId,
+    //       items,
+    //       cartDetail: {
+    //         ...req.body,
+    //         pickupLocation,
+    //         pickupAddress,
+    //         deliveryOption,
+    //         deliveryLocation,
+    //         deliveryAddress,
+    //         instructionToDeliveryAgent,
+    //         distance: distanceInKM,
+    //         startDate: scheduledDetails?.startDate || null,
+    //         endDate: scheduledDetails?.endDate || null,
+    //         time: scheduledDetails?.time || null,
+    //         numOfDays: scheduledDetails?.numOfDays || null,
+    //       },
+    //       billDetail: {
+    //         ...billDetail,
+    //         deliveryChargePerDay: oneTimeDeliveryCharge,
+    //       },
+    //     },
+    //     { new: true, upsert: true }
+    //   );
+    // }
+
+    if (["Pick and Drop", "Custom Order"].includes(deliveryMode)) {
+      console.log("Creating PickAndCustomCart", scheduledDetails?.startDate);
+
+      // ✅ Build PickAndCustomCart structure correctly
+      const cartDetailsForPickandCustomCart = {
+        customerId: customer._id,
+        merchantId,
+        deliveryMode,
+        deliveryOption,
+        pickups: [
+          {
+            location: pickupLocation || [],
+            address: pickupAddress || {},
+            instructionInPickup,
+            items: items.map((item) => ({
+              ...item,
+              itemId: new mongoose.Types.ObjectId(),
+            })),
+          },
+        ],
+        drops: [
+          {
+            location: deliveryLocation || [],
+            address: deliveryAddress || {},
+            instructionInDrop: instructionInDelivery,
+            items: [], // You can attach drop items if needed
+          },
+        ],
+        billDetail: { ...billDetail, vehicleType },
+        distance: distanceInKM || 0,
+        startDate: scheduledDetails?.startDate,
+        endDate: scheduledDetails?.endDate,
+        time: scheduledDetails?.time,
+        numOfDays: scheduledDetails?.numOfDays,
+      };
+
       customerCart = await PickAndCustomCart.findOneAndUpdate(
         { customerId: customer._id },
-        {
-          customerId: customer._id,
-          merchantId,
-          items,
-          cartDetail: {
-            ...req.body,
-            pickupLocation,
-            pickupAddress,
-            deliveryLocation,
-            deliveryAddress,
-            instructionInPickup,
-            instructionInDelivery,
-            distance: distanceInKM,
-            startDate: scheduledDetails?.startDate || null,
-            endDate: scheduledDetails?.endDate || null,
-            time: scheduledDetails?.time || null,
-            numOfDays: scheduledDetails?.numOfDays || null,
-          },
-          billDetail: {
-            ...billDetail,
-            deliveryChargePerDay: oneTimeDeliveryCharge,
-          },
-        },
+        { $set: cartDetailsForPickandCustomCart },
         { new: true, upsert: true }
       );
     } else {
+      // ✅ Normal CustomerCart flow
       customerCart = await CustomerCart.findOneAndUpdate(
         { customerId: customer._id },
         {
@@ -2117,9 +2340,9 @@ const createInvoiceController = async (req, res, next) => {
           merchantId,
           items,
           cartDetail: {
-            ...req.body,
             pickupLocation,
             pickupAddress,
+            deliveryOption,
             deliveryLocation,
             deliveryAddress,
             instructionToDeliveryAgent,

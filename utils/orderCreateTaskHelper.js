@@ -1,46 +1,61 @@
-const appError = require("./appError");
-const Task = require("../models/Task");
 const turf = require("@turf/turf");
-const AutoAllocation = require("../models/AutoAllocation");
+
+const Task = require("../models/Task");
 const Order = require("../models/Order");
 const Agent = require("../models/Agent");
-const AgentPricing = require("../models/AgentPricing");
 const Merchant = require("../models/Merchant");
+const FcmToken = require("../models/fcmToken");
+const AgentPricing = require("../models/AgentPricing");
+const AutoAllocation = require("../models/AutoAllocation");
+const BusinessCategory = require("../models/BusinessCategory");
+
 const {
-  io,
   sendNotification,
   getUserLocationFromSocket,
 } = require("../socket/socket");
-const BusinessCategory = require("../models/BusinessCategory");
-const FcmToken = require("../models/fcmToken");
+const BatchOrder = require("../models/BatchOrder");
 
 const orderCreateTaskHelper = async (orderId) => {
   try {
-    const order = await Order.findById(orderId);
-    let task = await Task.find({ orderId });
+    const [order, task] = await Promise.all([
+      Order.findById(orderId),
+      Task.exists({ orderId }),
+    ]);
 
-    if (order) {
-      if (task.length === 0) {
-        let pickupDetail = {
-          pickupLocation: order?.orderDetail?.pickupLocation,
-          pickupAddress: order?.orderDetail?.pickupAddress,
-        };
-        let deliveryDetail = {
-          deliveryLocation: order.orderDetail.deliveryLocation,
-          deliveryAddress: order.orderDetail.deliveryAddress,
-        };
-        await Task.create({
-          orderId,
-          deliveryMode: order.orderDetail.deliveryMode,
-          pickupDetail,
-          deliveryDetail,
-        });
-      }
+    if (!order) {
+      throw new Error("Order not found");
     }
 
-    task = await Task.find({ orderId });
+    if (task) return true;
 
-    const autoAllocation = await AutoAllocation.findOne();
+    let pickups = order.pickups.map((pick, index) => ({
+      status: "Pending",
+      stepIndex: index,
+      location: pick.location,
+      address: pick.address,
+      items: pick.items || [],
+    }));
+
+    let drops = order.drops.map((drop, index) => ({
+      status: "Pending",
+      stepIndex: index,
+      location: drop.location,
+      address: drop.address,
+      items: drop.items || [],
+    }));
+
+    await Task.create({
+      orderId,
+      deliveryMode: order.deliveryMode,
+      pickupDropDetails: [
+        {
+          pickups,
+          drops,
+        },
+      ],
+    });
+
+    // const autoAllocation = await AutoAllocation.findOne();
 
     // if (autoAllocation.isActive) {
     //   if (autoAllocation.autoAllocationType === "All") {
@@ -62,6 +77,52 @@ const orderCreateTaskHelper = async (orderId) => {
     return true;
   } catch (err) {
     throw new Error(`Error in creating order task: ${err}`);
+  }
+};
+
+const batchOrderCreateTaskHelper = async (batchOrderId) => {
+  try {
+    const [batchOrder, task] = await Promise.all([
+      BatchOrder.findById(batchOrderId),
+      Task.exists({ orderId: batchOrderId }),
+    ]);
+
+    if (!batchOrder) {
+      throw new Error("Batch Order not found");
+    }
+
+    if (task) return true;
+
+    let pickups = batchOrder.pickupAddress
+      ? [
+          {
+            status: "Pending",
+            location: batchOrder.pickupAddress.location,
+            address: batchOrder.pickupAddress,
+          },
+        ]
+      : [];
+
+    let drops = batchOrder.dropDetails.map((drop) => ({
+      status: "Pending",
+      location: drop.drops.location,
+      address: drop.drops.address,
+    }));
+
+    await Task.create({
+      orderId: batchOrderId,
+      deliveryMode: batchOrder.deliveryMode,
+      pickupDropDetails: [
+        {
+          pickups,
+          drops,
+        },
+      ],
+    });
+
+    return true;
+  } catch (err) {
+    throw new Error(`Error in creating batch order task: ${err}`);
   }
 };
 
@@ -88,7 +149,7 @@ const notifyAgents = async (order, priorityType) => {
         },
         fcm: {
           title: "New Order",
-          body: "You have a new order to pickup", 
+          body: "You have a new order to pickup",
           image: "",
           orderId: order.id,
           agentId: agent.id,
@@ -385,4 +446,4 @@ const fetchNearestAgents = async (merchantId) => {
   return filteredAgents;
 };
 
-module.exports = { orderCreateTaskHelper };
+module.exports = { orderCreateTaskHelper, batchOrderCreateTaskHelper };
