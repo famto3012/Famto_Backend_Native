@@ -987,7 +987,7 @@ const fetchMerchantDetails = async (
   }
 
   // Validate delivery option
-  validateDeliveryOption(merchantFound, deliveryOption);
+  // validateDeliveryOption(merchantFound, deliveryOption);
 
   return merchantFound;
 };

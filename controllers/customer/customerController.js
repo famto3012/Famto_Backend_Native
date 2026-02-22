@@ -121,7 +121,7 @@ const registerAndLoginController = async (req, res, next) => {
     if (!customer) {
       customer = await Customer.create({
         phoneNumber,
-        lastPlatformUsed: platform ? platform : "Not recognized",
+        lastPlatformUsed: platform ? platform : "Web",
         customerDetails: {
           location,
           geofenceId: geofence?._id ? geofence?._id : null,

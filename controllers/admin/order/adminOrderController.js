@@ -1387,17 +1387,14 @@ const downloadOrderBillController = async (req, res, next) => {
       return next(appError("Order not found or no bill details available"));
     }
 
-    console.log("orderFound", orderFound);
+    console.log(orderFound);
 
-    // Handle items safely
-    const formattedItems = Array.isArray(orderFound.items)
-      ? orderFound.items.map((item) => ({
-          itemName: item.itemName,
-          quantity: item.quantity,
-          price: item.price,
-          variantTypeName: item.variantTypeName,
-        }))
-      : [];
+    const formattedItems = orderFound.items.map((item) => ({
+      itemName: item.itemName,
+      quantity: item.quantity,
+      price: item.price,
+      variantTypeName: item.variantTypeName,
+    }));
 
     // Helper function to safely convert to number
     const toNumber = (value) => Number(value) || 0;
@@ -1597,9 +1594,7 @@ const downloadOrderBillController = async (req, res, next) => {
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Phone Number</p>
                         <p>${
-                          orderFound?.customerId?.phoneNumber ||
-                          "-"?.displayAddress ||
-                          "-"
+                          orderFound?.orderDetail?.deliveryAddress?.area || "-"
                         }</p>
                     </div>
                     
