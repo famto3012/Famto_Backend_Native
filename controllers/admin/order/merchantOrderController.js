@@ -98,8 +98,8 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
 
             const variantType = variant
               ? variant.variantTypes.find((type) =>
-                  type._id.equals(item.variantId)
-                )
+                type._id.equals(item.variantId)
+              )
               : null;
 
             return {
@@ -152,12 +152,12 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
       data: orderDetails,
       pagination: isPaginated
         ? {
-            totalDocuments,
-            totalPages,
-            currentPage: page,
-            hasNextPage: page < totalPages,
-            hasPrevPage: page > 1,
-          }
+          totalDocuments,
+          totalPages,
+          currentPage: page,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        }
         : undefined,
     });
   } catch (err) {
@@ -926,7 +926,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.pickups[0]?.address?.fullName,
+          order?.customerId?.fullName || order?.drops[0]?.address?.fullName || "",
         deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
@@ -1283,7 +1283,7 @@ const getOrderDetailController = async (req, res, next) => {
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-         pickAddress:
+        pickAddress:
           orderFound.pickups?.map((pickup) => ({
             location: pickup?.location || null,
             fullName: pickup?.address?.fullName,
@@ -1454,8 +1454,8 @@ const getScheduledOrderDetailController = async (req, res, next) => {
         orderFound.paymentMode === "Cash-on-delivery"
           ? "Pay-on-delivery"
           : orderFound.paymentMode || "-",
-      deliveryMode: orderFound.orderDetail.deliveryMode || "-",
-      deliveryOption: orderFound.orderDetail.deliveryOption || "-",
+      deliveryMode: orderFound.deliveryMode || "-",
+      deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
         orderFound.startDate
       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
@@ -1469,11 +1469,11 @@ const getScheduledOrderDetailController = async (req, res, next) => {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.orderDetail.deliveryAddress.fullName ||
+          orderFound.deliveryAddress.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        address: orderFound.orderDetail.deliveryAddress || "-",
+        address: orderFound?.drops[0]?.address,
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
@@ -1504,8 +1504,8 @@ const getScheduledOrderDetailController = async (req, res, next) => {
       },
       items: orderFound.items || null,
       billDetail: orderFound.billDetail || null,
-      pickUpLocation: orderFound?.orderDetail?.pickupLocation || null,
-      deliveryLocation: orderFound?.orderDetail?.deliveryLocation || null,
+      pickUpLocation: orderFound?.pickups[0]?.location || null,
+      deliveryLocation: orderFound?.drops[0]?.location || null,
       agentLocation: orderFound?.agentId?.location || null,
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper
@@ -1568,18 +1568,18 @@ const createOrderController = async (req, res, next) => {
 
       pickups: isCustomerCart
         ? [
-            {
-              location: cartFound.cartDetail.pickupLocation,
-              address: cartFound.cartDetail.pickupAddress,
-              instructionInPickup:
-                cartFound.cartDetail.instructionToMerchant || null,
-              voiceInstructionInPickup:
-                cartFound.cartDetail.voiceInstructionToMerchant || null,
-              items: [], // Fill if needed
-            },
-          ]
+          {
+            location: cartFound.cartDetail.pickupLocation,
+            address: cartFound.cartDetail.pickupAddress,
+            instructionInPickup:
+              cartFound.cartDetail.instructionToMerchant || null,
+            voiceInstructionInPickup:
+              cartFound.cartDetail.voiceInstructionToMerchant || null,
+            items: [], // Fill if needed
+          },
+        ]
         : isPickAndCustomCart
-        ? cartFound.pickups.map((p) => ({
+          ? cartFound.pickups.map((p) => ({
             location: p.location || [],
             address: p.address || {},
             instructionInPickup:
@@ -1589,35 +1589,35 @@ const createOrderController = async (req, res, next) => {
             voiceInstructionInDrop: p.voiceInstructionInDrop || null,
             items: p.items || [],
           }))
-        : [],
+          : [],
 
       drops: isCustomerCart
         ? [
-            {
-              location: cartFound.cartDetail.deliveryLocation,
-              address: cartFound.cartDetail.deliveryAddress,
-              instructionInDrop:
-                cartFound.cartDetail?.instructionToDeliveryAgent || null,
-              voiceInstructionInDrop:
-                cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
-              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-                ? orderDetails.formattedItems
-                : cartFound.items,
-              orderDetail: {
-                ...cartFound.cartDetail,
-                deliveryTime,
-              },
+          {
+            location: cartFound.cartDetail.deliveryLocation,
+            address: cartFound.cartDetail.deliveryAddress,
+            instructionInDrop:
+              cartFound.cartDetail?.instructionToDeliveryAgent || null,
+            voiceInstructionInDrop:
+              cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
+            items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+              ? orderDetails.formattedItems
+              : cartFound.items,
+            orderDetail: {
+              ...cartFound.cartDetail,
+              deliveryTime,
             },
-          ]
+          },
+        ]
         : isPickAndCustomCart
-        ? cartFound.drops.map((d) => ({
+          ? cartFound.drops.map((d) => ({
             location: d.location || [],
             address: d.address || {},
             instructionInDrop: d.instructionInDrop || null,
             voiceInstructionInDrop: d.voiceInstructionInDrop || null,
             items: d.items || [],
           }))
-        : [],
+          : [],
 
       billDetail: orderDetails.billDetail,
       distance: cartFound.cartDetail?.distance || cartFound.distance || 0,
@@ -1698,9 +1698,8 @@ const createOrderController = async (req, res, next) => {
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${
-          newOrderCreated._id
-        }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${newOrderCreated._id
+          }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
       clearCart(customer._id, deliveryMode),
       updateCustomerTransaction(customer, orderDetails.billDetail),
@@ -1966,7 +1965,7 @@ const downloadCSVByMerchantController = async (req, res, next) => {
     if (status && status !== "All") filter.status = status;
     if (paymentMode && paymentMode !== "All") filter.paymentMode = paymentMode;
     if (deliveryMode && deliveryMode !== "All")
-      filter["orderDetail.deliveryMode"] = deliveryMode;
+      filter["deliveryMode"] = deliveryMode;
     if (orderId) {
       filter.$or = [{ _id: { $regex: orderId, $options: "i" } }];
     }
@@ -1992,52 +1991,54 @@ const downloadCSVByMerchantController = async (req, res, next) => {
     let formattedResponse = [];
 
     allOrders?.forEach((order) => {
-      order.items.forEach((item) => {
-        formattedResponse.push({
-          orderId: order._id,
-          status: order?.status || "-",
-          merchantId: order?.merchantId?._id || "-",
-          merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
-          customerName: order?.customerId?.fullName || "-",
-          customerPhoneNumber:
-            order?.orderDetail?.deliveryAddress?.phoneNumber || "-",
-          customerEmail: order?.customerId?.email || "-",
-          deliveryMode: order?.orderDetail?.deliveryMode || "-",
-          orderTime:
-            `${formatDate(order?.createdAt)} | ${formatTime(
-              order?.createdAt
-            )}` || "-",
-          deliveryTime:
-            `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
-              order?.orderDetail?.deliveryTime
-            )}` || "-",
-          paymentMode: order?.paymentMode || "-",
-          deliveryOption: order?.orderDetail?.deliveryOption || "-",
-          totalAmount: order?.billDetail?.grandTotal || "-",
-          deliveryAddress:
-            `${order?.orderDetail?.deliveryAddress?.fullName}, ${order?.orderDetail?.deliveryAddress?.flat}, ${order?.orderDetail?.deliveryAddress?.area}, ${order?.orderDetail?.deliveryAddress?.landmark}` ||
-            "-",
-          distanceInKM: order?.orderDetail?.distance || "-",
-          cancellationReason: order?.cancellationReason || "-",
-          cancellationDescription: order?.cancellationDescription || "-",
-          merchantEarnings: order?.merchantEarnings || "-",
-          famtoEarnings: order?.famtoEarnings || "-",
-          deliveryCharge: order?.billDetail?.deliveryCharge || "-",
-          taxAmount: order?.billDetail?.taxAmount || "-",
-          discountedAmount: order?.billDetail?.discountedAmount || "-",
-          itemTotal: order?.billDetail?.itemTotal || "-",
-          addedTip: order?.billDetail?.addedTip || "-",
-          subTotal: order?.billDetail?.subTotal || "-",
-          surgePrice: order?.billDetail?.surgePrice || "-",
-          transactionId: order?.paymentId || "-",
-          itemName: item.itemName || "-",
-          quantity: item.quantity || "-",
-          length: item.length || "-",
-          width: item.width || "-",
-          height: item.height || "-",
-        });
+      const itemNames = order.items
+        .map((item) => `${item.itemName} (x${item.quantity})`)
+        .join(", ");
+      formattedResponse.push({
+        orderId: order._id,
+        status: order?.status || "-",
+        merchantId: order?.merchantId?._id || "-",
+        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
+        customerName: order?.customerId?.fullName || "-",
+        customerPhoneNumber:
+          order?.orderDetail?.deliveryAddress?.phoneNumber || "-",
+        customerEmail: order?.customerId?.email || "-",
+        deliveryMode: order?.orderDetail?.deliveryMode || "-",
+        orderTime:
+          `${formatDate(order?.createdAt)} | ${formatTime(
+            order?.createdAt
+          )}` || "-",
+        deliveryTime:
+          `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
+            order?.orderDetail?.deliveryTime
+          )}` || "-",
+        paymentMode: order?.paymentMode || "-",
+        deliveryOption: order?.orderDetail?.deliveryOption || "-",
+        totalAmount: order?.billDetail?.grandTotal || "-",
+        deliveryAddress:
+          `${order?.orderDetail?.deliveryAddress?.fullName}, ${order?.orderDetail?.deliveryAddress?.flat}, ${order?.orderDetail?.deliveryAddress?.area}, ${order?.orderDetail?.deliveryAddress?.landmark}` ||
+          "-",
+        distanceInKM: order?.orderDetail?.distance || "-",
+        cancellationReason: order?.cancellationReason || "-",
+        cancellationDescription: order?.cancellationDescription || "-",
+        merchantEarnings: order?.merchantEarnings || "-",
+        famtoEarnings: order?.famtoEarnings || "-",
+        deliveryCharge: order?.billDetail?.deliveryCharge || "-",
+        taxAmount: order?.billDetail?.taxAmount || "-",
+        discountedAmount: order?.billDetail?.discountedAmount || "-",
+        itemTotal: order?.billDetail?.itemTotal || "-",
+        addedTip: order?.billDetail?.addedTip || "-",
+        subTotal: order?.billDetail?.subTotal || "-",
+        surgePrice: order?.billDetail?.surgePrice || "-",
+        transactionId: order?.paymentId || "-",
+        itemName: itemNames || "-",
+        // quantity: item.quantity || "-",
+        // length: item.length || "-",
+        // width: item.width || "-",
+        // height: item.height || "-",
       });
     });
+
 
     const filePath = path.join(__dirname, "../../../Order.csv");
 
@@ -2555,7 +2556,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
 
     const deliveryTime = new Date(
       new Date().getTime() + Number(merchant?.merchantDetail?.deliveryTime) ||
-        60
+      60
     );
 
     const newOrder = await Order.create({
