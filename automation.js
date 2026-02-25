@@ -864,5 +864,5 @@ const migrateOrdersToNewSchema = async () => {
 
 
   
-migrateOrdersToNewSchema();
+// migrateOrdersToNewSchema();
 // prepareOrderDetailsInPayout();
