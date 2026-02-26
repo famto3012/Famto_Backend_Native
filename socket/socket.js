@@ -106,59 +106,58 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
     status: true,
   });
 
-  const mes = {
+ const mes = {
+  notification: {
+    title: notificationSettings?.title || message?.title,
+    body: notificationSettings?.description || message?.body,
+    image: message?.image,
+  },
+  data: {
+    orderId: String(message?.orderId || ""),
+    merchantName: String(message?.merchantName || ""),
+    pickAddress: JSON.stringify(message?.pickAddress || {}),
+    customerName: String(message?.customerName || ""),
+    customerAddress: JSON.stringify(message?.customerAddress || {}),
+    orderType: String(message?.orderType || ""),
+    taskDate: String(message?.taskDate || ""),
+    taskTime: String(message?.taskTime || ""),
+    timer: String(message?.timer || ""),
+  },
+  webpush: {
+    fcm_options: {
+      link: "https://dashboard.famto.in/home",
+    },
     notification: {
-      title: notificationSettings?.title || message?.title,
-      body: notificationSettings?.description || message?.body,
-      image: message?.image,
+      icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media&token=0be47a53-43f3-4887-9822-3baad0edd31e",
     },
-    data: {
-      orderId: message?.orderId || "",
-      merchantName: message?.merchantName || "",
-      pickAddress: JSON.stringify(message?.pickAddress || {}),
-      customerName: message?.customerName || "",
-      customerAddress: JSON.stringify(message?.customerAddress || {}),
-      orderType: message?.orderType || "",
-      taskDate: message?.taskDate || "",
-      taskTime: message?.taskTime || "",
-      timer: JSON.stringify(message?.timer || ""),
-    },
-    webpush: {
-      fcm_options: {
-        link: "https://dashboard.famto.in/home",
-      },
-      notification: {
-        icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media&token=0be47a53-43f3-4887-9822-3baad0edd31e",
-      },
-    },
-    token: fcmToken,
-  };
-
+  },
+  token: fcmToken,
+};
   try {
     // Try sending with the first project
     await admin1.messaging(app1).send(mes);
-    // console.log(
-    //   `Successfully sent message with project1 for token: ${fcmToken}`
-    // );
+    console.log(
+      `Successfully sent message with project1 for token: ${fcmToken}`
+    );
     return true;
   } catch (error1) {
-    // console.error(
-    //   `Error sending message with project1 for token: ${fcmToken}`,
-    //   error1
-    // );
+    console.error(
+      `Error sending message with project1 for token: ${fcmToken}`,
+      error1
+    );
 
     try {
       // Try sending with the second project
       await admin2.messaging(app2).send(mes);
-      // console.log(
-      //   `Successfully sent message with project2 for token: ${fcmToken}`
-      // );
+      console.log(
+        `Successfully sent message with project2 for token: ${fcmToken}`
+      );
       return true;
     } catch (error2) {
-      // console.error(
-      //   `Error sending message with project2 for token: ${fcmToken}`,
-      //   error2
-      // );
+      console.error(
+        `Error sending message with project2 for token: ${fcmToken}`,
+        error2
+      );
       return false;
     }
   }
@@ -274,7 +273,8 @@ const createNotificationLog = async (notificationSettings, message) => {
               }
             : {};
 
-        const deliveryDetails = Array.isArray(message?.customerAddress)
+        const deliveryDetails = 
+        Array.isArray(message?.customerAddress)
           ? message.customerAddress.map((addr) => ({
               name: addr?.fullName,
               address: {
@@ -318,10 +318,10 @@ const createNotificationLog = async (notificationSettings, message) => {
 const sendNotification = async (userId, eventName, data, role) => {
   const { fcmToken } = userSocketMap[userId] || {};
 
-  // if (!fcmToken || fcmToken.length === 0) {
-  //   console.log(`No fcmToken found for userId: ${userId}`);
-  //   return;
-  // }
+  if (!fcmToken || fcmToken.length === 0) {
+    console.log(`No fcmToken found for userId: ${userId}`);
+    return;
+  }
 
   let notificationSent = true;
 
@@ -330,13 +330,13 @@ const sendNotification = async (userId, eventName, data, role) => {
     status: true,
   });
 
-  // // Loop through all FCM tokens and send the notification to each one
-  // for (let token of fcmToken) {
-  //   if (token) {
-  //     const sent = await sendPushNotificationToUser(token, data.fcm, eventName);
-  //     if (sent) notificationSent = true; // Mark as sent if at least one succeeds
-  //   }
-  // }
+  // Loop through all FCM tokens and send the notification to each one
+  for (let token of fcmToken) {
+    if (token) {
+      const sent = await sendPushNotificationToUser(token, data.fcm, eventName);
+      if (sent) notificationSent = true; // Mark as sent if at least one succeeds
+    }
+  }
 
   // Log notification if at least one was sent successfully
   if (notificationSent) {

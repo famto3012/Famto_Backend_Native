@@ -48,18 +48,26 @@ const assignAgentToTaskController = async (req, res, next) => {
     const { taskId } = req.params;
     const { agentId } = req.body;
 
+    console.log("➡️ assignAgentToTaskController called");
+    console.log("Task ID:", taskId);
+    console.log("Agent ID:", agentId);
+
     const task = await Task.findById(taskId);
-    if (!task) return next(appError("Task not found", 404));
+    if (!task) {
+      console.log("❌ Task not found");
+      return next(appError("Task not found", 404));
+    }
 
     const [order, agent, autoAllocation] = await Promise.all([
-      // Task.findById(taskId),
       Order.findById(task.orderId),
       Agent.findById(agentId),
       AutoAllocation.findOne(),
     ]);
 
-    console.log("Task:", task);
-    console.log("Task Order:", order);
+    console.log("✅ Task found:", task._id);
+    console.log("✅ Order found:", order ? order._id : "No order");
+    console.log("✅ Agent found:", agent ? agent._id : "No agent");
+    console.log("Auto Allocation:", autoAllocation);
 
     if (!agent.appDetail) {
       agent.appDetail = {
@@ -73,14 +81,13 @@ const assignAgentToTaskController = async (req, res, next) => {
     }
 
     agent.appDetail.pendingOrders += 1;
-
     await agent.save();
-
-    // let deliveryAddress = order.orderDetail.deliveryAddress;
+    console.log("✅ Agent pendingOrders incremented:", agent.appDetail.pendingOrders);
 
     const eventName = "newOrder";
-
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
+    console.log("Roles to notify:", rolesToNotify);
+    console.log("Notification base data:", data);
 
     // Send notifications to each role dynamically
     for (const role of rolesToNotify) {
@@ -104,6 +111,7 @@ const assignAgentToTaskController = async (req, res, next) => {
           roleId = manager._id;
         }
       }
+
       const customerAddress = Array.isArray(order?.drops[0]?.address);
 
       if (roleId) {
@@ -122,6 +130,8 @@ const assignAgentToTaskController = async (req, res, next) => {
             timer: autoAllocation?.expireTime || null,
           },
         };
+
+        console.log(`📨 Sending notification to ${role} (ID: ${roleId})`, notificationData);
 
         await sendNotification(
           roleId,
@@ -148,13 +158,16 @@ const assignAgentToTaskController = async (req, res, next) => {
       batchOrder: false,
     };
 
+    console.log("🌐 Sending socket data to agent:", agentId, socketData);
     sendSocketData(agentId, eventName, socketData);
+    console.log("✅ Socket data sent");
 
     res.status(200).json({
-      message: "Notification send to the agent",
+      message: "Notification sent to the agent",
       data: socketData,
     });
   } catch (err) {
+    console.log("❌ Error in assignAgentToTaskController:", err.message);
     next(appError(err.message));
   }
 };
