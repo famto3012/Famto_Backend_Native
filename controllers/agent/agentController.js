@@ -1512,6 +1512,7 @@ const getPickUpDetailController = async (req, res, next) => {
       });
     }
   } catch (err) {
+    console.error(err);
     next(appError(err.message));
   }
 };
@@ -2736,10 +2737,10 @@ const getAllNotificationsController = async (req, res, next) => {
       // orderId: notification?.orderId || null,
       orderId: notification?.orderId, //?.map((o) => o._id || o),
       pickupDetail: notification?.pickupDetail?.address || null,
-      // deliveryDetail: notification?.deliveryDetail?.address || null,
-      deliveryDetail: Array.isArray(notification?.deliveryDetail)
-        ? notification.deliveryDetail.map((d) => d.address || null)
-        : [],
+      deliveryDetail: notification?.deliveryDetail?.address || null,
+      // deliveryDetail: Array.isArray(notification?.deliveryDetail)
+      //   ? notification.deliveryDetail.map((d) => d.address || null)
+      //   : [],
       orderType: notification?.orderType || null,
       status: notification?.status || null,
       taskDate: formatDate(notification?.orderId?.orderDetail?.deliveryTime),
