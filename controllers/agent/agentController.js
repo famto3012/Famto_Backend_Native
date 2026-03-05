@@ -1050,7 +1050,7 @@ const getTaskPreviewController = async (req, res, next) => {
 
     const taskFound = await Task.find({
       agentId,
-      taskStatus: "Assigned",
+      taskStatus: { $in: ["Assigned", "Completed"] }
     })
       .populate("orderId")
       .sort({ createdAt: 1 });

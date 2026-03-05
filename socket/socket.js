@@ -1343,9 +1343,9 @@ io.on("connection", async (socket) => {
         }
       }
 
-      sendSocketData(agentId, parameters.eventName, agentFound.appDetail);
+      sendSocketData(agentId, eventName, agentFound.appDetail);
       if (manager?._id) {
-        sendSocketData(manager._id, parameters.eventName, agentFound.appDetail);
+        sendSocketData(manager._id, eventName, agentFound.appDetail);
       }
     } catch (err) {
       console.log("Failed to reject order :" + err);
