@@ -101,67 +101,144 @@ const io = socketio(server, {
 const userSocketMap = {};
 
 const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
+
+  console.log("=========== PUSH DEBUG ===========");
+  console.log("Event:", eventName);
+  console.log("Token:", fcmToken);
+  console.log("Order:", message?.orderId);
+  console.log("==================================");
+
   const notificationSettings = await NotificationSetting.findOne({
     event: eventName || "",
     status: true,
   });
 
- const mes = {
-  notification: {
-    title: notificationSettings?.title || message?.title,
-    body: notificationSettings?.description || message?.body,
-    image: message?.image,
-  },
-  data: {
-    orderId: String(message?.orderId || ""),
-    merchantName: String(message?.merchantName || ""),
-    pickAddress: JSON.stringify(message?.pickAddress || {}),
-    customerName: String(message?.customerName || ""),
-    customerAddress: JSON.stringify(message?.customerAddress || {}),
-    orderType: String(message?.orderType || ""),
-    taskDate: String(message?.taskDate || ""),
-    taskTime: String(message?.taskTime || ""),
-    timer: String(message?.timer || ""),
-  },
-  webpush: {
-    fcm_options: {
-      link: "https://dashboard.famto.in/home",
-    },
+  const payload = {
     notification: {
-      icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media&token=0be47a53-43f3-4887-9822-3baad0edd31e",
+      title: notificationSettings?.title || message?.title || "New Notification",
+      body: notificationSettings?.description || message?.body || "",
+      image: message?.image || "",
     },
-  },
-  token: fcmToken,
-};
+
+    data: {
+      orderId: String(message?.orderId || ""),
+      merchantName: String(message?.merchantName || ""),
+      pickAddress: JSON.stringify(message?.pickAddress || {}),
+      customerName: String(message?.customerName || ""),
+      customerAddress: JSON.stringify(message?.customerAddress || {}),
+      orderType: String(message?.orderType || ""),
+      taskDate: String(message?.taskDate || ""),
+      taskTime: String(message?.taskTime || ""),
+      timer: String(message?.timer || ""),
+    },
+
+    webpush: {
+      fcm_options: {
+        link: "https://dashboard.famto.in/home",
+      },
+      notification: {
+        icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media",
+      },
+    },
+
+    token: fcmToken,
+  };
+
   try {
-    // Try sending with the first project
-    await admin1.messaging(app1).send(mes);
-    console.log(
-      `Successfully sent message with project1 for token: ${fcmToken}`
-    );
+
+    console.log("Sending push using Firebase Project 1...");
+
+    const response = await admin1.messaging(app1).send(payload);
+
+    console.log("Push Success (Project1):", response);
+
     return true;
+
   } catch (error1) {
-    console.error(
-      `Error sending message with project1 for token: ${fcmToken}`,
-      error1
-    );
+
+    console.error("Project1 failed:", error1.message);
 
     try {
-      // Try sending with the second project
-      await admin2.messaging(app2).send(mes);
-      console.log(
-        `Successfully sent message with project2 for token: ${fcmToken}`
-      );
+
+      console.log("Retrying push using Firebase Project 2...");
+
+      const response = await admin2.messaging(app2).send(payload);
+
+      console.log("Push Success (Project2):", response);
+
       return true;
+
     } catch (error2) {
-      console.error(
-        `Error sending message with project2 for token: ${fcmToken}`,
-        error2
-      );
+
+      console.error("Project2 failed:", error2.message);
+
       return false;
     }
   }
 };
+
+// const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
+//   const notificationSettings = await NotificationSetting.findOne({
+//     event: eventName || "",
+//     status: true,
+//   });
+
+//  const mes = {
+//   notification: {
+//     title: notificationSettings?.title || message?.title,
+//     body: notificationSettings?.description || message?.body,
+//     image: message?.image,
+//   },
+//   data: {
+//     orderId: String(message?.orderId || ""),
+//     merchantName: String(message?.merchantName || ""),
+//     pickAddress: JSON.stringify(message?.pickAddress || {}),
+//     customerName: String(message?.customerName || ""),
+//     customerAddress: JSON.stringify(message?.customerAddress || {}),
+//     orderType: String(message?.orderType || ""),
+//     taskDate: String(message?.taskDate || ""),
+//     taskTime: String(message?.taskTime || ""),
+//     timer: String(message?.timer || ""),
+//   },
+//   webpush: {
+//     fcm_options: {
+//       link: "https://dashboard.famto.in/home",
+//     },
+//     notification: {
+//       icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media&token=0be47a53-43f3-4887-9822-3baad0edd31e",
+//     },
+//   },
+//   token: fcmToken,
+// };
+//   try {
+//     // Try sending with the first project
+//     await admin1.messaging(app1).send(mes);
+//     console.log(
+//       `Successfully sent message with project1 for token: ${fcmToken}`
+//     );
+//     return true;
+//   } catch (error1) {
+//     console.error(
+//       `Error sending message with project1 for token: ${fcmToken}`,
+//       error1
+//     );
+
+//     try {
+//       // Try sending with the second project
+//       await admin2.messaging(app2).send(mes);
+//       console.log(
+//         `Successfully sent message with project2 for token: ${fcmToken}`
+//       );
+//       return true;
+//     } catch (error2) {
+//       console.error(
+//         `Error sending message with project2 for token: ${fcmToken}`,
+//         error2
+//       );
+//       return false;
+//     }
+//   }
+// };
 
 const createNotificationLog = async (notificationSettings, message) => {
   const logData = {
@@ -381,7 +458,7 @@ const populateUserSocketMap = async () => {
 };
 
 const getRecipientSocketId = (recipientId) => {
-  return userSocketMap[recipientId].socketId;
+  return userSocketMap[recipientId]?.socketId || null;
 };
 
 const getRecipientFcmToken = (recipientId) => {
@@ -769,19 +846,29 @@ const getPendingNotificationsWithTimers = async (agentId) => {
       .lean();
 
     console.log("Pending Notifications:", pendingNotifications);
+const notificationsWithTimers = pendingNotifications.map((notification) => {
+  const order = notification.orderId?.[0] || {};
 
-    const notificationsWithTimers = pendingNotifications.map((notification) => {
-      return {
-        notificationId: notification._id || null,
-        orderId: notification.orderId._id || null,
-        pickAddress: notification.orderId.pickups?.[0]?.address.area || null,
-        customerAddress: notification.orderId.drops?.[0]?.address.area || null,
-        orderType: notification.orderType || null,
-        status: notification.status || null,
-        taskDate: formatDate(notification.orderId?.deliveryTime),
-        taskTime: formatTime(notification.orderId?.deliveryTime),
-      };
-    });
+  return {
+    notificationId: notification._id || null,
+
+    orderId: order?._id || null,
+
+    pickAddress:
+      order?.pickups?.[0]?.address?.area || null,
+
+    customerAddress:
+      order?.drops?.[0]?.address?.area || null,
+
+    orderType: notification.orderType || null,
+
+    status: notification.status || null,
+
+    taskDate: formatDate(order?.deliveryTime),
+
+    taskTime: formatTime(order?.deliveryTime),
+  };
+});
 
     console.log("Notifications with Timers:", notificationsWithTimers);
 
