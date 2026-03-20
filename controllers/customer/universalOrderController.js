@@ -57,25 +57,25 @@ const getAllBusinessCategoryController = async (req, res, next) => {
 
     const geofence = await geoLocation(latitude, longitude);
 
-    if (!geofence) return res.status(200).json({ outside: true, data: [] });
+    let query = { status: true };
 
-    const allBusinessCategories = await BusinessCategory.find({
-      status: true,
-      geofenceId: { $in: [geofence._id] },
-    })
+    // Apply geofence filter only if geofence exists
+    if (geofence) {
+      query.geofenceId = { $in: [geofence._id] };
+    }
+
+    const allBusinessCategories = await BusinessCategory.find(query)
       .select("title bannerImageURL")
       .sort({ order: 1 });
 
-    const formattedResponse = allBusinessCategories?.map((category) => {
-      return {
-        id: category._id,
-        title: category.title,
-        bannerImageURL: category.bannerImageURL,
-      };
-    });
+    const formattedResponse = allBusinessCategories?.map((category) => ({
+      id: category._id,
+      title: category.title,
+      bannerImageURL: category.bannerImageURL,
+    }));
 
     res.status(200).json({
-      outside: false,
+      outside: !geofence,
       data: formattedResponse,
     });
   } catch (err) {

@@ -292,7 +292,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.pickups[0]?.address?.fullName,
+          order?.customerId?.fullName || order?.drops[0]?.deliveryAddress?.fullName,
         deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
@@ -762,7 +762,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     if (status && status !== "All") filter.status = status;
     if (paymentMode && paymentMode !== "All") filter.paymentMode = paymentMode;
     if (deliveryMode && deliveryMode !== "All")
-      filter["orderDetail.deliveryMode"] = deliveryMode;
+      filter["deliveryMode"] = deliveryMode;
     if (orderId) {
       filter.$or = [{ _id: { $regex: orderId, $options: "i" } }];
     }
@@ -802,7 +802,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
             merchantName:
               order?.merchantId?.merchantDetail?.merchantName || "-",
             customerName: order?.customerId?.fullName || "-",
-            customerPhoneNumber: order?.drops[0]?.address?.phoneNumber || "-",
+            customerPhoneNumber: order?.drops?.[0]?.address?.phoneNumber || "-",
             // customerEmail: order?.customerId?.email || "-",
             agentName: order?.agentId?.fullName || "-",
             agentPhoneNumber: order?.agentId?.phoneNumber || "-",
@@ -819,8 +819,8 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
             deliveryOption: order?.deliveryOption || "-",
             totalAmount: order?.billDetail?.grandTotal || "-",
             deliveryAddress:
-              `${order?.drops[0]?.address?.fullName || ""}, ${order?.drops[0]?.address?.flat || ""
-              }, ${order?.drops[0]?.address?.area || ""}, ${order?.drops[0]?.address?.landmark || ""
+              `${order?.drops?.[0]?.address?.fullName || ""}, ${order?.drops?.[0]?.address?.flat || ""
+              }, ${order?.drops?.[0]?.address?.area || ""}, ${order?.drops?.[0]?.address?.landmark || ""
               }` || "-",
             distanceInKM: order?.distance || "-",
             distanceTravelledByAgent: order?.distanceCoveredByAgent || "-",
