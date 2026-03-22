@@ -1705,9 +1705,10 @@ const downloadOrderBillController = async (req, res, next) => {
 
     // Generate PDF using Puppeteer
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+  executablePath: puppeteer.executablePath(), // ✅ IMPORTANT
+  headless: "new",
+  args: ["--no-sandbox", "--disable-setuid-sandbox"],
+});
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: "load" });
     await page.pdf({ path: filePath, format: "A4", printBackground: true });
