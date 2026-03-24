@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const turf = require("@turf/turf");
+const crypto = require("crypto");
 const { validationResult } = require("express-validator");
 
 const Task = require("../../models/Task");
@@ -381,7 +382,7 @@ const getMerchantData = async (req, res, next) => {
 
     let distanceInKM = 0;
 
-    console.log("Lat Lng", latitude , longitude);
+    console.log("Lat Lng", latitude, longitude);
 
     if (latitude && longitude) {
       const merchantLocation = merchantFound.merchantDetail.location;
@@ -400,7 +401,7 @@ const getMerchantData = async (req, res, next) => {
       }
     }
 
-    console.log('Distance',distanceInKM);
+    console.log('Distance', distanceInKM);
 
     let distanceWarning = false;
     if (distanceInKM > 12) distanceWarning = true;
@@ -1732,7 +1733,7 @@ const orderPaymentController = async (req, res, next) => {
           billDetail: orderBill,
           totalAmount: orderAmount,
           deliveryMode: cart.cartDetail.deliveryMode,
-          deliveryOption : cart.cartDetail.deliveryOption,
+          deliveryOption: cart.cartDetail.deliveryOption,
           status: "Pending",
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
@@ -2197,499 +2198,168 @@ const orderPaymentController = async (req, res, next) => {
         }
       }, 60000);
     } else if (paymentMode === "Online-payment") {
-      const { success, orderId, error } = await createRazorpayOrderId(
-        orderAmount
-      );
+      const { success, orderId, error } =
+        await createRazorpayOrderId(orderAmount);
 
       if (!success) {
-        return next(
-          appError(`Error in creating Razorpay order: ${error}`, 500)
-        );
+        return next(appError(error, 500));
       }
 
-      res.status(200).json({ success: true, orderId, amount: orderAmount });
-      return;
-    } else {
-      return next(appError("Invalid payment mode", 400));
+      // ✅ Save temp order BEFORE payment
+      const tempOrder = await TemporaryOrder.create({
+        razorpayOrderId: orderId, // 🔥 VERY IMPORTANT
+        customerId,
+        merchantId: cart.merchantId,
+        billDetail: cart.billDetail,
+        totalAmount: orderAmount,
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickups: cart.cartDetail.pickups,
+        drops: cart.cartDetail.drops,
+        purchasedItems: cart.items,
+        paymentMode: "Online-payment",
+        paymentStatus: "Pending",
+      });
+
+      return res.status(200).json({
+        success: true,
+        razorpayOrderId: orderId,
+        amount: orderAmount,
+      });
     }
+
+    return next(appError("Invalid payment mode", 400));
   } catch (err) {
     next(appError(err.message));
   }
 };
 
 // Verify online payment
-
-
 const verifyOnlinePaymentController = async (req, res, next) => {
-  console.log("🟢 verifyOnlinePaymentController called");
-
   try {
     const { paymentDetails } = req.body;
-    const customerId = req.userAuth;
 
-    console.log("➡️ Incoming paymentDetails:", paymentDetails);
-    console.log("➡️ Authenticated customerId:", customerId);
+    const isValid = await verifyPayment(paymentDetails);
 
-    if (!customerId) {
-      console.error("❌ No customerId found in req.userAuth");
-      return next(appError("Customer is not authenticated", 401));
+    if (!isValid) {
+      return next(appError("Payment verification failed", 400));
     }
 
-    const customer = await Customer.findById(customerId);
-    console.log("✅ Customer found:", !!customer, customer?._id);
-
-    if (!customer) {
-      console.error("❌ Customer not found:", customerId);
-      return next(appError("Customer not found", 404));
-    }
-
-    const cart = await CustomerCart.findOne({ customerId })
-      .populate({
-        path: "items.productId",
-        select: "productName productImageURL description variants",
-      })
-      .exec();
-
-    console.log("🛒 Cart found:", !!cart, "Items count:", cart?.items?.length);
-
-    if (!cart) {
-      console.error("❌ No cart found for customer:", customerId);
-      return next(appError("Cart not found", 404));
-    }
-
-    console.log("🧾 Verifying payment...");
-    const isPaymentValid = await verifyPayment(paymentDetails);
-    console.log("✅ Payment valid:", isPaymentValid);
-
-    if (!isPaymentValid) {
-      console.error("❌ Payment verification failed");
-      return next(appError("Invalid payment", 400));
-    }
-
-    const merchant = await Merchant.findById(cart.merchantId);
-    console.log("🏪 Merchant found:", !!merchant, merchant?._id);
-
-    if (!merchant) {
-      console.error("❌ Merchant not found:", cart.merchantId);
-      return next(appError("Merchant not found", 404));
-    }
-
-    const populatedCartWithVariantNames = cart.toObject();
-    console.log("📦 Processing items for variant names...");
-
-    populatedCartWithVariantNames.items =
-      populatedCartWithVariantNames.items.map((item) => {
-        const product = item.productId;
-        let variantTypeName = null;
-        let variantTypeData = null;
-        if (item.variantTypeId && product.variants) {
-          const variantType = product.variants
-            .flatMap((variant) => variant.variantTypes)
-            .find((type) => type._id.equals(item.variantTypeId));
-          if (variantType) {
-            variantTypeName = variantType.typeName;
-            variantTypeData = {
-              id: variantType._id,
-              variantTypeName: variantTypeName,
-            };
-          }
-        }
-        return {
-          ...item,
-          productId: {
-            _id: product._id,
-            productName: product.productName,
-            description: product.description,
-            productImageURL: product.productImageURL,
-          },
-          variantTypeId: variantTypeData,
-        };
-      });
-
-    console.log("🧩 Variant mapping complete");
-
-    const purchasedItems = await filterProductIdAndQuantity(
-      populatedCartWithVariantNames.items
-    );
-    console.log("🛍️ Purchased items prepared:", purchasedItems.length);
-
-    let formattedItems = populatedCartWithVariantNames.items.map((items) => {
-      return {
-        itemName: items?.productId?.productName,
-        description: items?.productId?.description,
-        itemImageURL: items?.productId?.productImageURL,
-        quantity: items?.quantity,
-        price: items?.price,
-        variantTypeName: items?.variantTypeId?.variantTypeName,
-      };
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified. Order will be created shortly.",
     });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
 
-    const orderAmount =
-      cart.billDetail.discountedGrandTotal ||
-      cart.billDetail.originalGrandTotal;
+// Razorpay Webhook 
 
-    console.log("💰 Order amount:", orderAmount);
 
-    let startDate, endDate;
-    if (cart.cartDetail.deliveryOption === "Scheduled") {
-      console.log("📅 Scheduled delivery detected");
-      startDate = new Date(cart.cartDetail.startDate);
-      startDate.setHours(18, 30, 0, 0);
 
-      endDate = new Date(cart.cartDetail.startDate);
-      endDate.setHours(18, 29, 59, 999);
+
+const razorpayWebhookController = async (req, res) => {
+  try {
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+
+    const signature = req.headers["x-razorpay-signature"];
+
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      console.log("❌ Invalid signature");
+      return res.status(400).send("Invalid signature");
     }
 
-    let orderBill = {
-      deliveryChargePerDay: cart.billDetail.deliveryChargePerDay,
-      deliveryCharge:
-        cart.billDetail.discountedDeliveryCharge ||
-        cart.billDetail.originalDeliveryCharge,
-      taxAmount: cart.billDetail.taxAmount,
-      discountedAmount: cart.billDetail.discountedAmount,
-      promoCodeUsed: cart.billDetail.promoCodeUsed,
-      grandTotal:
-        cart.billDetail.discountedGrandTotal ||
-        cart.billDetail.originalGrandTotal,
-      itemTotal: cart.billDetail.itemTotal,
-      addedTip: cart.billDetail.addedTip,
-      subTotal: cart.billDetail.subTotal,
-      surgePrice: cart.billDetail.surgePrice,
-    };
-    console.log("🧾 Bill detail:", orderBill);
+    const event = req.body.event;
 
-    let customerTransaction = {
-      customerId,
-      madeOn: new Date(),
-      transactionType: "Order Created",
-      transactionAmount: orderAmount,
-      type: "Debit",
-    };
+    console.log("📩 Webhook Event:", event);
 
-    const deliveryTimeMinutes = parseInt(
-      merchant.merchantDetail.deliveryTime,
-      10
-    );
-    const deliveryTime = new Date();
-    deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
-    console.log("🚚 Delivery time set to:", deliveryTime);
+    // ✅ Only handle successful payment
+    if (event === "payment.captured") {
+      const payment = req.body.payload.payment.entity;
 
-    let newOrder;
-    if (cart.cartDetail.deliveryOption === "Scheduled") {
-      console.log("🕓 Creating scheduled order...");
+      const razorpayOrderId = payment.order_id;
+      const paymentId = payment.id;
 
-      const newOrderCreated = await ScheduledOrder.create({
-        customerId,
-        merchantId: cart.merchantId,
-        items: formattedItems,
-        pickups : cart.pickups,
-        drops : cart.drops,
-        billDetail : orderBill,
-        deliveryMode: cart.deliveryMode,
-        deliveryOption: cart.deliveryOption,
-        totalAmount: orderAmount,
-        status: "Pending",
-        paymentMode: "Online-payment",
-        paymentStatus: "Completed",
-        startDate,
-        endDate,
-        time: cart.time,
-        paymentId: paymentDetails.razorpay_payment_id,
-        purchasedItems,
+      console.log("💰 Payment Captured:", paymentId);
+
+      // 🔍 Find temp order
+      const tempOrder = await TemporaryOrder.findOne({
+        razorpayOrderId,
       });
-
-      console.log("✅ ScheduledOrder created:", newOrderCreated._id);
-
-      await Promise.all([
-        PromoCode.findOneAndUpdate(
-          { promoCode: newOrderCreated.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: 1 } }
-        ),
-        CustomerCart.deleteOne({ customerId }),
-        customer.save(),
-        CustomerTransaction.create(customerTransaction),
-        ActivityLog.create({
-          userId: req.userAuth,
-          userType: req.userRole,
-          description: `Scheduled order (#${newOrderCreated._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-            } )`,
-        }),
-      ]);
-      console.log("🧾 Post-order updates done");
-
-      newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
-        "merchantId"
-      );
-
-      console.log("📦 Populated scheduled order for notification");
-
-      const eventName = "newOrderCreated";
-      const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-      const notificationData = {
-        fcm: {
-          orderId: newOrder._id,
-          customerId: newOrder.customerId,
-        },
-      };
-
-      const socketData = {
-        ...data,
-        orderId: newOrder._id,
-        orderDetail: newOrder.orderDetail,
-        billDetail: newOrder.billDetail,
-        _id: newOrder._id,
-        orderStatus: newOrder.status,
-        merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-        customerName:
-          newOrder?.deliveryAddress?.fullName ||
-          newOrder?.customerId?.fullName ||
-          "-",
-        deliveryMode: newOrder?.deliveryMode,
-        orderDate: formatDate(newOrder.createdAt),
-        orderTime: formatTime(newOrder.createdAt),
-        deliveryDate: newOrder?.deliveryTime
-          ? formatDate(newOrder.deliveryTime)
-          : "-",
-        deliveryTime: newOrder?.deliveryTime
-          ? formatTime(newOrder.deliveryTime)
-          : "-",
-        paymentMethod: newOrder.paymentMode,
-        deliveryOption: newOrder.deliveryOption,
-        amount: newOrder.billDetail.grandTotal,
-      };
-
-      const userIds = {
-        admin: process.env.ADMIN_ID,
-        merchant: newOrder?.merchantId._id,
-        agent: newOrder?.agentId,
-        customer: newOrder?.customerId,
-      };
-
-      console.log("📡 Sending scheduled order response to client...");
-      res.status(200).json({
-        success: true,
-        orderId: newOrder._id,
-        createdAt: null,
-        merchantName: null,
-        deliveryMode: newOrder.deliveryMode,
-      });
-
-      console.log("📢 Sending socket and notification...");
-      await sendSocketDataAndNotification({
-        rolesToNotify,
-        userIds,
-        eventName,
-        notificationData,
-        socketData,
-      });
-
-      console.log("✅ Scheduled order flow completed");
-      return;
-    } else {
-      console.log("⚡ Creating immediate temporary order...");
-
-      const orderId = new mongoose.Types.ObjectId();
-      const tempOrder = await TemporaryOrder.create({
-        orderId,
-        customerId,
-        merchantId: cart.merchantId,
-        deliveryMode: cart.deliveryMode,
-        deliveryOption: cart.deliveryOption,
-        pickups : cart.pickups,
-        drops : cart.drops,
-        billDetail: orderBill,
-        distance: cart.distance,
-        deliveryTime,
-        startDate: cart.startDate,
-        endDate: cart.endDate,
-        time: cart.time,
-        numOfDays: cart.numOfDays,
-        totalAmount: orderAmount,
-        paymentMode: "Online-payment",
-        paymentStatus: "Pending",
-        purchasedItems,
-      });
-
-      console.log("🕐 Temporary order created:", tempOrder?._id || "N/A");
 
       if (!tempOrder) {
-        console.error("❌ Failed to create TemporaryOrder");
-        return next(appError("Error in creating temporary order"));
+        console.log("⚠️ Temp order not found");
+        return res.status(200).json({ success: true });
       }
 
-      await Promise.all([
-        customer.save(),
-        CustomerCart.deleteOne({ customerId }),
-        CustomerTransaction.create(customerTransaction),
-        PromoCode.findOneAndUpdate(
-          { promoCode: tempOrder.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: 1 } }
-        ),
-      ]);
+      // ✅ Prevent duplicate order
+      const existingOrder = await Order.findOne({ paymentId });
 
-      console.log("✅ Temporary order post-actions completed");
+      if (existingOrder) {
+        console.log("⚠️ Order already exists");
+        return res.status(200).json({ success: true });
+      }
 
-      res.status(200).json({
-        success: true,
-        orderId,
-        createdAt: tempOrder.createdAt,
-        merchantName: merchant.merchantDetail.merchantName,
+      // ✅ CREATE FINAL ORDER
+      const newOrder = await Order.create({
+        customerId: tempOrder.customerId,
+        merchantId: tempOrder.merchantId,
+        pickups: tempOrder.pickups,
+        drops: tempOrder.drops,
+        billDetail: tempOrder.billDetail,
+        totalAmount: tempOrder.totalAmount,
         deliveryMode: tempOrder.deliveryMode,
+        deliveryOption: tempOrder.deliveryOption,
+        paymentMode: "Online-payment",
+        paymentStatus: "Completed",
+        paymentId,
+        purchasedItems: tempOrder.purchasedItems,
+        status: "Pending",
+        "orderDetailStepper.created": {
+          by: "Customer",
+          userId: tempOrder.customerId,
+          date: new Date(),
+        },
       });
 
-      console.log("🕑 Scheduling permanent order creation after 60s...");
-      setTimeout(async () => {
-        try {
-          console.log("⏰ 60s timer triggered for orderId:", orderId);
-          const storedOrderData = await TemporaryOrder.findOne({ orderId });
-          if (!storedOrderData) {
-            console.warn("⚠️ No TemporaryOrder found for:", orderId);
-            return;
-          }
+      console.log("✅ Order Created:", newOrder._id);
 
-          const existingOrder = await Order.findOne({
-            _id: storedOrderData.orderId,
-          });
-          if (existingOrder) {
-            console.warn("⚠️ Order already exists, skipping creation:", orderId);
-            return;
-          }
+      // 🗑️ Delete temp order
+      await TemporaryOrder.deleteOne({ _id: tempOrder._id });
 
+      // 🛒 Clear cart
+      await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
 
-          const fixedPurchasedItems = Array.isArray(storedOrderData.purchasedItems)
-  ? storedOrderData.purchasedItems.map(item => ({
-      ...item,
-      // only extract the ObjectId if variantId is an object
-      variantId:
-        typeof item.variantId === "object" && item.variantId !== null
-          ? item.variantId.id || null
-          : item.variantId || null,
-      productId:
-        typeof item.productId === "object" && item.productId !== null
-          ? item.productId._id || item.productId.id || item.productId
-          : item.productId,
-    }))
-  : [];
+      // 🔔 Notification
+      await sendSocketDataAndNotification({
+        eventName: "newOrderCreated",
+        userIds: {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder.merchantId,
+          customer: newOrder.customerId,
+        },
+        notificationData: {
+          fcm: { orderId: newOrder._id },
+        },
+        socketData: {
+          orderId: newOrder._id,
+          amount: newOrder.totalAmount,
+        },
+      });
 
-          console.log("🧱 Creating final order from temporary data...");
-          let newOrderCreated = await Order.create({
-            customerId: storedOrderData.customerId,
-            merchantId: storedOrderData.merchantId,
-            pickups: storedOrderData.pickups,
-            drops: storedOrderData.drops,
-            billDetail: storedOrderData.billDetail,
-            distance: storedOrderData.distance,
-            deliveryTime: storedOrderData.deliveryTime,
-            startDate: storedOrderData.startDate,
-            endDate: storedOrderData.endDate,
-            deliveryMode: storedOrderData.deliveryMode,
-            deliveryOption : storedOrderData.deliveryOption,
-            time: storedOrderData.time,
-            numOfDays: storedOrderData.numOfDays,
-            totalAmount: storedOrderData.totalAmount,
-            status: storedOrderData.status,
-            paymentMode: storedOrderData.paymentMode,
-            paymentStatus: storedOrderData.paymentStatus,
-            paymentId: storedOrderData.paymentId,
-            purchasedItems: fixedPurchasedItems,
-            "orderDetailStepper.created": {
-              by: "Customer",
-              userId: storedOrderData.customerId,
-              date: new Date(),
-            },
-            purchasedItems: storedOrderData.purchasedItems,
-          });
-
-          console.log("✅ Final order created:", newOrderCreated?._id);
-
-          const newOrder = await Order.findById(newOrderCreated._id).populate(
-            "merchantId"
-          );
-          if (!newOrder.merchantId) {
-            console.error("❌ Failed to populate merchant in new order");
-            return next(
-              appError("Error in populating order's merchant information")
-            );
-          }
-
-          await Promise.all([
-            TemporaryOrder.deleteOne({ orderId }),
-            ActivityLog.create({
-              userId: req.userAuth,
-              userType: req.userRole,
-              description: `Order (#${newOrderCreated._id
-                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-                } )`,
-            }),
-          ]);
-
-          console.log("🗑️ Temporary order deleted after success");
-
-          const eventName = "newOrderCreated";
-          const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-          const notificationData = {
-            fcm: {
-              orderId: newOrder._id,
-              customerId: newOrder.customerId,
-            },
-          };
-
-          const socketData = {
-            ...data,
-            orderId: newOrder._id,
-            billDetail: newOrder.billDetail,
-            orderDetailStepper: newOrder.orderDetailStepper.created,
-            _id: newOrder._id,
-            orderStatus: newOrder.status,
-            merchantName:
-              newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-            customerName:
-              newOrder?.drops[0]?.deliveryAddress
-                ?.fullName ||
-              newOrder?.customerId?.fullName ||
-              "-",
-            deliveryMode: newOrder?.deliveryMode,
-            orderDate: formatDate(newOrder.createdAt),
-            orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.deliveryTime
-              ? formatDate(newOrder.deliveryTime)
-              : "-",
-            deliveryTime: newOrder?.deliveryTime
-              ? formatTime(newOrder.deliveryTime)
-              : "-",
-            paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.deliveryOption,
-            amount: newOrder.billDetail.grandTotal,
-          };
-
-          const userIds = {
-            admin: process.env.ADMIN_ID,
-            merchant: newOrder?.merchantId._id,
-            agent: newOrder?.agentId,
-            customer: newOrder?.customerId,
-          };
-
-          console.log("📡 Sending socket and FCM notification...");
-          await sendSocketDataAndNotification({
-            rolesToNotify,
-            userIds,
-            eventName,
-            notificationData,
-            socketData,
-          });
-
-          console.log("✅ Order fully processed and notifications sent");
-        } catch (err) {
-          console.error("🔥 Error inside setTimeout order creation:", err);
-        }
-      }, 60000);
+      console.log("🎉 Order Flow Completed via Webhook");
     }
+
+    res.status(200).json({ success: true });
   } catch (err) {
-    console.error("🔥 verifyOnlinePaymentController Error:", err);
-    next(appError(err.message));
+    console.error("🔥 Webhook Error:", err);
+    res.status(500).send("Webhook Error");
   }
 };
 
@@ -3501,6 +3171,7 @@ module.exports = {
   // applyPromoCodeController,
   orderPaymentController,
   verifyOnlinePaymentController,
+  razorpayWebhookController,
   cancelOrderBeforeCreationController,
   clearCartController,
   // applyTipController,

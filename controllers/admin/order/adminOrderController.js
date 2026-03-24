@@ -1705,11 +1705,11 @@ const downloadOrderBillController = async (req, res, next) => {
 
     // Generate PDF using Puppeteer
     const browser = await puppeteer.launch({
-  executablePath:
-    "/home/famto/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome",
-  headless: "new",
-  args: ["--no-sandbox", "--disable-setuid-sandbox"],
-});
+      executablePath:
+        "/home/famto/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome",
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: "load" });
     await page.pdf({ path: filePath, format: "A4", printBackground: true });
