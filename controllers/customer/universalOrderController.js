@@ -2198,35 +2198,68 @@ const orderPaymentController = async (req, res, next) => {
         }
       }, 60000);
     } else if (paymentMode === "Online-payment") {
-      const { success, orderId, error } =
-        await createRazorpayOrderId(orderAmount);
+  const { success, orderId: razorpayOrderId, error } =
+    await createRazorpayOrderId(orderAmount);
 
-      if (!success) {
-        return next(appError(error, 500));
-      }
+  if (!success) {
+    return next(appError(error, 500));
+  }
 
-      // ✅ Save temp order BEFORE payment
-      const tempOrder = await TemporaryOrder.create({
-        razorpayOrderId: orderId, // 🔥 VERY IMPORTANT
-        customerId,
-        merchantId: cart.merchantId,
-        billDetail: cart.billDetail,
-        totalAmount: orderAmount,
-        deliveryMode: cart.cartDetail.deliveryMode,
-        deliveryOption: cart.cartDetail.deliveryOption,
-        pickups: cart.cartDetail.pickups,
-        drops: cart.cartDetail.drops,
-        purchasedItems: cart.items,
-        paymentMode: "Online-payment",
-        paymentStatus: "Pending",
-      });
+  // ✅ Calculate delivery time (same as before)
+  const merchant = await Merchant.findById(cart.merchantId);
 
-      return res.status(200).json({
-        success: true,
-        razorpayOrderId: orderId,
-        amount: orderAmount,
-      });
-    }
+  const deliveryTimeMinutes = parseInt(
+    merchant.merchantDetail.deliveryTime,
+    10
+  );
+
+  const deliveryTime = new Date();
+  deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
+
+  // ✅ Generate orderId (REQUIRED in your schema)
+  const orderId = new mongoose.Types.ObjectId();
+
+  // ✅ FIX billDetail.deliveryCharge
+  let orderBill = {
+    ...cart.billDetail,
+    deliveryCharge:
+      cart.billDetail.discountedDeliveryCharge ||
+      cart.billDetail.originalDeliveryCharge,
+  };
+
+  // ✅ CREATE TEMP ORDER (FULL DATA)
+  const tempOrder = await TemporaryOrder.create({
+    orderId, // 🔥 REQUIRED
+    razorpayOrderId, // 🔥 REQUIRED FOR WEBHOOK
+    customerId,
+    merchantId: cart.merchantId,
+    deliveryMode: cart.cartDetail.deliveryMode,
+    deliveryOption: cart.cartDetail.deliveryOption,
+    pickups,
+    drops,
+    billDetail: orderBill, // 🔥 FIXED
+    distance: cart.cartDetail.distance,
+    deliveryTime, // 🔥 REQUIRED
+    startDate: cart.cartDetail.startDate,
+    endDate: cart.cartDetail.endDate,
+    time: cart.cartDetail.time,
+    numOfDays: cart.cartDetail.numOfDays,
+    totalAmount: orderAmount,
+    paymentMode: "Online-payment",
+    paymentStatus: "Pending",
+    purchasedItems,
+  });
+
+  if (!tempOrder) {
+    return next(appError("Error creating temp order"));
+  }
+
+  return res.status(200).json({
+    success: true,
+    razorpayOrderId,
+    amount: orderAmount,
+  });
+}
 
     return next(appError("Invalid payment mode", 400));
   } catch (err) {
