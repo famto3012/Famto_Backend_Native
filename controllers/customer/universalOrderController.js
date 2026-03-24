@@ -2292,13 +2292,14 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 const razorpayWebhookController = async (req, res) => {
   try {
     console.log("🔥 WEBHOOK HIT");
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
 
+    // ✅ Verify signature using RAW BODY
     const expectedSignature = crypto
       .createHmac("sha256", secret)
-      .update(JSON.stringify(req.body))
+      .update(req.body)
       .digest("hex");
 
     if (expectedSignature !== signature) {
@@ -2306,20 +2307,20 @@ const razorpayWebhookController = async (req, res) => {
       return res.status(400).send("Invalid signature");
     }
 
-    const event = req.body.event;
+    // ✅ Convert buffer → JSON
+    const body = JSON.parse(req.body.toString());
 
-    console.log("📩 Webhook Event:", event);
+    const event = body.event;
+    console.log("📩 Event:", event);
 
-    // ✅ Only handle successful payment
     if (event === "payment.captured") {
-      const payment = req.body.payload.payment.entity;
+      const payment = body.payload.payment.entity;
 
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
-      console.log("💰 Payment Captured:", paymentId);
+      console.log("💰 Payment:", paymentId);
 
-      // 🔍 Find temp order
       const tempOrder = await TemporaryOrder.findOne({
         razorpayOrderId,
       });
@@ -2329,15 +2330,13 @@ const razorpayWebhookController = async (req, res) => {
         return res.status(200).json({ success: true });
       }
 
-      // ✅ Prevent duplicate order
       const existingOrder = await Order.findOne({ paymentId });
 
       if (existingOrder) {
-        console.log("⚠️ Order already exists");
+        console.log("⚠️ Already created");
         return res.status(200).json({ success: true });
       }
 
-      // ✅ CREATE FINAL ORDER
       const newOrder = await Order.create({
         customerId: tempOrder.customerId,
         merchantId: tempOrder.merchantId,
@@ -2352,39 +2351,14 @@ const razorpayWebhookController = async (req, res) => {
         paymentId,
         purchasedItems: tempOrder.purchasedItems,
         status: "Pending",
-        "orderDetailStepper.created": {
-          by: "Customer",
-          userId: tempOrder.customerId,
-          date: new Date(),
-        },
       });
 
       console.log("✅ Order Created:", newOrder._id);
 
-      // 🗑️ Delete temp order
       await TemporaryOrder.deleteOne({ _id: tempOrder._id });
-
-      // 🛒 Clear cart
       await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
 
-      // 🔔 Notification
-      await sendSocketDataAndNotification({
-        eventName: "newOrderCreated",
-        userIds: {
-          admin: process.env.ADMIN_ID,
-          merchant: newOrder.merchantId,
-          customer: newOrder.customerId,
-        },
-        notificationData: {
-          fcm: { orderId: newOrder._id },
-        },
-        socketData: {
-          orderId: newOrder._id,
-          amount: newOrder.totalAmount,
-        },
-      });
-
-      console.log("🎉 Order Flow Completed via Webhook");
+      console.log("🎉 DONE");
     }
 
     res.status(200).json({ success: true });
