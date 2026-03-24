@@ -2294,12 +2294,12 @@ const razorpayWebhookController = async (req, res) => {
     console.log("🔥 WEBHOOK HIT");
 
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
     const signature = req.headers["x-razorpay-signature"];
 
-    // ✅ Verify signature using RAW BODY
     const expectedSignature = crypto
       .createHmac("sha256", secret)
-      .update(req.body)
+      .update(req.body.toString()) // ✅ RAW BODY
       .digest("hex");
 
     if (expectedSignature !== signature) {
@@ -2307,23 +2307,20 @@ const razorpayWebhookController = async (req, res) => {
       return res.status(400).send("Invalid signature");
     }
 
-    // ✅ Convert buffer → JSON
-    const body = JSON.parse(req.body.toString());
+    const event = JSON.parse(req.body).event;
 
-    const event = body.event;
     console.log("📩 Event:", event);
 
     if (event === "payment.captured") {
-      const payment = body.payload.payment.entity;
+      const payload = JSON.parse(req.body);
+      const payment = payload.payload.payment.entity;
 
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
-      console.log("💰 Payment:", paymentId);
+      console.log("💰 Payment captured:", paymentId);
 
-      const tempOrder = await TemporaryOrder.findOne({
-        razorpayOrderId,
-      });
+      const tempOrder = await TemporaryOrder.findOne({ razorpayOrderId });
 
       if (!tempOrder) {
         console.log("⚠️ Temp order not found");
@@ -2333,7 +2330,7 @@ const razorpayWebhookController = async (req, res) => {
       const existingOrder = await Order.findOne({ paymentId });
 
       if (existingOrder) {
-        console.log("⚠️ Already created");
+        console.log("⚠️ Order already exists");
         return res.status(200).json({ success: true });
       }
 
@@ -2357,8 +2354,6 @@ const razorpayWebhookController = async (req, res) => {
 
       await TemporaryOrder.deleteOne({ _id: tempOrder._id });
       await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
-
-      console.log("🎉 DONE");
     }
 
     res.status(200).json({ success: true });
