@@ -91,6 +91,12 @@ const {
   distanceCache,
 } = require("./controllers/customer/universalOrderController.js");
 
+
+app.use(
+  "/api/v1/customers/razorpay-webhook",
+  express.raw({ type: "application/json" })
+);
+
 //middlewares
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("tiny"));

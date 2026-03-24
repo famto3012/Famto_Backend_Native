@@ -2289,12 +2289,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
 // Razorpay Webhook 
 
-
-
-
 const razorpayWebhookController = async (req, res) => {
   try {
-    const secret = process.env.RAZORPAY_KEY_SECRET;
+    console.log("🔥 WEBHOOK HIT");
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
     const signature = req.headers["x-razorpay-signature"];
 

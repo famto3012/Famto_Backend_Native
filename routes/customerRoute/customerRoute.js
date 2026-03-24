@@ -308,7 +308,6 @@ customerRoute.post(
 
 customerRoute.post(
   "/razorpay-webhook",
-  isAuthenticated,
   razorpayWebhookController
 );
 
