@@ -3,6 +3,9 @@ const cors = require("cors");
 const cron = require("node-cron");
 const morgan = require("morgan");
 
+const TemporaryOrder = require("./models/TemporaryOrder");
+const Order = require("./models/Order");
+const CustomerCart = require("./models/CustomerCart");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
@@ -215,7 +218,7 @@ cron.schedule("30 18 * * *", async () => {
     removeExpiredProductDiscount(),
     removeExpiredPromoCode(),
     deleteOldLogs(),
-    deleteOldTasks()
+    deleteOldTasks(),
   ]);
 });
 
@@ -255,6 +258,84 @@ cron.schedule("* * * * *", async () => {
     for (const scheduledOrder of pickAndDropScheduledOrders) {
       await createOrdersFromScheduledPickAndDrop(scheduledOrder);
     }
+  }
+});
+
+cron.schedule("*/10 * * * * *", async () => {
+  try {
+    console.log("⏱️ Processing Temporary Orders...");
+
+    const expiredOrders = await TemporaryOrder.find({
+      expiresAt: { $lte: new Date() },
+      isProcessed: { $ne: true },
+    });
+
+    if (!expiredOrders.length) return;
+
+    for (const tempOrder of expiredOrders) {
+      try {
+        console.log("⚙️ Processing Order:", tempOrder._id);
+
+        // ✅ ONLINE PAYMENT CHECK
+        if (tempOrder.paymentMode === "Online-payment") {
+          if (tempOrder.paymentStatus !== "Completed") {
+            console.log("❌ Payment not completed, skipping:", tempOrder._id);
+            continue;
+          }
+        }
+
+        // ✅ PREVENT DUPLICATE ORDER
+        const existingOrder = await Order.findOne({
+          paymentId: tempOrder.paymentId,
+        });
+
+        if (existingOrder) {
+          console.log("⚠️ Order already exists, skipping");
+          tempOrder.isProcessed = true;
+          await tempOrder.save();
+          continue;
+        }
+
+        // ✅ CREATE FINAL ORDER
+        const newOrder = await Order.create({
+          customerId: tempOrder.customerId,
+          merchantId: tempOrder.merchantId,
+          pickups: tempOrder.pickups,
+          drops: tempOrder.drops,
+          billDetail: tempOrder.billDetail,
+          totalAmount: tempOrder.totalAmount,
+          deliveryMode: tempOrder.deliveryMode,
+          deliveryOption: tempOrder.deliveryOption,
+          paymentMode: tempOrder.paymentMode,
+          paymentStatus: tempOrder.paymentStatus,
+          paymentId: tempOrder.paymentId,
+          purchasedItems: tempOrder.purchasedItems,
+          status: "Completed",
+          "orderDetailStepper.created": {
+            by: "Customer",
+            userId: tempOrder.customerId,
+            date: new Date(),
+          },
+        });
+
+        console.log("✅ Final Order Created:", newOrder._id);
+
+        // ✅ MARK PROCESSED
+        tempOrder.isProcessed = true;
+        await tempOrder.save();
+
+        // ✅ CLEANUP (IMPORTANT)
+        await Promise.all([
+          TemporaryOrder.deleteOne({ _id: tempOrder._id }),
+          CustomerCart.deleteOne({ customerId: tempOrder.customerId }),
+        ]);
+
+      } catch (err) {
+        console.error("❌ Error processing temp order:", err);
+      }
+    }
+  } catch (err) {
+    console.error("🔥 ORDER CRON ERROR:", err);
   }
 });
 

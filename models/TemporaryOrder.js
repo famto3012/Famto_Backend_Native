@@ -148,6 +148,8 @@ const tempOrderSchema = new mongoose.Schema(
     paymentId: { type: String, default: null },
     purchasedItems : [purchasedItemsSchema],
     razorpayOrderId : { type : String , default: null},
+    expiresAt: { type: Date, required: false }, // ✅ IMPORTANT
+  isProcessed: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

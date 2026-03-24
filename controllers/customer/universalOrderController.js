@@ -2205,49 +2205,27 @@ const orderPaymentController = async (req, res, next) => {
     return next(appError(error, 500));
   }
 
-  // ✅ Calculate delivery time (same as before)
-  const merchant = await Merchant.findById(cart.merchantId);
-
-  const deliveryTimeMinutes = parseInt(
-    merchant.merchantDetail.deliveryTime,
-    10
-  );
-
-  const deliveryTime = new Date();
-  deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
-
-  // ✅ Generate orderId (REQUIRED in your schema)
   const orderId = new mongoose.Types.ObjectId();
 
-  // ✅ FIX billDetail.deliveryCharge
-  let orderBill = {
-    ...cart.billDetail,
-    deliveryCharge:
-      cart.billDetail.discountedDeliveryCharge ||
-      cart.billDetail.originalDeliveryCharge,
-  };
-
-  // ✅ CREATE TEMP ORDER (FULL DATA)
   const tempOrder = await TemporaryOrder.create({
-    orderId, // 🔥 REQUIRED
-    razorpayOrderId, // 🔥 REQUIRED FOR WEBHOOK
+    orderId,
+    razorpayOrderId,
     customerId,
     merchantId: cart.merchantId,
     deliveryMode: cart.cartDetail.deliveryMode,
     deliveryOption: cart.cartDetail.deliveryOption,
     pickups,
     drops,
-    billDetail: orderBill, // 🔥 FIXED
+    billDetail: orderBill,
     distance: cart.cartDetail.distance,
-    deliveryTime, // 🔥 REQUIRED
-    startDate: cart.cartDetail.startDate,
-    endDate: cart.cartDetail.endDate,
-    time: cart.cartDetail.time,
-    numOfDays: cart.cartDetail.numOfDays,
+    deliveryTime,
     totalAmount: orderAmount,
     paymentMode: "Online-payment",
     paymentStatus: "Pending",
     purchasedItems,
+
+    // ✅ CRITICAL
+    expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec
   });
 
   if (!tempOrder) {
@@ -2278,9 +2256,10 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       return next(appError("Payment verification failed", 400));
     }
 
+    // ✅ Only response
     return res.status(200).json({
       success: true,
-      message: "Payment verified. Order will be created shortly.",
+      message: "Payment verified successfully",
     });
   } catch (err) {
     next(appError(err.message));
@@ -2291,78 +2270,51 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
 const razorpayWebhookController = async (req, res) => {
   try {
-    console.log("🔥 WEBHOOK HIT");
-
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
     const signature = req.headers["x-razorpay-signature"];
 
     const expectedSignature = crypto
       .createHmac("sha256", secret)
-      .update(req.body.toString()) // ✅ RAW BODY
+      .update(req.body.toString())
       .digest("hex");
 
     if (expectedSignature !== signature) {
-      console.log("❌ Invalid signature");
       return res.status(400).send("Invalid signature");
     }
 
-    const event = JSON.parse(req.body).event;
-
-    console.log("📩 Event:", event);
+    const payload = JSON.parse(req.body);
+    const event = payload.event;
 
     if (event === "payment.captured") {
-      const payload = JSON.parse(req.body);
       const payment = payload.payload.payment.entity;
 
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
-      console.log("💰 Payment captured:", paymentId);
-
       const tempOrder = await TemporaryOrder.findOne({ razorpayOrderId });
 
       if (!tempOrder) {
-        console.log("⚠️ Temp order not found");
         return res.status(200).json({ success: true });
       }
 
-      const existingOrder = await Order.findOne({ paymentId });
+      // ✅ ONLY UPDATE STATUS
+      await TemporaryOrder.findOneAndUpdate(
+        { razorpayOrderId },
+        {
+          paymentStatus: "Completed",
+          paymentId,
+        }
+      );
 
-      if (existingOrder) {
-        console.log("⚠️ Order already exists");
-        return res.status(200).json({ success: true });
-      }
-
-      const newOrder = await Order.create({
-        customerId: tempOrder.customerId,
-        merchantId: tempOrder.merchantId,
-        pickups: tempOrder.pickups,
-        drops: tempOrder.drops,
-        billDetail: tempOrder.billDetail,
-        totalAmount: tempOrder.totalAmount,
-        deliveryMode: tempOrder.deliveryMode,
-        deliveryOption: tempOrder.deliveryOption,
-        paymentMode: "Online-payment",
-        paymentStatus: "Completed",
-        paymentId,
-        purchasedItems: tempOrder.purchasedItems,
-        status: "Pending",
-      });
-
-      console.log("✅ Order Created:", newOrder._id);
-
-      await TemporaryOrder.deleteOne({ _id: tempOrder._id });
-      await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
+      console.log("✅ Payment marked completed");
     }
 
     res.status(200).json({ success: true });
   } catch (err) {
-    console.error("🔥 Webhook Error:", err);
+    console.error("Webhook Error:", err);
     res.status(500).send("Webhook Error");
   }
 };
-
 
 // const verifyOnlinePaymentController = async (req, res, next) => {
 //   try {
