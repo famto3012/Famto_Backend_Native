@@ -166,13 +166,13 @@ const registerAndLoginController = async (req, res, next) => {
       customer?._id,
       customer?.role,
       customer?.fullName ? customer?.fullName : "",
-      "60s"
+      "30d"
     );
     const token = generateToken(
       customer?.id,
       customer?.role,
       customer?.fullName ? customer?.fullName : "",
-      "10s"
+      "2hr"
     );
 
     customer.refreshToken = refreshToken;

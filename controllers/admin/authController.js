@@ -146,10 +146,10 @@ const refreshTokenController = async (req, res, next) => {
     }
 
     // Issue a new access token
-    const newToken = generateToken(user._id, role, name, "20s");
+    const newToken = generateToken(user._id, role, name, "2hr");
     let newRefreshToken;
     if (isExpired) {
-      newRefreshToken = generateToken(user._id, role, name, "30s");
+      newRefreshToken = generateToken(user._id, role, name, "30d");
       user.refreshToken = newRefreshToken;
       await user.save();
     }
