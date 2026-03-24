@@ -263,77 +263,106 @@ cron.schedule("* * * * *", async () => {
 
 cron.schedule("*/10 * * * * *", async () => {
   try {
-    console.log("⏱️ Processing Temporary Orders...");
 
-    const expiredOrders = await TemporaryOrder.find({
-      expiresAt: { $lte: new Date() },
-      isProcessed: { $ne: true },
+    const now = new Date();
+
+    // ✅ STEP 1: Fetch limited batch (prevents overload)
+    const tempOrders = await TemporaryOrder.find({
+      expiresAt: { $lte: now },
+      isProcessed: false,
+      isProcessing: { $ne: true },
+    })
+      .limit(20) // 🔥 batch size (tune based on traffic)
+      .lean();
+
+    if (!tempOrders.length) return;
+
+    const tempOrderIds = tempOrders.map((o) => o._id);
+
+    // ✅ STEP 2: LOCK orders (avoid duplicate processing)
+    await TemporaryOrder.updateMany(
+      { _id: { $in: tempOrderIds } },
+      { $set: { isProcessing: true } }
+    );
+
+    // ✅ STEP 3: Filter valid orders
+    const validOrders = tempOrders.filter((o) => {
+      if (o.paymentMode === "Online-payment") {
+        return o.paymentStatus === "Completed";
+      }
+      return true;
     });
 
-    if (!expiredOrders.length) return;
+    if (!validOrders.length) return;
 
-    for (const tempOrder of expiredOrders) {
-      try {
-        console.log("⚙️ Processing Order:", tempOrder._id);
+    // ✅ STEP 4: Avoid duplicate orders (bulk check)
+    const paymentIds = validOrders
+      .map((o) => o.paymentId)
+      .filter(Boolean);
 
-        // ✅ ONLINE PAYMENT CHECK
-        if (tempOrder.paymentMode === "Online-payment") {
-          if (tempOrder.paymentStatus !== "Completed") {
-            console.log("❌ Payment not completed, skipping:", tempOrder._id);
-            continue;
-          }
-        }
+    const existingOrders = await Order.find({
+      paymentId: { $in: paymentIds },
+    }).select("paymentId");
 
-        // ✅ PREVENT DUPLICATE ORDER
-        const existingOrder = await Order.findOne({
-          paymentId: tempOrder.paymentId,
-        });
+    const existingPaymentIds = new Set(
+      existingOrders.map((o) => o.paymentId)
+    );
 
-        if (existingOrder) {
-          console.log("⚠️ Order already exists, skipping");
-          tempOrder.isProcessed = true;
-          await tempOrder.save();
-          continue;
-        }
+    const ordersToCreate = validOrders.filter(
+      (o) => !existingPaymentIds.has(o.paymentId)
+    );
 
-        // ✅ CREATE FINAL ORDER
-        const newOrder = await Order.create({
-          customerId: tempOrder.customerId,
-          merchantId: tempOrder.merchantId,
-          pickups: tempOrder.pickups,
-          drops: tempOrder.drops,
-          billDetail: tempOrder.billDetail,
-          totalAmount: tempOrder.totalAmount,
-          deliveryMode: tempOrder.deliveryMode,
-          deliveryOption: tempOrder.deliveryOption,
-          paymentMode: tempOrder.paymentMode,
-          paymentStatus: tempOrder.paymentStatus,
-          paymentId: tempOrder.paymentId,
-          purchasedItems: tempOrder.purchasedItems,
-          status: "Completed",
+    // ✅ STEP 5: PREPARE BULK INSERT
+    const bulkOrders = ordersToCreate.map((o) => ({
+      insertOne: {
+        document: {
+          customerId: o.customerId,
+          merchantId: o.merchantId,
+          pickups: o.pickups,
+          drops: o.drops,
+          billDetail: o.billDetail,
+          totalAmount: o.totalAmount,
+          deliveryMode: o.deliveryMode,
+          deliveryOption: o.deliveryOption,
+          paymentMode: o.paymentMode,
+          paymentStatus: o.paymentStatus,
+          paymentId: o.paymentId,
+          purchasedItems: o.purchasedItems,
+          status: "Pending", // 🔥 better than Completed
           "orderDetailStepper.created": {
             by: "Customer",
-            userId: tempOrder.customerId,
+            userId: o.customerId,
             date: new Date(),
           },
-        });
+        },
+      },
+    }));
 
-        console.log("✅ Final Order Created:", newOrder._id);
-
-        // ✅ MARK PROCESSED
-        tempOrder.isProcessed = true;
-        await tempOrder.save();
-
-        // ✅ CLEANUP (IMPORTANT)
-        await Promise.all([
-          TemporaryOrder.deleteOne({ _id: tempOrder._id }),
-          CustomerCart.deleteOne({ customerId: tempOrder.customerId }),
-        ]);
-
-      } catch (err) {
-        console.error("❌ Error processing temp order:", err);
-      }
+    // ✅ STEP 6: BULK INSERT (FAST 🚀)
+    if (bulkOrders.length) {
+      await Order.bulkWrite(bulkOrders);
+      console.log(`✅ Created ${bulkOrders.length} orders`);
     }
+
+    // ✅ STEP 7: MARK ALL AS PROCESSED
+    await TemporaryOrder.updateMany(
+      { _id: { $in: tempOrderIds } },
+      {
+        $set: {
+          isProcessed: true,
+          isProcessing: false,
+        },
+      }
+    );
+
+    // ✅ STEP 8: CLEANUP (BULK DELETE)
+    await Promise.all([
+      TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } }),
+      CustomerCart.deleteMany({
+        customerId: { $in: tempOrders.map((o) => o.customerId) },
+      }),
+    ]);
+
   } catch (err) {
     console.error("🔥 ORDER CRON ERROR:", err);
   }
