@@ -842,11 +842,11 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
       displayAddress: order?.merchantId?.merchantDetail?.displayAddress || null,
-      deliveryMode: order?.cartDetail?.deliveryMode || null,
+      deliveryMode: order.deliveryMode || null,
       startDate: formatDate(order?.startDate),
       endDate: formatDate(order?.endDate),
       time: formatTime(order.time) || null,
-      numberOfDays: order?.cartDetail?.numOfDays || null,
+      numberOfDays: order?.numOfDays || null,
       grandTotal: order.billDetail.grandTotal || null,
       orderStatus: order?.status,
     }));
