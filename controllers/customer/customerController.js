@@ -825,7 +825,7 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
     const [universalOrders, pickAndCustomOrders] = await Promise.all([
       ScheduledOrder.find({ customerId }).populate(
         "merchantId",
-        "merchantDetail.merchantName merchantDetail.displayAddress"
+        "merchantDetail.merchantName merchantDetail.displayAddress cartDetail"
       ),
       scheduledPickAndCustom.find({ customerId }),
     ]);
@@ -842,7 +842,7 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
       orderId: order._id,
       merchantName: order?.merchantId?.merchantDetail?.merchantName || null,
       displayAddress: order?.merchantId?.merchantDetail?.displayAddress || null,
-      deliveryMode: order?.cartDetail.deliveryMode || null,
+      deliveryMode: order?.cartDetail?.deliveryMode || null,
       startDate: formatDate(order?.startDate),
       endDate: formatDate(order?.endDate),
       time: formatTime(order.time) || null,
