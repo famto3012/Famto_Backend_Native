@@ -707,7 +707,10 @@ const fetchAllMerchantsController = async (req, res, next) => {
         mongoose.Types.ObjectId.createFromHexString(businessCategory.trim());
     }
 
-    if (geofence && geofence.toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    } else if (geofence && geofence.toLowerCase() !== "all") {
       matchCriteria["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }
@@ -928,8 +931,15 @@ const rejectRegistrationController = async (req, res, next) => {
 // Get all merchants for dropdown
 const getAllMerchantsForDropDownController = async (req, res, next) => {
   try {
+    const query = { isBlocked: false };
+
+    // If manager, restrict to their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
+
     // Find merchants, sort by merchantName alphabetically and phoneNumber numerically
-    const merchantsFound = await Merchant.find({ isBlocked: false })
+    const merchantsFound = await Merchant.find(query)
       .select("merchantDetail")
       .sort({
         "merchantDetail.merchantName": 1,
@@ -2269,10 +2279,19 @@ const fetchMerchantsAccordingToBusinessCategory = async (req, res, next) => {
   try {
     const { businessCategoryId } = req.query;
 
-    const allMerchants = await Merchant.find({
+    const query = {
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       isApproved: "Approved",
-    }).sort({ "merchantDetail.merchantName": 1 });
+    };
+
+    // If manager, restrict to their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
+
+    const allMerchants = await Merchant.find(query).sort({
+      "merchantDetail.merchantName": 1,
+    });
 
     const formattedResponse = allMerchants?.map((merchant) => ({
       merchantId: merchant._id,

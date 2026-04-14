@@ -1511,6 +1511,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       {
         customerId: customer._id,
         merchantId: merchant._id,
+        businessCategoryId : businessCategoryId,
         items: cart.items,
         cartDetail: {
           ...req.body,

@@ -743,6 +743,9 @@ const calculateDeliveryChargesHelper = async ({
     if (isSuperMarketOrder) {
       oneTimeDeliveryCharge = 40;
     } else {
+
+      console.log('DATA',deliveryMode , businessCategoryId);
+
       customerPricing = await CustomerPricing.findOne({
         deliveryMode,
         businessCategoryId,

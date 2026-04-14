@@ -208,6 +208,17 @@ const fetchCommissionLogs = async (req, res, next) => {
 
     const filterCriteria = {};
 
+    // If manager, restrict to merchants in their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find({
+        "merchantDetail.geofenceId": { $in: req.geofenceId },
+      }).select("_id");
+      const geofenceMerchantIds = merchantsInGeofence.map((m) =>
+        m._id.toString()
+      );
+      filterCriteria.merchantId = { $in: geofenceMerchantIds };
+    }
+
     // Merchant name filter
     if (merchantName) {
       filterCriteria.merchantName = {
@@ -216,7 +227,7 @@ const fetchCommissionLogs = async (req, res, next) => {
       };
     }
 
-    // Merchant ID filter
+    // Merchant ID filter (only apply if no geofence restriction, or refine within it)
     if (merchantId && merchantId.toLowerCase() !== "all") {
       filterCriteria.merchantId = merchantId;
     }
@@ -225,7 +236,6 @@ const fetchCommissionLogs = async (req, res, next) => {
     if (date) {
       const formattedDay = moment.tz(date, "Asia/Kolkata");
 
-      // Start and end of the previous day in IST
       const startDate = formattedDay.startOf("day").toDate();
       const endDate = formattedDay.endOf("day").toDate();
 

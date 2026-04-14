@@ -311,9 +311,28 @@ const getTasksController = async (req, res, next) => {
       query.taskStatus = filter;
     }
 
+    // If manager, restrict tasks to orders belonging to their geofence's merchants
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const Merchant = require("../../../models/Merchant");
+      const Order = require("../../../models/Order");
+
+      const merchantsInGeofence = await Merchant.find({
+        "merchantDetail.geofenceId": { $in: req.geofenceId },
+      }).select("_id");
+
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+
+      const ordersInGeofence = await Order.find({
+        merchantId: { $in: merchantIds },
+      }).select("_id");
+
+      const orderIds = ordersInGeofence.map((o) => o._id);
+      query.orderId = { $in: orderIds };
+    }
+
     // Execute the query with optional population
     const tasks = await Task.find(query)
-      .populate("agentId") // Populate specific fields for efficiency
+      .populate("agentId")
       .populate("orderId");
 
     // Send the response
@@ -347,6 +366,11 @@ const getAgentsController = async (req, res, next) => {
       } else {
         query.status = "Inactive";
       }
+    }
+
+    // If manager, restrict agents to their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query.geofenceId = { $in: req.geofenceId };
     }
 
     // Fetch agents based on the constructed query

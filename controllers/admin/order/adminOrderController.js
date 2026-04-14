@@ -121,6 +121,15 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
     }
 
+    // If manager, restrict orders to their geofence's merchants only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find({
+        "merchantDetail.geofenceId": { $in: req.geofenceId },
+      }).select("_id");
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      filterCriteria.merchantId = { $in: merchantIds };
+    }
+
     const [orders, totalCount] = await Promise.all([
       await Order.find(filterCriteria)
         .populate({

@@ -229,8 +229,11 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
     // Base query
     let matchCriteria = { "customerDetails.isBlocked": false };
 
-    // If filter is not "all", filter by geofenceId
-    if (geofence && geofence.trim().toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria["customerDetails.geofenceId"] = { $in: req.geofenceId };
+    } else if (geofence && geofence.trim().toLowerCase() !== "all") {
+      // If filter is not "all", filter by geofenceId (admin use)
       matchCriteria["customerDetails.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }

@@ -651,7 +651,10 @@ const filterAgentsController = async (req, res, next) => {
       };
     }
 
-    if (geofence && geofence.trim().toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      filterCriteria.geofenceId = { $in: req.geofenceId };
+    } else if (geofence && geofence.trim().toLowerCase() !== "all") {
       filterCriteria.geofenceId = mongoose.Types.ObjectId.createFromHexString(
         geofence.trim()
       );

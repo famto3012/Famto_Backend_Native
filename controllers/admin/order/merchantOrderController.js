@@ -367,7 +367,19 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
     limit = parseInt(limit, 10);
     const skip = (page - 1) * limit;
 
-    const filterCriteria = { merchantId: req.userAuth };
+    let filterCriteria = {};
+
+    // If manager, filter by merchants in their geofences
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find({
+        "merchantDetail.geofenceId": { $in: req.geofenceId },
+      }).select("_id");
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      filterCriteria.merchantId = { $in: merchantIds };
+    } else {
+      // Merchant viewing their own orders
+      filterCriteria.merchantId = req.userAuth;
+    }
 
     if (status && status.trim().toLowerCase() !== "all") {
       filterCriteria.status = { $regex: status.trim(), $options: "i" };
