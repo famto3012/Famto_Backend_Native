@@ -303,13 +303,19 @@ const searchCustomerByNameForOrderController = async (req, res, next) => {
       });
     }
 
-    const searchResults = await Customer.find({
+    const searchFilter = {
       $or: [
         { fullName: { $regex: query.trim(), $options: "i" } },
         { phoneNumber: { $regex: query.trim(), $options: "i" } },
       ],
       "customerDetails.isBlocked": false,
-    })
+    };
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      searchFilter["customerDetails.geofenceId"] = { $in: req.geofenceId };
+    }
+
+    const searchResults = await Customer.find(searchFilter)
       .select(
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
       )

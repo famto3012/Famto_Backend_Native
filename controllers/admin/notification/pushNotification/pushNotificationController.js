@@ -336,6 +336,7 @@ const sendPushNotificationController = async (req, res, next) => {
         title: pushNotification.title,
         description: pushNotification.description,
         imageUrl: pushNotification.imageUrl,
+        geofenceId: pushNotification.geofenceId || null,
       });
     })().catch((err) => {
       errorLogger(

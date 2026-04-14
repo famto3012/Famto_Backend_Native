@@ -385,6 +385,7 @@ const createNotificationLog = async (notificationSettings, message) => {
       await AdminNotificationLogs.create({
         ...logData,
         orderId: message?.orderId,
+        merchantId: message?.merchantId || null,
       });
     }
   } catch (err) {

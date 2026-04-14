@@ -784,6 +784,10 @@ const searchMerchantForOrderController = async (req, res, next) => {
       "merchantDetail.merchantName": { $regex: query?.trim(), $options: "i" },
     };
 
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      searchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
+
     // Perform search with geofenceId populated
     const searchResults = await Merchant.find(searchCriteria)
       .select(

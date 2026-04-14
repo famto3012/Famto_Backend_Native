@@ -3,7 +3,6 @@ const appError = require("../../../../utils/appError");
 const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
 const MerchantNotificationLogs = require("../../../../models/MerchantNotificationLog");
 const Merchant = require("../../../../models/Merchant");
-const Order = require("../../../../models/Order");
 
 const getAdminNotificationLogController = async (req, res, next) => {
   try {
@@ -14,29 +13,23 @@ const getAdminNotificationLogController = async (req, res, next) => {
 
     let filterCriteria = {};
 
-    // If manager → show only notifications related to their geofence merchants
+    // If manager → show only notifications related to their geofence
     if (req.geofenceId && req.geofenceId.length > 0) {
-      // Step 1: Get merchants in manager's geofences
-      const merchantsInGeofence = await Merchant.find({
-        "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      // Get merchants in manager's geofences
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      // Convert to strings since merchantId is stored as String in the log
+      const merchantIds = merchantsInGeofence.map((m) => m._id.toString());
 
-      const merchantIds = merchantsInGeofence.map((m) => m._id);
-
-      // Step 2: Get order IDs for those merchants
-      const ordersInGeofence = await Order.find({
-        merchantId: { $in: merchantIds },
-      }).select("_id");
-
-      const orderIds = ordersInGeofence.map((o) => o._id.toString());
-
-      // Step 3: Show notifications where orderId overlaps with geofence orders
-      //         OR orderId is empty (push/alert notifications - broadcast to all managers)
+      // Show:
+      // 1. Order-related notifications → matched by merchantId (string)
+      // 2. Push notifications → matched by geofenceId
       filterCriteria = {
         $or: [
-          { orderId: { $elemMatch: { $in: orderIds } } },
-          { orderId: { $size: 0 } },
-          { orderId: { $exists: false } },
+          { merchantId: { $in: merchantIds } },
+          { geofenceId: { $in: req.geofenceId } },
         ],
       };
     }

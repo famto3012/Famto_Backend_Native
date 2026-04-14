@@ -8,6 +8,15 @@ const AdminNotificationLogSchema = new mongoose.Schema(
         ref: "Order",
       },
     ],
+    merchantId: {
+      type: String,
+      default: null,
+    },
+    geofenceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Geofence",
+      default: null,
+    },
     imageUrl: {
       type: String,
       default: null,
