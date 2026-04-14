@@ -79,7 +79,15 @@ const addAgentPricingController = async (req, res, next) => {
 
 const getAllAgentPricingController = async (req, res, next) => {
   try {
-    const pricing = await AgentPricing.find({}).populate("geofenceId", "name");
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const pricing = await AgentPricing.find(filter).populate(
+      "geofenceId",
+      "name"
+    );
 
     res.status(200).json({
       message: "All agent pricings",

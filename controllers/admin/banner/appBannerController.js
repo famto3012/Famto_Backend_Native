@@ -107,7 +107,15 @@ const editAppBannerController = async (req, res, next) => {
 
 const getAllAppBannersController = async (req, res, next) => {
   try {
-    const appBanners = await AppBanner.find({}).populate("geofenceId", "name");
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const appBanners = await AppBanner.find(filter).populate(
+      "geofenceId",
+      "name"
+    );
 
     res.status(200).json({
       success: true,

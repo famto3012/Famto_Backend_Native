@@ -65,7 +65,12 @@ const addMerchantSurgeController = async (req, res, next) => {
 
 const getAllMerchantSurgeController = async (req, res, next) => {
   try {
-    const allMerchantSurges = await MerchantSurge.find({}).populate(
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allMerchantSurges = await MerchantSurge.find(filter).populate(
       "geofenceId",
       "name"
     );

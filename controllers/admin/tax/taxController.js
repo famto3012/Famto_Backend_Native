@@ -75,7 +75,12 @@ const addTaxController = async (req, res, next) => {
 // Get all tax
 const getAllTaxController = async (req, res, next) => {
   try {
-    const allTaxes = await Tax.find({})
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofences: { $in: req.geofenceId } }
+        : {};
+
+    const allTaxes = await Tax.find(filter)
       .populate({
         path: "geofences",
         select: "name",

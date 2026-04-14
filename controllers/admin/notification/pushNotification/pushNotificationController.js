@@ -109,9 +109,14 @@ const searchPushNotificationController = async (req, res, next) => {
 };
 
 //TODO: Remove after panel V2
-const getAllPushNotificationController = async (req, res) => {
+const getAllPushNotificationController = async (req, res, next) => {
   try {
-    const pushNotification = await PushNotification.find();
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const pushNotification = await PushNotification.find(filter);
     res.status(200).json({
       success: "Push Notification found",
       data: pushNotification,
@@ -132,6 +137,10 @@ const fetchPushNotificationController = async (req, res, next) => {
 
     const query = {};
     query[type] = true;
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query.geofenceId = { $in: req.geofenceId };
+    }
 
     const pushNotifications = await PushNotification.find(query);
 
@@ -358,6 +367,11 @@ const filterPushNotificationController = async (req, res, next) => {
     if (searchQuery) {
       const searchTerm = searchQuery.trim();
       query.title = { $regex: searchTerm, $options: "i" };
+    }
+
+    // If manager → filter by their geofences
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query.geofenceId = { $in: req.geofenceId };
     }
 
     // Fetch push notifications based on the constructed query

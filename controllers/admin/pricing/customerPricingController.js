@@ -98,7 +98,12 @@ const addCustomerPricingController = async (req, res, next) => {
 
 const getAllCustomerPricingController = async (req, res, next) => {
   try {
-    const allCustomerPricings = await CustomerPricing.find({}).populate(
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allCustomerPricings = await CustomerPricing.find(filter).populate(
       "geofenceId",
       "name"
     );

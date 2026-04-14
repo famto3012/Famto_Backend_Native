@@ -301,18 +301,20 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.drops[0]?.deliveryAddress?.fullName,
+          order?.customerId?.fullName ||
+          order?.drops?.[0]?.deliveryAddress?.fullName ||
+          "-",
         deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
         deliveryTime: order?.time ? formatTime(order?.time) : "-",
         paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
+          order?.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
-            : order.paymentMode,
+            : order?.paymentMode,
         deliveryOption: order?.deliveryOption,
-        amount: order.billDetail.grandTotal,
+        amount: order?.billDetail?.grandTotal || 0,
       };
     });
 
