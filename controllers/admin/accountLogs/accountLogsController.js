@@ -11,6 +11,26 @@ const AccountLogs = require("../../../models/AccountLogs");
 const appError = require("../../../utils/appError");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 
+const getGeofenceUserIds = async (geofenceId) => {
+  const [customers, agents, merchants] = await Promise.all([
+    Customer.find(
+      { "customerDetails.geofenceId": { $in: geofenceId } },
+      "_id"
+    ),
+    Agent.find({ geofenceId: { $in: geofenceId } }, "_id"),
+    Merchant.find(
+      { "merchantDetail.geofenceId": { $in: geofenceId } },
+      "_id"
+    ),
+  ]);
+
+  return [
+    ...customers.map((c) => c._id.toString()),
+    ...agents.map((a) => a._id.toString()),
+    ...merchants.map((m) => m._id.toString()),
+  ];
+};
+
 const filterUserInAccountLogs = async (req, res, next) => {
   try {
     const { role, query, date } = req.query;
@@ -36,6 +56,11 @@ const filterUserInAccountLogs = async (req, res, next) => {
         $gte: startDate,
         $lte: endDate,
       };
+    }
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const userIds = await getGeofenceUserIds(req.geofenceId);
+      filterCriteria.userId = { $in: userIds };
     }
 
     const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 });
@@ -124,6 +149,11 @@ const downloadUserCSVInAccountLogs = async (req, res, next) => {
         $gte: formattedStartDate,
         $lte: formattedEndDate,
       };
+    }
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const userIds = await getGeofenceUserIds(req.geofenceId);
+      filterCriteria.userId = { $in: userIds };
     }
 
     const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 });

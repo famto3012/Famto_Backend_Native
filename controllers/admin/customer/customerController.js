@@ -841,6 +841,8 @@ const downloadCustomerCSVController = async (req, res, next) => {
     } else if (geofenceId && geofenceId.toLowerCase() !== "all") {
       filter["customerDetails.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filter["customerDetails.geofenceId"] = { $in: req.geofenceId };
     }
 
     if (name) {

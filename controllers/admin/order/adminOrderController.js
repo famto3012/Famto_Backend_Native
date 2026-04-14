@@ -226,6 +226,14 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
 
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
       filterCriteria.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria.merchantId = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     if (orderId && orderId !== "") {
@@ -779,6 +787,12 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     }
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
       filter.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filter.merchantId = { $in: merchantsInGeofence.map((m) => m._id) };
     }
 
     if (startDate && endDate) {

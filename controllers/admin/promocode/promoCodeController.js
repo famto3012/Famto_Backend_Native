@@ -143,7 +143,15 @@ const editPromoCodeController = async (req, res, next) => {
 
 const getAllPromoCodesController = async (req, res, next) => {
   try {
-    const promoCodes = await PromoCode.find({}).populate("geofenceId", "name");
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const promoCodes = await PromoCode.find(filter).populate(
+      "geofenceId",
+      "name"
+    );
 
     const formattedResponse = promoCodes?.map((promoCode) => ({
       promoCodeId: promoCode._id,

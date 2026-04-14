@@ -37,8 +37,7 @@ appBannerRoute.put(
 
 appBannerRoute.get(
   "/get-app-banner",
-  // isAuthenticated,
-  // isAdmin,
+  isAuthenticated,
   getAllAppBannersController
 );
 

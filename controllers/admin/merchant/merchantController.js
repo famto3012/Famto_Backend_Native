@@ -1786,9 +1786,12 @@ const downloadMerchantCSVController = async (req, res, next) => {
 
     if (serviceable && serviceable.toLowerCase() !== "all")
       filter.status = serviceable?.trim();
-    if (geofence && geofence.toLowerCase() !== "all")
+    if (geofence && geofence.toLowerCase() !== "all") {
       filter["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filter["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
     if (businessCategory && businessCategory.toLowerCase() !== "all")
       filter["merchantDetail.businessCategoryId"] =
         mongoose.Types.ObjectId.createFromHexString(businessCategory);
@@ -2018,6 +2021,14 @@ const getMerchantPayoutController = async (req, res, next) => {
     if (geofenceId && geofenceId.toLowerCase() !== "all") {
       filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria["merchantId"] = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
@@ -2200,6 +2211,14 @@ const downloadPayoutCSVController = async (req, res, next) => {
     if (geofenceId && geofenceId !== "all") {
       filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria["merchantId"] = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     // Set start and end date boundaries, adjusting for timezone offset
