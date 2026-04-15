@@ -16,8 +16,13 @@ const isAuthenticated = async (req, res, next) => {
   req.userRole = decodedUser.role;
   req.userName = decodedUser.name;
 
-  // If user is a Manager (not Admin), attach their geofence IDs to req
-  if (decodedUser.role !== "Admin") {
+  // Only fetch geofenceId for Manager roles (not Admin, Agent, Merchant, Customer)
+  if (
+    decodedUser.role !== "Admin" &&
+    decodedUser.role !== "Agent" &&
+    decodedUser.role !== "Merchant" &&
+    decodedUser.role !== "Customer"
+  ) {
     const manager = await Manager.findById(decodedUser.id).select("geofenceId");
     req.geofenceId = manager?.geofenceId || [];
   }
