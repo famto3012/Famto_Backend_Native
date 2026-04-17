@@ -104,7 +104,30 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     }
 
     if (merchantId && merchantId?.trim()?.toLowerCase() !== "all") {
+      // Specific merchant selected — use it directly
       filterCriteria.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      // No specific merchant — restrict to manager's geofence
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find(
+          { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+        Customer.find(
+          { "customerDetails.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+      ]);
+
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
+
+      // Merchant orders: filter by merchantId
+      // Pick & Drop / Custom orders: merchantId is null, filter by customerId
+      filterCriteria.$or = [
+        { merchantId: { $in: merchantIds } },
+        { merchantId: null, customerId: { $in: customerIds } },
+      ];
     }
 
     if (orderId && orderId !== "") {
@@ -119,15 +142,6 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
       endDate = end.endOf("day").toDate();
 
       filterCriteria.createdAt = { $gte: startDate, $lte: endDate };
-    }
-
-    // If manager, restrict orders to their geofence's merchants only
-    if (req.geofenceId && req.geofenceId.length > 0) {
-      const merchantsInGeofence = await Merchant.find({
-        "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
-      const merchantIds = merchantsInGeofence.map((m) => m._id);
-      filterCriteria.merchantId = { $in: merchantIds };
     }
 
     const [orders, totalCount] = await Promise.all([
@@ -788,11 +802,22 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
       filter.merchantId = merchantId;
     } else if (req.geofenceId && req.geofenceId.length > 0) {
-      const merchantsInGeofence = await Merchant.find(
-        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
-        "_id"
-      );
-      filter.merchantId = { $in: merchantsInGeofence.map((m) => m._id) };
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find(
+          { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+        Customer.find(
+          { "customerDetails.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+      ]);
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
+      filter.$or = [
+        { merchantId: { $in: merchantIds } },
+        { merchantId: null, customerId: { $in: customerIds } },
+      ];
     }
 
     if (startDate && endDate) {
