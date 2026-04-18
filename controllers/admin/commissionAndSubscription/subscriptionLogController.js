@@ -720,6 +720,86 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
       filterCriteria.userId = merchantId.trim();
     }
 
+    const now = new Date();
+    const isExpiredFilter =
+      status && status.toLowerCase() === "expired";
+    const isActiveFilter =
+      status && status.toLowerCase() === "active";
+
+    if (isExpiredFilter) {
+      // For expired filter: get only the LATEST subscription log per merchant
+      // A merchant qualifies only if their most recent subscription is expired
+
+      // Fetch all logs sorted newest-first
+      const allLogs = await SubscriptionLog.find(filterCriteria)
+        .sort({ endDate: -1 })
+        .lean();
+
+      // Build map: merchantId → latest log (first occurrence since sorted desc)
+      const latestLogPerMerchant = {};
+      for (const log of allLogs) {
+        if (!latestLogPerMerchant[log.userId]) {
+          latestLogPerMerchant[log.userId] = log;
+        }
+      }
+
+      // Keep only merchants whose latest log is expired
+      const expiredLogs = Object.values(latestLogPerMerchant).filter(
+        (log) => new Date(log.endDate) < now
+      );
+
+      // Sort by merchant name for consistent ordering (will resolve after merchant fetch)
+      const totalDocuments = expiredLogs.length;
+
+      // Apply pagination
+      const paginatedLogs = expiredLogs.slice(skip, skip + limit);
+
+      if (!paginatedLogs.length) {
+        return res.status(200).json({ data: [], total: totalDocuments });
+      }
+
+      const planIds = [...new Set(paginatedLogs.map((log) => log.planId))];
+      const userIds = [...new Set(paginatedLogs.map((log) => log.userId))];
+
+      const [plans, merchants] = await Promise.all([
+        MerchantSubscription.find({ _id: { $in: planIds } })
+          .select("_id name")
+          .lean(),
+        Merchant.find({ _id: { $in: userIds } })
+          .select("_id merchantDetail.merchantName merchantDetail.displayAddress")
+          .lean(),
+      ]);
+
+      const planMap = plans.reduce((acc, plan) => {
+        acc[plan._id] = plan.name;
+        return acc;
+      }, {});
+
+      const merchantMap = merchants.reduce((acc, merchant) => {
+        const merchantName = merchant.merchantDetail?.merchantName || "Unknown";
+        const displayAddress = merchant.merchantDetail?.displayAddress || "-";
+        acc[merchant._id] = `${merchantName} - ${displayAddress}`;
+        return acc;
+      }, {});
+
+      const formattedResponse = paginatedLogs.map((log) => ({
+        logId: log._id,
+        merchantName: merchantMap[log.userId] || null,
+        planName: planMap[log.planId] || null,
+        amount: log.amount || null,
+        paymentMode: log.paymentMode || null,
+        startDate: formatDate(log.startDate),
+        endDate: formatDate(log.endDate),
+        status: log.paymentStatus || null,
+      }));
+
+      return res
+        .status(200)
+        .json({ data: formattedResponse, total: totalDocuments });
+    }
+
+    // For "all" and "active" filters — original behaviour
+
     // Fetch all subscription logs
     const allLogs = await SubscriptionLog.find(filterCriteria)
       .sort({ startDate: -1 })
@@ -732,20 +812,13 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
       return acc;
     }, {});
 
-    // Filter merchants based on active/expired status
+    // Filter merchants based on active status
     let filteredMerchantIds = Object.keys(merchantLogsMap);
 
-    if (status && status.toLowerCase() !== "all") {
-      const now = new Date();
-      if (status.toLowerCase() === "active") {
-        filteredMerchantIds = filteredMerchantIds.filter((merchantId) =>
-          merchantLogsMap[merchantId].some((log) => log.endDate > now)
-        );
-      } else if (status.toLowerCase() === "expired") {
-        filteredMerchantIds = filteredMerchantIds.filter((merchantId) =>
-          merchantLogsMap[merchantId].every((log) => log.endDate < now)
-        );
-      }
+    if (isActiveFilter) {
+      filteredMerchantIds = filteredMerchantIds.filter((merchantId) =>
+        merchantLogsMap[merchantId].some((log) => new Date(log.endDate) > now)
+      );
     }
 
     // Apply pagination
@@ -796,6 +869,7 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
       amount: log.amount || null,
       paymentMode: log.paymentMode || null,
       startDate: formatDate(log.startDate),
+      endDate: formatDate(log.endDate),
       status: log.paymentStatus || null,
     }));
 

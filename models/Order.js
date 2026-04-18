@@ -300,6 +300,7 @@ const orderSchema = mongoose.Schema(
     orderRating: orderRatingSchema,
     commissionDetail: commissionDetailSchema,
     isReady: { type: Boolean, default: false },
+    delayAlertSent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

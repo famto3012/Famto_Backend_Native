@@ -695,6 +695,12 @@ const fetchAllMerchantsController = async (req, res, next) => {
             $options: "i",
           },
         },
+        {
+          _id: {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
       ];
     }
 

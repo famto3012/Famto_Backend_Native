@@ -2,6 +2,8 @@ const turf = require("@turf/turf");
 const moment = require("moment-timezone");
 
 const Agent = require("../../../models/Agent");
+const Customer = require("../../../models/Customer");
+const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const Task = require("../../../models/Task");
 const AutoAllocation = require("../../../models/AutoAllocation");
@@ -311,19 +313,27 @@ const getTasksController = async (req, res, next) => {
       query.taskStatus = filter;
     }
 
-    // If manager, restrict tasks to orders belonging to their geofence's merchants
+    // If manager, restrict tasks to orders belonging to their geofence's merchants/customers
     if (req.geofenceId && req.geofenceId.length > 0) {
-      const Merchant = require("../../../models/Merchant");
-      const Order = require("../../../models/Order");
 
-      const merchantsInGeofence = await Merchant.find({
-        "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find({
+          "merchantDetail.geofenceId": { $in: req.geofenceId },
+        }).select("_id"),
+        Customer.find({
+          "customerDetails.geofenceId": { $in: req.geofenceId },
+        }).select("_id"),
+      ]);
 
       const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
 
+      // Include merchant orders AND pick & drop / custom orders (merchantId: null, linked via customer)
       const ordersInGeofence = await Order.find({
-        merchantId: { $in: merchantIds },
+        $or: [
+          { merchantId: { $in: merchantIds } },
+          { merchantId: null, customerId: { $in: customerIds } },
+        ],
       }).select("_id");
 
       const orderIds = ordersInGeofence.map((o) => o._id);

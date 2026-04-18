@@ -37,6 +37,7 @@ const cron = require("node-cron");
 const {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
+  checkOrdersNearDelivery,
 } = require("../libs/automatic");
 const BatchOrder = require("../models/BatchOrder");
 
@@ -838,6 +839,35 @@ mongoose.connection.once("open", () => {
   // Backup check every 10 minutes (in case Mongo Change Streams miss anything)
   cron.schedule("* * * * *", async () => {
     await automaticStatusToggleForMerchant();
+  });
+});
+
+// **Check for orders approaching delivery time every minute**
+mongoose.connection.once("open", async () => {
+  // Ensure the notification setting exists (upsert)
+  await NotificationSetting.findOneAndUpdate(
+    { event: "order-delay-alert" },
+    {
+      $setOnInsert: {
+        event: "order-delay-alert",
+        title: "Order Delay Alert",
+        description: "An order is approaching its scheduled delivery time.",
+        admin: true,
+        manager: [],
+        merchant: false,
+        driver: false,
+        customer: false,
+        whatsapp: false,
+        sms: false,
+        email: false,
+        status: true,
+      },
+    },
+    { upsert: true }
+  );
+
+  cron.schedule("* * * * *", async () => {
+    await checkOrdersNearDelivery(io, userSocketMap);
   });
 });
 

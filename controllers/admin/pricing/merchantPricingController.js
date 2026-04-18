@@ -78,10 +78,9 @@ const getAllMerchantPricingController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const allMerchantPricings = await MerchantPricing.find(filter).populate(
-      "geofenceId",
-      "name"
-    );
+    const allMerchantPricings = await MerchantPricing.find(filter)
+      .populate("geofenceId", "name")
+      .sort({ ruleName: 1 });
 
     res.status(200).json({
       message: "All merchant pricings",

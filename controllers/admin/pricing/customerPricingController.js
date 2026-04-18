@@ -105,8 +105,8 @@ const getAllCustomerPricingController = async (req, res, next) => {
 
     const allCustomerPricings = await CustomerPricing.find(filter).populate(
       "geofenceId",
-      "name"
-    );
+      "name",
+    ).sort({ ruleName : 1});
 
     res.status(200).json({
       message: "All customer pricings",
