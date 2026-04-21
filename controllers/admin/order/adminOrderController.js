@@ -112,11 +112,11 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
         Merchant.find(
           { "merchantDetail.geofenceId": { $in: req.geofenceId } },
           "_id"
-        ),
+        ).lean(),
         Customer.find(
           { "customerDetails.geofenceId": { $in: req.geofenceId } },
           "_id"
-        ),
+        ).lean(),
       ]);
 
       const merchantIds = merchantsInGeofence.map((m) => m._id);
@@ -145,7 +145,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     }
 
     const [orders, totalCount] = await Promise.all([
-      await Order.find(filterCriteria)
+      Order.find(filterCriteria)
         .populate({
           path: "merchantId",
           select: "merchantDetail.merchantName merchantDetail.deliveryTime",
@@ -154,7 +154,8 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
         .populate({ path: "agentId", select: "fullName" })
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       Order.countDocuments(filterCriteria),
     ]);
 
@@ -244,7 +245,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
       const merchantsInGeofence = await Merchant.find(
         { "merchantDetail.geofenceId": { $in: req.geofenceId } },
         "_id"
-      );
+      ).lean();
       filterCriteria.merchantId = {
         $in: merchantsInGeofence.map((m) => m._id),
       };
@@ -632,7 +633,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           select: "name",
         },
       })
-      .exec();
+      .lean();
 
     if (!orderFound) {
       return next(appError("Order not found", 404));
@@ -836,7 +837,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       .populate("customerId", "fullName")
       .populate("agentId", "fullName phoneNumber")
       .sort({ createdAt: -1 })
-      .exec();
+      .lean();
 
     let formattedResponse = [];
 
@@ -1423,7 +1424,8 @@ const downloadOrderBillController = async (req, res, next) => {
 
     const orderFound = await Order.findById(orderId)
       .populate("merchantId", "merchantDetail.merchantName")
-      .populate("customerId", "fullName phoneNumber");
+      .populate("customerId", "fullName phoneNumber")
+      .lean();
 
     if (!orderFound || !orderFound.billDetail) {
       return next(appError("Order not found or no bill details available"));
@@ -2443,7 +2445,7 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
           path: "merchantId",
           select: "merchantDetail",
         })
-        .exec();
+        .lean();
     } else {
       orderFound = await scheduledPickAndCustom
         .findOne({
@@ -2453,7 +2455,7 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
           path: "customerId",
           select: "fullName phoneNumber email",
         })
-        .exec();
+        .lean();
     }
 
     let isScheduledOrder = true;
@@ -2889,11 +2891,11 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     let totalOrderDistance = 0;
 
     const [agentPricing, agentSurge] = await Promise.all([
-      AgentPricing.findById(agentFound?.workStructure?.salaryStructureId),
+      AgentPricing.findById(agentFound?.workStructure?.salaryStructureId).lean(),
       AgentSurge.findOne({
         geofenceId: agentFound.geofenceId,
         status: true,
-      }),
+      }).lean(),
     ]);
 
     if (!agentPricing) throw new Error("Agent pricing not found");
@@ -2990,9 +2992,9 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       taskStatus: "Assigned",
       agentId: agentFound._id,
       createdAt: { $gte: startOfDay, $lte: endOfDay },
-    }).sort({
-      createdAt: 1,
-    });
+    })
+      .sort({ createdAt: 1 })
+      .lean();
 
     agentTasks.length > 1
       ? (agentFound.status = "Busy")
@@ -3078,8 +3080,8 @@ const markOrderAsCancelled = async (req, res, next) => {
     const [order, task, notification, notificationCount] = await Promise.all([
       Order.findById(orderId),
       Task.findOne({ orderId }),
-      AgentNotificationLogs.findOne({ orderId, status: "Accepted" }),
-      AgentNotificationLogs.find({ status: "Accepted" }),
+      AgentNotificationLogs.findOne({ orderId, status: "Accepted" }).lean(),
+      AgentNotificationLogs.find({ status: "Accepted" }).lean(),
     ]);
 
     if (!order) return next(appError("Order not found", 404));

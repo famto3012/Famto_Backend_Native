@@ -54,10 +54,10 @@ const addProductController = async (req, res, next) => {
   } = req.body;
 
   try {
-    const existingProduct = await Product.findOne({ productName, categoryId });
-    const category = await Category.findById(categoryId).populate(
-      "businessCategoryId"
-    );
+    const existingProduct = await Product.findOne({ productName, categoryId }).lean();
+    const category = await Category.findById(categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -67,7 +67,7 @@ const addProductController = async (req, res, next) => {
     }
 
     // Find the highest order number
-    const lastCategory = await Product.findOne().sort({ order: -1 });
+    const lastCategory = await Product.findOne().sort({ order: -1 }).lean();
     const newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
     // Determine the price based on user role
@@ -125,7 +125,7 @@ const getAllProductsByMerchant = async (req, res) => {
   try {
     const { merchantId } = req.params;
 
-    const categories = await Category.find({ merchantId }).select("_id");
+    const categories = await Category.find({ merchantId }).select("_id").lean();
 
     const categoryIds = categories.map((category) => category._id);
 
@@ -133,7 +133,8 @@ const getAllProductsByMerchant = async (req, res) => {
       categoryId: { $in: categoryIds },
     })
       .select("productName")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -148,7 +149,7 @@ const getProductController = async (req, res, next) => {
   try {
     const { productId } = req.params;
 
-    const productFound = await Product.findById(productId);
+    const productFound = await Product.findById(productId).lean();
 
     if (!productFound) return next(appError("Product not found", 404));
 
@@ -191,10 +192,10 @@ const editProductController = async (req, res, next) => {
 
   try {
     const { productId } = req.params;
-    const productToUpdate = await Product.findById(productId);
-    const category = await Category.findById(
-      productToUpdate.categoryId
-    ).populate("businessCategoryId");
+    const productToUpdate = await Product.findById(productId).lean();
+    const category = await Category.findById(productToUpdate.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -266,7 +267,7 @@ const editProductController = async (req, res, next) => {
 
 const deleteProductController = async (req, res, next) => {
   try {
-    const productToDelete = await Product.findById(req.params.productId);
+    const productToDelete = await Product.findById(req.params.productId).lean();
 
     if (!productToDelete) {
       return next(appError("Product not found", 404));
@@ -303,7 +304,7 @@ const searchProductController = async (req, res, next) => {
         { productName: { $regex: searchTerm, $options: "i" } },
         { searchTags: { $regex: searchTerm, $options: "i" } },
       ],
-    });
+    }).lean();
 
     res.status(200).json({
       message: "Searched product results",
@@ -322,7 +323,8 @@ const getProductByCategoryController = async (req, res, next) => {
       categoryId: categoryId,
     })
       .select("productName inventory")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       message: "Products By category",
@@ -429,9 +431,9 @@ const addVariantToProductController = async (req, res, next) => {
     if (!product) {
       return next(appError("Product not found", 404));
     }
-    const category = await Category.findById(product.categoryId).populate(
-      "businessCategoryId"
-    );
+    const category = await Category.findById(product.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -465,8 +467,8 @@ const addVariantToProductController = async (req, res, next) => {
     product.variants.push(newVariant);
 
     await Promise.all([
-      await product.save(),
-      await ActivityLog.create({
+      product.save(),
+      ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
         description: `Variants added to product (${product.productName}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
@@ -489,9 +491,9 @@ const editVariantController = async (req, res, next) => {
 
     const product = await Product.findById(productId);
     if (!product) return next(appError("Product not found", 404));
-    const category = await Category.findById(product.categoryId).populate(
-      "businessCategoryId"
-    );
+    const category = await Category.findById(product.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -925,7 +927,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
 
           const businessCategory = await BusinessCategory.findOne({
             title: businessCategoryName,
-          });
+          }).lean();
 
           let increasedPercentage = 0; // Default 5% if no business category is found
           if (businessCategory) {
@@ -1041,7 +1043,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
             // Find or create the business category using businessCategoryName
             const businessCategoryFound = await BusinessCategory.findOne({
               title: categoryData.businessCategoryName,
-            });
+            }).lean();
 
             if (!businessCategoryFound) {
               // console.log(
@@ -1061,7 +1063,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
             const existingCategory = await Category.findOne({
               merchantId,
               categoryName: categoryData.categoryName,
-            });
+            }).lean();
             // console.log("existingCategory", existingCategory._id)
 
             let newCategory;
@@ -1081,7 +1083,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
               //   `Creating new category: ${categoryData.categoryName}`
               // );
               // Get the last category order
-              let lastCategory = await Category.findOne().sort({ order: -1 });
+              let lastCategory = await Category.findOne().sort({ order: -1 }).lean();
               let newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
               categoryData.order = newOrder++;
@@ -1106,7 +1108,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
                 productName: productData.productName,
                 categoryId: productData.categoryId,
                 sku: productData.sku,
-              });
+              }).lean();
               // console.log("Existing product:", existingProduct);
 
               if (existingProduct) {
@@ -1119,7 +1121,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
               } else {
                 // console.log(`Creating new product: ${productData.productName}`);
                 // Get the last product order
-                let lastProduct = await Product.findOne().sort({ order: -1 });
+                let lastProduct = await Product.findOne().sort({ order: -1 }).lean();
                 let newOrder = lastProduct ? lastProduct.order + 1 : 1;
 
                 productData.order = newOrder++;
@@ -1135,7 +1137,8 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
           // Fetch all categories after adding, ordered by the 'order' field in ascending order
           const allCategories = await Category.find({ merchantId })
             .select("categoryName status")
-            .sort({ order: 1 });
+            .sort({ order: 1 })
+            .lean();
 
           await ActivityLog.create({
             userId: req.userAuth,

@@ -35,7 +35,8 @@ const getAllCustomersController = async (req, res, next) => {
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails averageRating"
       )
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     // Count total documents
     const totalDocuments = await Customer.countDocuments({
@@ -368,10 +369,12 @@ const getSingleCustomerController = async (req, res, next) => {
           select: "merchantDetail",
         })
         .sort({ createdAt: -1 })
-        .limit(50),
+        .limit(50)
+        .lean(),
       CustomerWalletTransaction.find({ customerId })
         .sort({ date: -1 })
-        .limit(50),
+        .limit(50)
+        .lean(),
     ]);
 
     const formattedCustomerOrders = orders?.map((order) => {
@@ -485,7 +488,9 @@ const editCustomerDetailsController = async (req, res, next) => {
   } = req.body;
 
   try {
-    const customer = await Customer.findById(req.params.customerId);
+    const customer = await Customer.findById(req.params.customerId)
+      .select("customerDetails.customerImageURL")
+      .lean();
 
     if (!customer) {
       return next(appError("Customer not found", 404));
@@ -947,29 +952,28 @@ const getCustomersOfMerchant = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
       ...new Set(ordersOfMerchant.map((order) => order.customerId.toString())),
     ];
 
-    // Fetch customer names for the unique customer IDs
-    const customers = await Customer.find({
-      _id: { $in: uniqueCustomerIds },
-    })
-      .select(
-        "fullName phoneNumber email lastPlatformUsed createdAt averageRating"
-      )
-      .skip(skip)
-      .limit(limit);
+    const customerQuery = { _id: { $in: uniqueCustomerIds } };
 
-    // Count total documents
-    const totalDocuments = await Customer.countDocuments({
-      _id: { $in: uniqueCustomerIds },
-    });
+    // Fetch customer names for the unique customer IDs (parallel)
+    const [customers, totalDocuments] = await Promise.all([
+      Customer.find(customerQuery)
+        .select(
+          "fullName phoneNumber email lastPlatformUsed createdAt averageRating"
+        )
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Customer.countDocuments(customerQuery),
+    ]);
 
     const formattedResponse = customers?.map((customer) => {
       return {
@@ -1020,32 +1024,31 @@ const searchCustomerByNameForMerchantController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Find orders placed with this merchant to get customer IDs
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs from the orders
     const uniqueCustomerIds = [
       ...new Set(ordersOfMerchant.map((order) => order.customerId.toString())),
     ];
 
-    // Find customers by name who belong to this merchant
-    const searchResults = await Customer.find({
+    const searchCriteria = {
       _id: { $in: uniqueCustomerIds },
       fullName: { $regex: query.trim(), $options: "i" },
-    })
-      .select(
-        "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
-      )
-      .skip(skip)
-      .limit(limit)
-      .lean({ virtuals: true });
+    };
 
-    // Count total documents for pagination (only for this merchant)
-    const totalDocuments = await Customer.countDocuments({
-      _id: { $in: uniqueCustomerIds },
-      fullName: { $regex: query.trim(), $options: "i" },
-    });
+    // Find customers by name who belong to this merchant (parallel count)
+    const [searchResults, totalDocuments] = await Promise.all([
+      Customer.find(searchCriteria)
+        .select(
+          "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
+        )
+        .skip(skip)
+        .limit(limit)
+        .lean({ virtuals: true }),
+      Customer.countDocuments(searchCriteria),
+    ]);
 
     // Format customers with necessary fields
     const formattedCustomers = searchResults.map((customer) => {
@@ -1108,9 +1111,9 @@ const filterCustomerByGeofenceForMerchantController = async (
     const merchantId = req.userAuth;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
@@ -1184,9 +1187,9 @@ const fetchCustomersOfMerchantController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
@@ -1259,9 +1262,9 @@ const searchCustomerByNameForMerchantToOrderController = async (
     }
 
     // Find orders placed with this merchant to get customer IDs
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs from the orders
     const uniqueCustomerIds = [

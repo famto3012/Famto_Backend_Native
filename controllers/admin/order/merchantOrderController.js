@@ -373,7 +373,9 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
     if (req.geofenceId && req.geofenceId.length > 0) {
       const merchantsInGeofence = await Merchant.find({
         "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      })
+        .select("_id")
+        .lean();
       const merchantIds = merchantsInGeofence.map((m) => m._id);
       filterCriteria.merchantId = { $in: merchantIds };
     } else {
@@ -1264,7 +1266,7 @@ const getOrderDetailController = async (req, res, next) => {
           select: "name",
         },
       })
-      .exec();
+      .lean();
 
     if (!orderFound) {
       return next(appError("Order not found", 404));
@@ -1440,7 +1442,7 @@ const getScheduledOrderDetailController = async (req, res, next) => {
           path: "merchantId",
           select: "merchantDetail",
         })
-        .exec();
+        .lean();
     } else {
       orderFound = await scheduledPickAndCustom
         .findOne({
@@ -1451,7 +1453,7 @@ const getScheduledOrderDetailController = async (req, res, next) => {
           path: "customerId",
           select: "fullName phoneNumber email",
         })
-        .exec();
+        .lean();
     }
 
     if (!orderFound) {
@@ -1791,7 +1793,8 @@ const getScheduledOrderByIdForMerchant = async (req, res) => {
       .populate({
         path: "merchantId",
         select: "merchantDetail",
-      });
+      })
+      .lean();
 
     // Check if the scheduled order exists
     if (!scheduledOrder) {
@@ -1846,7 +1849,7 @@ const downloadOrdersCSVByMerchantController = async (req, res, next) => {
       .populate("customerId", "fullName")
       .populate("agentId", "fullName")
       .sort({ createdAt: -1 })
-      .exec();
+      .lean();
 
     let formattedResponse = [];
 
@@ -1998,7 +2001,7 @@ const downloadCSVByMerchantController = async (req, res, next) => {
       .populate("customerId", "fullName")
       .populate("agentId", "fullName")
       .sort({ createdAt: -1 })
-      .exec();
+      .lean();
 
     let formattedResponse = [];
 
@@ -2414,7 +2417,8 @@ const getAvailableMerchantBusinessCategoriesController = async (
 
     const merchantFound = await Merchant.findById(merchantId)
       .select("merchantDetail.businessCategoryId")
-      .populate("merchantDetail.businessCategoryId", "title");
+      .populate("merchantDetail.businessCategoryId", "title")
+      .lean();
 
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
@@ -2464,7 +2468,7 @@ const numberOfScheduledOrderNotViewedController = async (req, res, next) => {
     const scheduledOrder = await ScheduledOrder.find({
       merchantId,
       isViewed: false,
-    });
+    }).lean();
 
     if (!scheduledOrder) {
       return next(appError("Scheduled order not found", 404));
@@ -2483,7 +2487,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
   try {
     const merchantId = req.merchantId;
 
-    const merchant = await Merchant.findById(merchantId);
+    const merchant = await Merchant.findById(merchantId).lean();
 
     if (!merchant) {
       return next(appError("Merchant not found", 404));
@@ -2505,22 +2509,22 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
       CustomerPricing.findOne({
         geofenceId: geofence._id,
         status: true,
-      }),
+      }).lean(),
       CustomerSurge.findOne({
         geofenceId: geofence._id,
         status: true,
-      }),
+      }).lean(),
       Tax.findOne({
         geofences: { $in: geofence._id },
         status: true,
-      }),
+      }).lean(),
     ]);
 
     if (!customerPricing) {
       return next(appError("Customer pricing not found", 404));
     }
 
-    let customer = await Customer.findOne({ phoneNumber });
+    let customer = await Customer.findOne({ phoneNumber }).lean();
 
     if (!customer) {
       await Customer.create({

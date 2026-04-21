@@ -24,5 +24,8 @@ const accountLogsSchema = new mongoose.Schema(
   }
 );
 
+accountLogsSchema.index({ userId: 1, createdAt: -1 });
+accountLogsSchema.index({ createdAt: -1 });
+
 const AccountLogs = mongoose.model("AccountLogs", accountLogsSchema);
 module.exports = AccountLogs;

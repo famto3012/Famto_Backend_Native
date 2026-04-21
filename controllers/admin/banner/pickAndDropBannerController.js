@@ -49,7 +49,7 @@ const editPickAndDropBannerController = async (req, res, next) => {
     const { id } = req.params;
     const { title, description } = req.body;
 
-    const banner = await PickAndDropBanner.findOne({ _id: id });
+    const banner = await PickAndDropBanner.findOne({ _id: id }).lean();
 
     let imageUrl = banner.imageUrl;
     if (req.file) {
@@ -84,7 +84,7 @@ const editPickAndDropBannerController = async (req, res, next) => {
 
 const getAllPickAndDropBannersController = async (req, res, next) => {
   try {
-    const banners = await PickAndDropBanner.find();
+    const banners = await PickAndDropBanner.find().lean();
 
     if (!banners) {
       return next(appError("No pick and drop banners found", 404));
@@ -102,7 +102,7 @@ const getAllPickAndDropBannersController = async (req, res, next) => {
 const getPickAndDropBannerByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const banners = await PickAndDropBanner.findOne({ _id: id });
+    const banners = await PickAndDropBanner.findOne({ _id: id }).lean();
 
     if (!banners) {
       return next(appError("No pick and drop banners found", 404));
@@ -122,7 +122,7 @@ const deletePickAndDropBannerController = async (req, res, next) => {
     const { id } = req.params;
 
     // Find the banner by ID and delete it
-    const deletedBanner = await PickAndDropBanner.findOne({ _id: id });
+    const deletedBanner = await PickAndDropBanner.findOne({ _id: id }).lean();
 
     // Check if the banner was found and deleted
     if (!deletedBanner) {

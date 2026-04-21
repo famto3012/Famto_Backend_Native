@@ -427,5 +427,12 @@ merchantDetailSchema.virtual("averageRating").get(function () {
 //   next();
 // });
 
+merchantSchema.index({ "merchantDetail.geofenceId": 1 });
+merchantSchema.index({ "merchantDetail.businessCategoryId": 1 });
+merchantSchema.index({ "merchantDetail.merchantName": 1 });
+merchantSchema.index({ isApproved: 1, isBlocked: 1 });
+merchantSchema.index({ status: 1 });
+merchantSchema.index({ phoneNumber: 1 });
+
 const Merchant = mongoose.model("Merchant", merchantSchema);
 module.exports = Merchant;

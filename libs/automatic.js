@@ -21,7 +21,7 @@ const automaticStatusOfflineForAgent = async () => {
   );
 
   // Fetch all free and approved agents at once
-  const agents = await Agent.find({ isApproved: "Approved", status: "Free" });
+  const agents = await Agent.find({ isApproved: "Approved", status: "Free" }).lean();
 
   if (!agents.length) return;
 
@@ -123,9 +123,9 @@ const automaticStatusToggleForMerchant = async () => {
     isApproved: "Approved",
     isBlocked: false,
     statusManualToggle: false,
-  }).select(
-    "_id merchantDetail.availability.type merchantDetail.availability.specificDays"
-  );
+  })
+    .select("_id merchantDetail.availability.type merchantDetail.availability.specificDays")
+    .lean();
 
   let merchantsToOpen = [];
   let merchantsToClose = [];

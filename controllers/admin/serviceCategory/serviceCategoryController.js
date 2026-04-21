@@ -22,9 +22,9 @@ const addServiceCategoryController = async (req, res, next) => {
   try {
     const { title, geofenceId } = req.body;
 
-    const lastCategory = await ServiceCategory.findOne().sort({
-      order: -1,
-    });
+    const lastCategory = await ServiceCategory.findOne()
+      .sort({ order: -1 })
+      .lean();
 
     const newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
@@ -106,7 +106,7 @@ const editServiceCategoryController = async (req, res, next) => {
 
 const getAllServiceCategoriesController = async (req, res, next) => {
   try {
-    const services = await ServiceCategory.find({}).sort({ order: 1 });
+    const services = await ServiceCategory.find({}).sort({ order: 1 }).lean();
 
     const formattedResponse = services?.map((service) => ({
       serviceId: service._id,
@@ -124,7 +124,7 @@ const getServiceCategoryByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const service = await ServiceCategory.findById(id);
+    const service = await ServiceCategory.findById(id).lean();
 
     if (!service) return next(appError("Service category not found", 404));
 
@@ -163,7 +163,7 @@ const deleteServiceCategoryController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const service = await ServiceCategory.findById(id);
+    const service = await ServiceCategory.findById(id).lean();
 
     if (!service) return next(appError("Service not found", 404));
 

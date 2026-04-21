@@ -112,10 +112,9 @@ const getAllBannersController = async (req, res, next) => {
   try {
     const { merchantId } = req.params;
 
-    const banners = await Banner.find({ merchantId }).populate(
-      "geofenceId",
-      "name"
-    );
+    const banners = await Banner.find({ merchantId })
+      .populate("geofenceId", "name")
+      .lean();
 
     const formattedResponse = banners?.map((banner) => {
       return {
@@ -140,7 +139,7 @@ const getAllBannersController = async (req, res, next) => {
 const getBannerByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const banner = await Banner.findById(id);
+    const banner = await Banner.findById(id).lean();
 
     if (!banner) return next(appError("No banner found", 404));
 
@@ -158,7 +157,7 @@ const deleteBannerController = async (req, res, next) => {
     const { id } = req.params;
 
     // Find the banner by ID and delete it
-    const deletedBanner = await Banner.findById(id);
+    const deletedBanner = await Banner.findById(id).lean();
 
     // Check if the banner was found and deleted
     if (!deletedBanner) {

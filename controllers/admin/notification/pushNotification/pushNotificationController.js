@@ -116,7 +116,7 @@ const getAllPushNotificationController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const pushNotification = await PushNotification.find(filter);
+    const pushNotification = await PushNotification.find(filter).lean();
     res.status(200).json({
       success: "Push Notification found",
       data: pushNotification,
@@ -266,50 +266,49 @@ const sendPushNotificationController = async (req, res, next) => {
     (async () => {
       let userIds = [];
 
-      if (pushNotification.customer) {
-        const customers = await Customer.find({
-          "customerDetails.geofenceId": pushNotification.geofenceId,
-        });
-        for (const customer of customers) {
-          await CustomerNotificationLogs.create({
-            customerId: customer._id,
-            title: pushNotification.title,
-            description: pushNotification.description,
-            imageUrl: pushNotification.imageUrl,
-          });
-        }
-        userIds = userIds.concat(customers.map((customer) => customer._id));
-      }
+      const logPayload = {
+        title: pushNotification.title,
+        description: pushNotification.description,
+        imageUrl: pushNotification.imageUrl,
+      };
 
-      if (pushNotification.merchant) {
-        const merchants = await Merchant.find({
-          "merchantDetail.geofenceId": pushNotification.geofenceId,
-        });
-        for (const merchant of merchants) {
-          await MerchantNotificationLogs.create({
-            merchantId: merchant._id,
-            title: pushNotification.title,
-            description: pushNotification.description,
-            imageUrl: pushNotification.imageUrl,
-          });
-        }
-        userIds = userIds.concat(merchants.map((merchant) => merchant._id));
-      }
+      // Fetch all relevant users in parallel
+      const [customers, merchants, drivers] = await Promise.all([
+        pushNotification.customer
+          ? Customer.find({ "customerDetails.geofenceId": pushNotification.geofenceId }, "_id").lean()
+          : Promise.resolve([]),
+        pushNotification.merchant
+          ? Merchant.find({ "merchantDetail.geofenceId": pushNotification.geofenceId }, "_id").lean()
+          : Promise.resolve([]),
+        pushNotification.driver
+          ? Agent.find({ geofenceId: pushNotification.geofenceId }, "_id").lean()
+          : Promise.resolve([]),
+      ]);
 
-      if (pushNotification.driver) {
-        const drivers = await Agent.find({
-          geofenceId: pushNotification.geofenceId,
-        });
-        for (const driver of drivers) {
-          await AgentAnnouncementLogs.create({
-            agentId: driver._id,
-            title: pushNotification.title,
-            description: pushNotification.description,
-            imageUrl: pushNotification.imageUrl,
-          });
-        }
-        userIds = userIds.concat(drivers.map((driver) => driver._id));
-      }
+      // Bulk-insert all notification logs in parallel
+      await Promise.all([
+        customers.length
+          ? CustomerNotificationLogs.insertMany(
+              customers.map((c) => ({ ...logPayload, customerId: c._id }))
+            )
+          : Promise.resolve(),
+        merchants.length
+          ? MerchantNotificationLogs.insertMany(
+              merchants.map((m) => ({ ...logPayload, merchantId: m._id }))
+            )
+          : Promise.resolve(),
+        drivers.length
+          ? AgentAnnouncementLogs.insertMany(
+              drivers.map((d) => ({ ...logPayload, agentId: d._id }))
+            )
+          : Promise.resolve(),
+      ]);
+
+      userIds = [
+        ...customers.map((c) => c._id),
+        ...merchants.map((m) => m._id),
+        ...drivers.map((d) => d._id),
+      ];
 
       const data = {
         socket: {
@@ -376,7 +375,7 @@ const filterPushNotificationController = async (req, res, next) => {
     }
 
     // Fetch push notifications based on the constructed query
-    const pushNotifications = await PushNotification.find(query);
+    const pushNotifications = await PushNotification.find(query).lean();
 
     res.status(200).json({
       success: "Push Notifications fetched successfully",

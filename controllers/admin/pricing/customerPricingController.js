@@ -252,15 +252,11 @@ const editCustomerPricingController = async (req, res, next) => {
 
 const deleteCustomerPricingController = async (req, res, next) => {
   try {
-    const customerPricingFound = await CustomerPricing.findById(
-      req.params.customerPricingId
-    );
+    const deleted = await CustomerPricing.findByIdAndDelete(req.params.customerPricingId);
 
-    if (!customerPricingFound) {
+    if (!deleted) {
       return next(appError("Customer pricing not found", 404));
     }
-
-    await CustomerPricing.findByIdAndDelete(req.params.customerPricingId);
 
     res.status(200).json({ message: "Rule deleted successfully" });
   } catch (err) {

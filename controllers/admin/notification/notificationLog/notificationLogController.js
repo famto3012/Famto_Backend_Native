@@ -19,7 +19,7 @@ const getAdminNotificationLogController = async (req, res, next) => {
       const merchantsInGeofence = await Merchant.find(
         { "merchantDetail.geofenceId": { $in: req.geofenceId } },
         "_id"
-      );
+      ).lean();
       // Convert to strings since merchantId is stored as String in the log
       const merchantIds = merchantsInGeofence.map((m) => m._id.toString());
 
@@ -39,7 +39,8 @@ const getAdminNotificationLogController = async (req, res, next) => {
       AdminNotificationLogs.find(filterCriteria)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       AdminNotificationLogs.countDocuments(filterCriteria),
     ]);
 
@@ -67,18 +68,15 @@ const getMerchantNotificationLogController = async (req, res, next) => {
     const skip = (page - 1) * limit;
     const merchantId = req.userAuth;
 
-    // Find documents with pagination
-    const merchantNotificationLog = await MerchantNotificationLogs.find({
-      merchantId,
-    })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Get the total count of documents
-    const totalDocuments = await MerchantNotificationLogs.countDocuments({
-      merchantId,
-    });
+    // Find documents with pagination — run both in parallel
+    const [merchantNotificationLog, totalDocuments] = await Promise.all([
+      MerchantNotificationLogs.find({ merchantId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      MerchantNotificationLogs.countDocuments({ merchantId }),
+    ]);
 
     // Calculate total pages
     const totalPages = Math.ceil(totalDocuments / limit);

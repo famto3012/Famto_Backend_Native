@@ -101,7 +101,7 @@ const deleteDiscountController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const discount = await MerchantDiscount.findById(id);
+    const discount = await MerchantDiscount.findById(id).lean();
     if (!discount) {
       return res.status(404).json({ error: "Discount not found" });
     }
@@ -120,10 +120,9 @@ const getAllDiscountController = async (req, res, next) => {
   try {
     const merchantId = req.userAuth;
 
-    const discounts = await MerchantDiscount.find({ merchantId }).populate(
-      "geofenceId",
-      "name"
-    );
+    const discounts = await MerchantDiscount.find({ merchantId })
+      .populate("geofenceId", "name")
+      .lean();
 
     res.status(200).json({
       success: "Discounts retrieved successfully",
@@ -210,7 +209,7 @@ const getMerchantDiscountByIdController = async (req, res, next) => {
     const { id } = req.params; // Extract the ID from the request parameters
 
     // Find the MerchantDiscount by ID
-    const merchantDiscount = await MerchantDiscount.findById(id);
+    const merchantDiscount = await MerchantDiscount.findById(id).lean();
 
     // Check if the MerchantDiscount exists
     if (!merchantDiscount) {
@@ -323,7 +322,9 @@ const getAllDiscountAdminController = async (req, res, next) => {
 
     const merchantDiscounts = await MerchantDiscount.find({
       merchantId: id,
-    }).populate("geofenceId", "name");
+    })
+      .populate("geofenceId", "name")
+      .lean();
 
     res.status(200).json({
       success: "Discounts retrieved successfully",

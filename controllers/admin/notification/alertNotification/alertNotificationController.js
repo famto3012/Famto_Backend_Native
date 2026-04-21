@@ -161,7 +161,7 @@ const deleteAlertNotificationController = async (req, res, next) => {
     // Find the alert notification by ID and delete it
     const deletedAlertNotification = await AlertNotification.findOne({
       _id: id,
-    });
+    }).lean();
 
     if (!deletedAlertNotification) {
       return res.status(404).json({ error: "Alert Notification not found" });
@@ -182,7 +182,7 @@ const deleteAlertNotificationController = async (req, res, next) => {
 const getAllAlertNotificationsController = async (req, res, next) => {
   try {
     // Fetch all alert notifications from the database
-    const alertNotifications = await AlertNotification.find();
+    const alertNotifications = await AlertNotification.find().lean();
 
     res.status(200).json({
       message: "Alert notifications retrieved successfully!",
@@ -216,7 +216,7 @@ const getAlertNotificationsByUserTypeController = async (req, res, next) => {
     }
 
     // Fetch alert notifications by user type from the database
-    const alertNotifications = await AlertNotification.find(query);
+    const alertNotifications = await AlertNotification.find(query).lean();
     res.status(200).json({
       message: "Alert notifications retrieved successfully!",
       alertNotifications,
@@ -238,7 +238,7 @@ const searchAlertNotificationsByTitleController = async (req, res, next) => {
     // Fetch alert notifications by title from the database
     const alertNotifications = await AlertNotification.find({
       title: { $regex: title, $options: "i" }, // Case-insensitive search
-    });
+    }).lean();
 
     res.status(200).json({
       message: "Alert notifications retrieved successfully!",
@@ -286,7 +286,8 @@ const getAlertNotificationsController = async (req, res, next) => {
     const alertNotifications = await AlertNotification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     const totalDocuments = await AlertNotification.countDocuments();
     const totalPages = Math.ceil(totalDocuments / limit);

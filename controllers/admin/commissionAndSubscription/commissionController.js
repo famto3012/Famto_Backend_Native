@@ -57,7 +57,7 @@ const addAndEditCommissionController = async (req, res, next) => {
 
         const subscriptionLogFound = await SubscriptionLog.findById(
           lastData.modelId
-        );
+        ).lean();
 
         if (subscriptionLogFound.endDate > new Date()) {
           return next(appError("Current subscription have not ended yet", 400));
@@ -98,7 +98,7 @@ const addAndEditCommissionController = async (req, res, next) => {
 // TODO: Remove this controller after Panel V2
 const getAllCommissionLogController = async (req, res, next) => {
   try {
-    const commissionLogs = await CommissionLogs.find({});
+    const commissionLogs = await CommissionLogs.find({}).lean();
 
     res.status(200).json({
       status: "success",
@@ -125,7 +125,7 @@ const getCommissionLogsByMerchantName = async (req, res) => {
 
     const commissionLogs = await CommissionLogs.find({
       merchantName: new RegExp(`^${merchantName}`, "i"),
-    });
+    }).lean();
 
     res.status(200).json({
       status: "success",
@@ -160,14 +160,14 @@ const getCommissionLogsByCreatedDate = async (req, res, next) => {
           $gte: startDate,
           $lte: endDate,
         },
-      });
+      }).lean();
     } else {
       commissionLogs = await CommissionLogs.find({
         createdAt: {
           $gte: startDate,
           $lte: endDate,
         },
-      });
+      }).lean();
     }
 
     res.status(200).json({
@@ -186,7 +186,7 @@ const getCommissionLogsByMerchantId = async (req, res) => {
 
     if (!merchantId) return next(appError("Merchant id is required", 400));
 
-    const commissionLogs = await CommissionLogs.find({ merchantId });
+    const commissionLogs = await CommissionLogs.find({ merchantId }).lean();
 
     res.status(200).json({
       status: "success",
@@ -212,7 +212,9 @@ const fetchCommissionLogs = async (req, res, next) => {
     if (req.geofenceId && req.geofenceId.length > 0) {
       const merchantsInGeofence = await Merchant.find({
         "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      })
+        .select("_id")
+        .lean();
       const geofenceMerchantIds = merchantsInGeofence.map((m) =>
         m._id.toString()
       );
@@ -249,7 +251,8 @@ const fetchCommissionLogs = async (req, res, next) => {
     const commissionLogs = await CommissionLogs.find(filterCriteria)
       .sort({ createdAt: -1 })
       .skip((pageNumber - 1) * pageSize)
-      .limit(pageSize);
+      .limit(pageSize)
+      .lean();
 
     // Count total logs for pagination metadata
     const totalLogs = await CommissionLogs.countDocuments(filterCriteria);
@@ -322,7 +325,7 @@ const getCommissionDetailOfMerchant = async (req, res, next) => {
   try {
     const merchantId = req.userAuth;
 
-    const commissionFound = await Commission.findOne({ merchantId });
+    const commissionFound = await Commission.findOne({ merchantId }).lean();
 
     res.status(200).json({
       message: "Commission of merchant",

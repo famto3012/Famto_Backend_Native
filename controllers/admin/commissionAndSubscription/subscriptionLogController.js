@@ -1076,12 +1076,12 @@ const fetchAllCustomerSubscriptionLogs = async (req, res, next) => {
     }
 
     const [logs, totalDocuments] = await Promise.all([
-      await SubscriptionLog.find(filterCriteria)
+      SubscriptionLog.find(filterCriteria)
         .skip(skip)
         .limit(limit)
         .sort({ startDate: -1 })
         .lean(),
-      await SubscriptionLog.countDocuments(filterCriteria),
+      SubscriptionLog.countDocuments(filterCriteria),
     ]);
 
     if (!logs.length) {

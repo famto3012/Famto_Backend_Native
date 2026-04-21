@@ -112,10 +112,7 @@ const getAllAppBannersController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const appBanners = await AppBanner.find(filter).populate(
-      "geofenceId",
-      "name"
-    );
+    const appBanners = await AppBanner.find(filter).populate("geofenceId", "name").lean();
 
     res.status(200).json({
       success: true,
@@ -129,7 +126,7 @@ const getAllAppBannersController = async (req, res, next) => {
 const getAppBannerByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const appBanners = await AppBanner.findById(id);
+    const appBanners = await AppBanner.findById(id).lean();
 
     if (!appBanners) {
       return next(appError("No app banners found", 404));
@@ -148,16 +145,13 @@ const deleteAppBannerController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Find the banner by ID and delete it
-    const deletedAppBanner = await AppBanner.findOne({ _id: id });
+    const deletedAppBanner = await AppBanner.findByIdAndDelete(id).lean();
 
-    // Check if the banner was found and deleted
     if (!deletedAppBanner) {
       return next(appError("App Banner not found", 404));
-    } else {
-      await deleteFromFirebase(deletedAppBanner.imageUrl);
-      await AppBanner.findByIdAndDelete(id);
     }
+
+    await deleteFromFirebase(deletedAppBanner.imageUrl);
 
     res.status(200).json({
       success: true,

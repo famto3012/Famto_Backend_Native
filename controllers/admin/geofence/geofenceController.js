@@ -118,11 +118,11 @@ const getAllGeofences = async (req, res, next) => {
         ? { _id: { $in: req.geofenceId } }
         : {};
 
-    const geofences = await Geofence.find(filter);
+    const geofences = await Geofence.find(filter).lean();
 
     res.status(200).json({
       success: true,
-      geofences: geofences,
+      geofences,
     });
   } catch (err) {
     next(appError(err.message));
@@ -131,7 +131,7 @@ const getAllGeofences = async (req, res, next) => {
 
 const getGeofenceById = async (req, res, next) => {
   try {
-    const geofence = await Geofence.findById(req.params.id);
+    const geofence = await Geofence.findById(req.params.id).lean();
 
     if (!geofence) {
       return res.status(404).json({ error: "Geofence not found" });
@@ -139,7 +139,7 @@ const getGeofenceById = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      geofence: geofence,
+      geofence,
     });
   } catch (err) {
     next(appError(err.message));

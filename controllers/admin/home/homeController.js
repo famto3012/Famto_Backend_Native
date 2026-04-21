@@ -18,7 +18,7 @@ const getHomeScreenRealTimeData = async (req, res, next) => {
       const merchantsInGeofence = await Merchant.find({
         "merchantDetail.geofenceId": { $in: geofenceIds },
         isBlocked: false,
-      }).select("_id status merchantDetail");
+      }).select("_id status merchantDetail").lean();
 
       const merchantIds = merchantsInGeofence.map((m) => m._id);
 
@@ -95,7 +95,7 @@ const getHomeScreenRealTimeData = async (req, res, next) => {
     }
 
     // Admin → return pre-computed global data
-    const realTimeData = await HomeScreenRealTimeData.findOne();
+    const realTimeData = await HomeScreenRealTimeData.findOne().lean();
 
     if (!realTimeData) {
       return res.status(404).json({ message: "No real-time data found" });
@@ -166,7 +166,7 @@ const getRevenueDataByDateRange = async (req, res, next) => {
     if (req.geofenceId && req.geofenceId.length > 0) {
       const merchantsInGeofence = await Merchant.find({
         "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      }).select("_id").lean();
 
       const merchantIds = merchantsInGeofence.map((m) => m._id);
 

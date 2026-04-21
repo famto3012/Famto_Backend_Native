@@ -35,6 +35,10 @@ const AdminNotificationLogSchema = new mongoose.Schema(
   }
 );
 
+AdminNotificationLogSchema.index({ createdAt: -1 });
+AdminNotificationLogSchema.index({ merchantId: 1, createdAt: -1 });
+AdminNotificationLogSchema.index({ geofenceId: 1, createdAt: -1 });
+
 const AdminNotificationLogs = mongoose.model(
   "AdminNotificationLogs",
   AdminNotificationLogSchema

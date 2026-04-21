@@ -259,5 +259,10 @@ customerDetailSchema.virtual("averageRating").get(function () {
   return total / this.ratingsByAgents.length;
 });
 
+customerSchema.index({ "customerDetails.geofenceId": 1 });
+customerSchema.index({ phoneNumber: 1 });
+customerSchema.index({ fullName: 1 });
+customerSchema.index({ isBlocked: 1 });
+
 const Customer = mongoose.model("Customer", customerSchema);
 module.exports = Customer;

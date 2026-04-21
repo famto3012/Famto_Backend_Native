@@ -75,9 +75,7 @@ const getAllBusinessCategoryController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const allBusinessCategories = await BusinessCategory.find(filter).sort({
-      order: 1,
-    });
+    const allBusinessCategories = await BusinessCategory.find(filter).sort({ order: 1 }).lean();
 
     const formattedResponse = allBusinessCategories?.map((category) => {
       return {
@@ -104,7 +102,7 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
   try {
     const businessCategory = await BusinessCategory.findById(
       req.params.businessCategoryId
-    );
+    ).lean();
 
     if (!businessCategory) {
       return next(appError("Business category not found", 404));
@@ -244,11 +242,14 @@ const updateBusinessCategoryOrderController = async (req, res, next) => {
   const { categories } = req.body;
 
   try {
-    for (const category of categories) {
-      await BusinessCategory.findByIdAndUpdate(category.id, {
-        order: category.order,
-      });
-    }
+    await BusinessCategory.bulkWrite(
+      categories.map((category) => ({
+        updateOne: {
+          filter: { _id: category.id },
+          update: { $set: { order: category.order } },
+        },
+      }))
+    );
 
     res.status(200).json({
       message: "Business category order updated successfully",
