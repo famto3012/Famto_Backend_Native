@@ -229,8 +229,11 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
     // Base query
     let matchCriteria = { "customerDetails.isBlocked": false };
 
-    // If filter is not "all", filter by geofenceId
-    if (geofence && geofence.trim().toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria["customerDetails.geofenceId"] = { $in: req.geofenceId };
+    } else if (geofence && geofence.trim().toLowerCase() !== "all") {
+      // If filter is not "all", filter by geofenceId (admin use)
       matchCriteria["customerDetails.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }
@@ -300,13 +303,19 @@ const searchCustomerByNameForOrderController = async (req, res, next) => {
       });
     }
 
-    const searchResults = await Customer.find({
+    const searchFilter = {
       $or: [
         { fullName: { $regex: query.trim(), $options: "i" } },
         { phoneNumber: { $regex: query.trim(), $options: "i" } },
       ],
       "customerDetails.isBlocked": false,
-    })
+    };
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      searchFilter["customerDetails.geofenceId"] = { $in: req.geofenceId };
+    }
+
+    const searchResults = await Customer.find(searchFilter)
       .select(
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
       )
@@ -838,6 +847,8 @@ const downloadCustomerCSVController = async (req, res, next) => {
     } else if (geofenceId && geofenceId.toLowerCase() !== "all") {
       filter["customerDetails.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filter["customerDetails.geofenceId"] = { $in: req.geofenceId };
     }
 
     if (name) {

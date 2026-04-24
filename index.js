@@ -3,6 +3,9 @@ const cors = require("cors");
 const cron = require("node-cron");
 const morgan = require("morgan");
 
+const TemporaryOrder = require("./models/TemporaryOrder");
+const Order = require("./models/Order");
+const CustomerCart = require("./models/CustomerCart");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
@@ -90,6 +93,12 @@ const { deleteOldLogs, deleteOldTasks } = require("./libs/automatic.js");
 const {
   distanceCache,
 } = require("./controllers/customer/universalOrderController.js");
+
+
+app.use(
+  "/api/v1/customers/razorpay-webhook",
+  express.raw({ type: "application/json" })
+);
 
 //middlewares
 app.use(express.json({ limit: "10mb" }));
@@ -209,7 +218,7 @@ cron.schedule("30 18 * * *", async () => {
     removeExpiredProductDiscount(),
     removeExpiredPromoCode(),
     deleteOldLogs(),
-    deleteOldTasks()
+    deleteOldTasks(),
   ]);
 });
 
@@ -249,6 +258,113 @@ cron.schedule("* * * * *", async () => {
     for (const scheduledOrder of pickAndDropScheduledOrders) {
       await createOrdersFromScheduledPickAndDrop(scheduledOrder);
     }
+  }
+});
+
+cron.schedule("*/10 * * * * *", async () => {
+  try {
+
+    const now = new Date();
+
+    // ✅ STEP 1: Fetch limited batch (prevents overload)
+    const tempOrders = await TemporaryOrder.find({
+      expiresAt: { $lte: now },
+      isProcessed: false,
+      isProcessing: { $ne: true },
+    })
+      .limit(20) // 🔥 batch size (tune based on traffic)
+      .lean();
+
+    if (!tempOrders.length) return;
+
+    const tempOrderIds = tempOrders.map((o) => o._id);
+
+    // ✅ STEP 2: LOCK orders (avoid duplicate processing)
+    await TemporaryOrder.updateMany(
+      { _id: { $in: tempOrderIds } },
+      { $set: { isProcessing: true } }
+    );
+
+    // ✅ STEP 3: Filter valid orders
+    const validOrders = tempOrders.filter((o) => {
+      if (o.paymentMode === "Online-payment") {
+        return o.paymentStatus === "Completed";
+      }
+      return true;
+    });
+
+    if (!validOrders.length) return;
+
+    // ✅ STEP 4: Avoid duplicate orders (bulk check)
+    const paymentIds = validOrders
+      .map((o) => o.paymentId)
+      .filter(Boolean);
+
+    const existingOrders = await Order.find({
+      paymentId: { $in: paymentIds },
+    }).select("paymentId");
+
+    const existingPaymentIds = new Set(
+      existingOrders.map((o) => o.paymentId)
+    );
+
+    const ordersToCreate = validOrders.filter(
+      (o) => !existingPaymentIds.has(o.paymentId)
+    );
+
+    // ✅ STEP 5: PREPARE BULK INSERT
+    const bulkOrders = ordersToCreate.map((o) => ({
+      insertOne: {
+        document: {
+          customerId: o.customerId,
+          merchantId: o.merchantId,
+          pickups: o.pickups,
+          drops: o.drops,
+          billDetail: o.billDetail,
+          totalAmount: o.totalAmount,
+          deliveryMode: o.deliveryMode,
+          deliveryOption: o.deliveryOption,
+          paymentMode: o.paymentMode,
+          paymentStatus: o.paymentStatus,
+          paymentId: o.paymentId,
+          purchasedItems: o.purchasedItems,
+          status: "Pending", // 🔥 better than Completed
+          "orderDetailStepper.created": {
+            by: "Customer",
+            userId: o.customerId,
+            date: new Date(),
+          },
+        },
+      },
+    }));
+
+    // ✅ STEP 6: BULK INSERT (FAST 🚀)
+    if (bulkOrders.length) {
+      await Order.bulkWrite(bulkOrders);
+      console.log(`✅ Created ${bulkOrders.length} orders`);
+    }
+
+    // ✅ STEP 7: MARK ALL AS PROCESSED
+    await TemporaryOrder.updateMany(
+      { _id: { $in: tempOrderIds } },
+      {
+        $set: {
+          isProcessed: true,
+          isProcessing: false,
+        },
+      }
+    );
+
+    // ✅ STEP 8: CLEANUP (BULK DELETE)
+    await Promise.all([
+      TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } }),
+      CustomerCart.deleteMany({
+        customerId: { $in: tempOrders.map((o) => o.customerId) },
+      }),
+    ]);
+
+  } catch (err) {
+    console.error("🔥 ORDER CRON ERROR:", err);
   }
 });
 

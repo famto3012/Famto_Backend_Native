@@ -385,6 +385,7 @@ const createNotificationLog = async (notificationSettings, message) => {
       await AdminNotificationLogs.create({
         ...logData,
         orderId: message?.orderId,
+        merchantId: message?.merchantId || null,
       });
     }
   } catch (err) {
@@ -543,8 +544,10 @@ const getRealTimeDataCountMerchant = async (data) => {
         },
       };
 
-      const { socketId } = userSocketMap[data.id];
-      io.to(socketId).emit("realTimeDataCount", realTimeData);
+      const entry = userSocketMap[data.id];
+      if (entry?.socketId) {
+        io.to(entry.socketId).emit("realTimeDataCount", realTimeData);
+      }
     } else {
       [pending, ongoing, completed, cancelled] = await Promise.all([
         Order.countDocuments({
@@ -619,13 +622,16 @@ const getRealTimeDataCountMerchant = async (data) => {
         },
       };
 
-      //console.log("Emitting real-time data:", realTimeData);
-      const admins = await Admin.find();
-      admins.map((admin) => {
-        const { socketId } = userSocketMap[admin._id];
-        io.to(socketId).emit("realTimeDataCount", realTimeData);
+      const [admins, managers] = await Promise.all([
+        Admin.find(),
+        Manager.find(),
+      ]);
+      [...admins, ...managers].forEach((user) => {
+        const entry = userSocketMap[user._id];
+        if (entry?.socketId) {
+          io.to(entry.socketId).emit("realTimeDataCount", realTimeData);
+        }
       });
-      // Emit data globally for admin
     }
   } catch (err) {
     console.error("Error updating real-time data:", err);

@@ -651,7 +651,10 @@ const filterAgentsController = async (req, res, next) => {
       };
     }
 
-    if (geofence && geofence.trim().toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      filterCriteria.geofenceId = { $in: req.geofenceId };
+    } else if (geofence && geofence.trim().toLowerCase() !== "all") {
       filterCriteria.geofenceId = mongoose.Types.ObjectId.createFromHexString(
         geofence.trim()
       );
@@ -833,6 +836,8 @@ const filterAgentPayoutController = async (req, res, next) => {
     if (geofence && geofence.toLowerCase() !== "all") {
       filterCriteria.geofenceId =
         mongoose.Types.ObjectId.createFromHexString(geofence);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filterCriteria.geofenceId = { $in: req.geofenceId };
     }
 
     if (name) {
@@ -1037,7 +1042,11 @@ const downloadAgentCSVController = async (req, res, next) => {
 
     // Build query object based on filters
     const filter = { isApproved: "Approved" };
-    if (geofence && geofence !== "All") filter.geofenceId = geofence?.trim();
+    if (geofence && geofence !== "All") {
+      filter.geofenceId = geofence?.trim();
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filter.geofenceId = { $in: req.geofenceId };
+    }
     if (status && status !== "All") filter.status = status?.trim();
     if (name) {
       filter.$or = [{ fullName: { $regex: name.trim(), $options: "i" } }];
@@ -1149,6 +1158,8 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
 
     if (geofence && geofence.toLowerCase() !== "all") {
       filterCriteria.geofenceId = mongoose.Types.ObjectId(geofence);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filterCriteria.geofenceId = { $in: req.geofenceId };
     }
 
     if (name) {

@@ -70,7 +70,12 @@ const addBusinessCategoryController = async (req, res, next) => {
 
 const getAllBusinessCategoryController = async (req, res, next) => {
   try {
-    const allBusinessCategories = await BusinessCategory.find({}).sort({
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allBusinessCategories = await BusinessCategory.find(filter).sort({
       order: 1,
     });
 

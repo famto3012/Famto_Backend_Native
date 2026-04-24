@@ -20,6 +20,9 @@ const addCustomerPricingController = async (req, res, next) => {
     vehicleType,
     businessCategoryId,
     merchants,
+    returnBaseFare,
+    returnBaseDistance,
+    fareAfterBaseReturnDistance,
   } = req.body;
 
   const errors = validationResult(req);
@@ -79,6 +82,9 @@ const addCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId: businessCategoryId || null,
       merchants,
+      returnBaseFare: returnBaseFare || null,
+      returnBaseDistance: returnBaseDistance || null,
+      fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
     });
 
     if (!newRule) {
@@ -98,7 +104,12 @@ const addCustomerPricingController = async (req, res, next) => {
 
 const getAllCustomerPricingController = async (req, res, next) => {
   try {
-    const allCustomerPricings = await CustomerPricing.find({}).populate(
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allCustomerPricings = await CustomerPricing.find(filter).populate(
       "geofenceId",
       "name"
     );
@@ -168,6 +179,9 @@ const editCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId,
       merchants,
+      returnBaseFare,
+      returnBaseDistance,
+      fareAfterBaseReturnDistance,
     } = req.body;
 
     const normalizedRuleName = ruleName
@@ -223,6 +237,9 @@ const editCustomerPricingController = async (req, res, next) => {
         vehicleType,
         businessCategoryId: businessCategoryId || null,
         merchants,
+        returnBaseFare: returnBaseFare || null,
+        returnBaseDistance: returnBaseDistance || null,
+        fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
       },
       { new: true }
     );

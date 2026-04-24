@@ -109,6 +109,21 @@ const customerPricingValidations = [
   body("waitingFare").optional().trim(),
   body("waitingTime").optional().trim(),
   body("geofenceId").trim().notEmpty().withMessage("Geofence is required"),
+  body("returnBaseFare")
+    .optional()
+    .trim()
+    .isNumeric()
+    .withMessage("Return base fare must be a number"),
+  body("returnBaseDistance")
+    .optional()
+    .trim()
+    .isNumeric()
+    .withMessage("Return base distance must be a number"),
+  body("fareAfterBaseReturnDistance")
+    .optional()
+    .trim()
+    .isNumeric()
+    .withMessage("Fare after base return distance must be a number"),
 ];
 
 const agentPricingValidations = [

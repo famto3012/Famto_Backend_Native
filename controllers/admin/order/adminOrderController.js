@@ -104,7 +104,30 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
     }
 
     if (merchantId && merchantId?.trim()?.toLowerCase() !== "all") {
+      // Specific merchant selected — use it directly
       filterCriteria.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      // No specific merchant — restrict to manager's geofence
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find(
+          { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+        Customer.find(
+          { "customerDetails.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+      ]);
+
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
+
+      // Merchant orders: filter by merchantId
+      // Pick & Drop / Custom orders: merchantId is null, filter by customerId
+      filterCriteria.$or = [
+        { merchantId: { $in: merchantIds } },
+        { merchantId: null, customerId: { $in: customerIds } },
+      ];
     }
 
     if (orderId && orderId !== "") {
@@ -217,6 +240,14 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
 
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
       filterCriteria.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria.merchantId = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     if (orderId && orderId !== "") {
@@ -292,18 +323,20 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.drops[0]?.deliveryAddress?.fullName,
+          order?.customerId?.fullName ||
+          order?.drops?.[0]?.deliveryAddress?.fullName ||
+          "-",
         deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
         deliveryTime: order?.time ? formatTime(order?.time) : "-",
         paymentMethod:
-          order.paymentMode === "Cash-on-delivery"
+          order?.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
-            : order.paymentMode,
+            : order?.paymentMode,
         deliveryOption: order?.deliveryOption,
-        amount: order.billDetail.grandTotal,
+        amount: order?.billDetail?.grandTotal || 0,
       };
     });
 
@@ -768,6 +801,23 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     }
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
       filter.merchantId = merchantId;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find(
+          { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+        Customer.find(
+          { "customerDetails.geofenceId": { $in: req.geofenceId } },
+          "_id"
+        ),
+      ]);
+      const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
+      filter.$or = [
+        { merchantId: { $in: merchantIds } },
+        { merchantId: null, customerId: { $in: customerIds } },
+      ];
     }
 
     if (startDate && endDate) {
@@ -1030,6 +1080,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       addedTip,
       subTotal,
       surgePrice,
+      waitingFare
     ] = [
       billDetail.discountedDeliveryCharge ||
       billDetail.originalDeliveryCharge ||
@@ -1041,6 +1092,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       billDetail.addedTip || 0,
       billDetail.subTotal || 0,
       billDetail.surgePrice || 0,
+      billDetail.waitingFare || 0,
     ].map((value) => Number(value));
 
     if (
@@ -1053,6 +1105,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
         addedTip,
         subTotal,
         surgePrice,
+        waitingFare,
       ].some(isNaN)
     ) {
       return next(
@@ -1306,7 +1359,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
                     <!-- Subtotal -->
                     <tr>
                         <td colspan="3">Waiting Charge</td>
-                        <td>${surgePrice?.toFixed(2) || 0}</td>
+                        <td>${waitingFare?.toFixed(2) || 0}</td>
                     </tr>
                     ${discountedAmount
         ? `
@@ -1705,7 +1758,9 @@ const downloadOrderBillController = async (req, res, next) => {
 
     // Generate PDF using Puppeteer
     const browser = await puppeteer.launch({
-      headless: true,
+      executablePath:
+        "/home/famto/.cache/puppeteer/chrome/linux-146.0.7680.153/chrome-linux64/chrome",
+      headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
@@ -2003,6 +2058,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       deliveryChargeForScheduledOrder,
       taxAmount,
       itemTotal,
+      returnCharge,
     } = await calculateDeliveryChargeHelperForAdmin(
       deliveryMode,
       distanceInKM,
@@ -2033,7 +2089,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       flatDiscount || 0,
       merchantDiscountAmount || 0,
       taxAmount || 0,
-      addedTip || 0
+      addedTip || 0,
+      returnCharge || 0
     );
 
     console.log("Bill detail:", billDetail);

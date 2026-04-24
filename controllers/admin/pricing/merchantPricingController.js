@@ -73,7 +73,12 @@ const addMerchantPricingController = async (req, res, next) => {
 
 const getAllMerchantPricingController = async (req, res, next) => {
   try {
-    const allMerchantPricings = await MerchantPricing.find({}).populate(
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allMerchantPricings = await MerchantPricing.find(filter).populate(
       "geofenceId",
       "name"
     );

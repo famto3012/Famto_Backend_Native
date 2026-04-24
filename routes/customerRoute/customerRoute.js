@@ -84,6 +84,7 @@ const {
   getFiltersFromBusinessCategory,
   getMerchantTodayAvailability,
   getImageDisplayType,
+  razorpayWebhookController,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -303,6 +304,11 @@ customerRoute.post(
   "/verify-payment",
   isAuthenticated,
   verifyOnlinePaymentController
+);
+
+customerRoute.post(
+  "/razorpay-webhook",
+  razorpayWebhookController
 );
 
 customerRoute.post(

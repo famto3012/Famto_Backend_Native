@@ -145,6 +145,8 @@ const fetchAllManagersController = async (req, res, next) => {
       matchCriteria.geofenceId = mongoose.Types.ObjectId.createFromHexString(
         geofence?.trim()
       );
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria.geofenceId = { $in: req.geofenceId };
     }
 
     if (name) {

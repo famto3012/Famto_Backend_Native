@@ -65,7 +65,12 @@ const addCustomerSurgeController = async (req, res, next) => {
 
 const getAllCustomerSurgeController = async (req, res, next) => {
   try {
-    const allCustomerSurges = await CustomerSurge.find({}).populate(
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { geofenceId: { $in: req.geofenceId } }
+        : {};
+
+    const allCustomerSurges = await CustomerSurge.find(filter).populate(
       "geofenceId",
       "name"
     );

@@ -1,5 +1,6 @@
 const Referral = require("../../../models/Referral");
 const ReferralCode = require("../../../models/ReferralCode");
+const Customer = require("../../../models/Customer");
 
 const appError = require("../../../utils/appError");
 
@@ -164,7 +165,19 @@ const getReferralController = async (req, res, next) => {
 
 const getReferralDetailController = async (req, res, next) => {
   try {
-    const referrals = await ReferralCode.find({});
+    const filter = {};
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const customersInGeofence = await Customer.find(
+        { "customerDetails.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filter.customerId = {
+        $in: customersInGeofence.map((c) => c._id.toString()),
+      };
+    }
+
+    const referrals = await ReferralCode.find(filter);
 
     const formattedResponse = referrals?.map((referral) => ({
       customerId: referral.customerId,

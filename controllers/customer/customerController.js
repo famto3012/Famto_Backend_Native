@@ -825,7 +825,7 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
     const [universalOrders, pickAndCustomOrders] = await Promise.all([
       ScheduledOrder.find({ customerId }).populate(
         "merchantId",
-        "merchantDetail.merchantName merchantDetail.displayAddress"
+        "merchantDetail.merchantName merchantDetail.displayAddress cartDetail"
       ),
       scheduledPickAndCustom.find({ customerId }),
     ]);
@@ -1242,7 +1242,7 @@ const getCustomerCartController = async (req, res, next) => {
     })
       .populate({
         path: "items.productId",
-        select: "productName productImageURL description variants",
+        select: "productName productImageURL description variants businessCategoryId",
       })
       .exec();
 
@@ -1287,6 +1287,7 @@ const getCustomerCartController = async (req, res, next) => {
         cartId: populatedCartWithVariantNames?._id || null,
         customerId: populatedCartWithVariantNames?.customerId || null,
         merchantId: populatedCartWithVariantNames?.merchantId || null,
+        businessCategoryId: populatedCartWithVariantNames?.businessCategoryId || null,
         items: populatedCartWithVariantNames?.items || [],
         deliveryOption:
           populatedCartWithVariantNames?.cartDetail?.deliveryOption || null,

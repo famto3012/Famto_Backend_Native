@@ -113,7 +113,12 @@ const deleteGeofence = async (req, res, next) => {
 
 const getAllGeofences = async (req, res, next) => {
   try {
-    const geofences = await Geofence.find();
+    const filter =
+      req.geofenceId && req.geofenceId.length > 0
+        ? { _id: { $in: req.geofenceId } }
+        : {};
+
+    const geofences = await Geofence.find(filter);
 
     res.status(200).json({
       success: true,

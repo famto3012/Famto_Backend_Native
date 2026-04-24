@@ -165,6 +165,10 @@ const billSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    returnCharge: {
+      type: Number,
+      default: null,
+    },
   },
   {
     _id: false,
@@ -182,6 +186,11 @@ const CustomerCartSchema = mongoose.Schema(
     merchantId: {
       type: String,
       ref: "Merchant",
+      required: true,
+    },
+    businessCategoryId: {
+      type: String,
+      ref: "BusinessCategoryId",
       required: true,
     },
     scheduledOrderId: {

@@ -707,7 +707,10 @@ const fetchAllMerchantsController = async (req, res, next) => {
         mongoose.Types.ObjectId.createFromHexString(businessCategory.trim());
     }
 
-    if (geofence && geofence.toLowerCase() !== "all") {
+    // If manager, restrict to their geofences (overrides query param)
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    } else if (geofence && geofence.toLowerCase() !== "all") {
       matchCriteria["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }
@@ -780,6 +783,10 @@ const searchMerchantForOrderController = async (req, res, next) => {
     const searchCriteria = {
       "merchantDetail.merchantName": { $regex: query?.trim(), $options: "i" },
     };
+
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      searchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
 
     // Perform search with geofenceId populated
     const searchResults = await Merchant.find(searchCriteria)
@@ -928,8 +935,15 @@ const rejectRegistrationController = async (req, res, next) => {
 // Get all merchants for dropdown
 const getAllMerchantsForDropDownController = async (req, res, next) => {
   try {
+    const query = { isBlocked: false };
+
+    // If manager, restrict to their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
+
     // Find merchants, sort by merchantName alphabetically and phoneNumber numerically
-    const merchantsFound = await Merchant.find({ isBlocked: false })
+    const merchantsFound = await Merchant.find(query)
       .select("merchantDetail")
       .sort({
         "merchantDetail.merchantName": 1,
@@ -1776,9 +1790,12 @@ const downloadMerchantCSVController = async (req, res, next) => {
 
     if (serviceable && serviceable.toLowerCase() !== "all")
       filter.status = serviceable?.trim();
-    if (geofence && geofence.toLowerCase() !== "all")
+    if (geofence && geofence.toLowerCase() !== "all") {
       filter["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      filter["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
     if (businessCategory && businessCategory.toLowerCase() !== "all")
       filter["merchantDetail.businessCategoryId"] =
         mongoose.Types.ObjectId.createFromHexString(businessCategory);
@@ -2008,6 +2025,14 @@ const getMerchantPayoutController = async (req, res, next) => {
     if (geofenceId && geofenceId.toLowerCase() !== "all") {
       filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria["merchantId"] = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
@@ -2190,6 +2215,14 @@ const downloadPayoutCSVController = async (req, res, next) => {
     if (geofenceId && geofenceId !== "all") {
       filterCriteria["geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofenceId);
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      filterCriteria["merchantId"] = {
+        $in: merchantsInGeofence.map((m) => m._id),
+      };
     }
 
     // Set start and end date boundaries, adjusting for timezone offset
@@ -2269,10 +2302,19 @@ const fetchMerchantsAccordingToBusinessCategory = async (req, res, next) => {
   try {
     const { businessCategoryId } = req.query;
 
-    const allMerchants = await Merchant.find({
+    const query = {
       "merchantDetail.businessCategoryId": { $in: [businessCategoryId] },
       isApproved: "Approved",
-    }).sort({ "merchantDetail.merchantName": 1 });
+    };
+
+    // If manager, restrict to their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      query["merchantDetail.geofenceId"] = { $in: req.geofenceId };
+    }
+
+    const allMerchants = await Merchant.find(query).sort({
+      "merchantDetail.merchantName": 1,
+    });
 
     const formattedResponse = allMerchants?.map((merchant) => ({
       merchantId: merchant._id,

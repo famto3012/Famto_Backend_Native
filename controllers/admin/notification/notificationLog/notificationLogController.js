@@ -2,6 +2,7 @@ const appError = require("../../../../utils/appError");
 
 const AdminNotificationLogs = require("../../../../models/AdminNotificationLog");
 const MerchantNotificationLogs = require("../../../../models/MerchantNotificationLog");
+const Merchant = require("../../../../models/Merchant");
 
 const getAdminNotificationLogController = async (req, res, next) => {
   try {
@@ -10,14 +11,37 @@ const getAdminNotificationLogController = async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    // Find documents with pagination
-    const adminNotificationLog = await AdminNotificationLogs.find()
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    let filterCriteria = {};
 
-    // Get the total count of documents
-    const totalDocuments = await AdminNotificationLogs.countDocuments();
+    // If manager → show only notifications related to their geofence
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      // Get merchants in manager's geofences
+      const merchantsInGeofence = await Merchant.find(
+        { "merchantDetail.geofenceId": { $in: req.geofenceId } },
+        "_id"
+      );
+      // Convert to strings since merchantId is stored as String in the log
+      const merchantIds = merchantsInGeofence.map((m) => m._id.toString());
+
+      // Show:
+      // 1. Order-related notifications → matched by merchantId (string)
+      // 2. Push notifications → matched by geofenceId
+      filterCriteria = {
+        $or: [
+          { merchantId: { $in: merchantIds } },
+          { geofenceId: { $in: req.geofenceId } },
+        ],
+      };
+    }
+
+    // Find documents with pagination
+    const [adminNotificationLog, totalDocuments] = await Promise.all([
+      AdminNotificationLogs.find(filterCriteria)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      AdminNotificationLogs.countDocuments(filterCriteria),
+    ]);
 
     // Calculate total pages
     const totalPages = Math.ceil(totalDocuments / limit);

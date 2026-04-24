@@ -678,10 +678,24 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
     const skip = (page - 1) * limit;
     const filterCriteria = { typeOfUser: "Merchant" };
 
+    // If manager, restrict to merchants in their geofences only
+    if (req.geofenceId && req.geofenceId.length > 0) {
+      const merchantsInGeofence = await Merchant.find({
+        "merchantDetail.geofenceId": { $in: req.geofenceId },
+      }).select("_id");
+
+      if (!merchantsInGeofence.length) {
+        return res.status(200).json({ data: [], total: 0 });
+      }
+
+      filterCriteria.userId = {
+        $in: merchantsInGeofence.map((m) => m._id.toString()),
+      };
+    }
+
     if (date) {
       const formattedDay = moment.tz(date, "Asia/Kolkata");
 
-      // Start and end of the previous day in IST
       const startOfDay = formattedDay.startOf("day").toDate();
       const endOfDay = formattedDay.endOf("day").toDate();
 
