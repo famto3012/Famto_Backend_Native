@@ -1448,6 +1448,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       deliveryChargeForScheduledOrder,
       taxAmount,
       itemTotal,
+      returnCharge,
     } = await calculateDeliveryChargesHelper({
       deliveryMode,
       distanceInKM: distance,
@@ -1503,7 +1504,8 @@ const confirmOrderDetailController = async (req, res, next) => {
       0,
       discountTotal,
       taxAmount || 0,
-      cart?.billDetail?.addedTip || 0
+      cart?.billDetail?.addedTip || 0,
+      returnCharge || 0
     );
 
     const customerCart = await CustomerCart.findOneAndUpdate(

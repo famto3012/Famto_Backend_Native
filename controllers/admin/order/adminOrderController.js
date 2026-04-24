@@ -1080,6 +1080,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       addedTip,
       subTotal,
       surgePrice,
+      waitingFare
     ] = [
       billDetail.discountedDeliveryCharge ||
       billDetail.originalDeliveryCharge ||
@@ -1091,6 +1092,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       billDetail.addedTip || 0,
       billDetail.subTotal || 0,
       billDetail.surgePrice || 0,
+      billDetail.waitingFare || 0,
     ].map((value) => Number(value));
 
     if (
@@ -1103,6 +1105,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
         addedTip,
         subTotal,
         surgePrice,
+        waitingFare,
       ].some(isNaN)
     ) {
       return next(
@@ -1356,7 +1359,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
                     <!-- Subtotal -->
                     <tr>
                         <td colspan="3">Waiting Charge</td>
-                        <td>${surgePrice?.toFixed(2) || 0}</td>
+                        <td>${waitingFare?.toFixed(2) || 0}</td>
                     </tr>
                     ${discountedAmount
         ? `
@@ -2055,6 +2058,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       deliveryChargeForScheduledOrder,
       taxAmount,
       itemTotal,
+      returnCharge,
     } = await calculateDeliveryChargeHelperForAdmin(
       deliveryMode,
       distanceInKM,
@@ -2085,7 +2089,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       flatDiscount || 0,
       merchantDiscountAmount || 0,
       taxAmount || 0,
-      addedTip || 0
+      addedTip || 0,
+      returnCharge || 0
     );
 
     console.log("Bill detail:", billDetail);

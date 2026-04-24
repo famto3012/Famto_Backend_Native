@@ -20,6 +20,9 @@ const addCustomerPricingController = async (req, res, next) => {
     vehicleType,
     businessCategoryId,
     merchants,
+    returnBaseFare,
+    returnBaseDistance,
+    fareAfterBaseReturnDistance,
   } = req.body;
 
   const errors = validationResult(req);
@@ -79,6 +82,9 @@ const addCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId: businessCategoryId || null,
       merchants,
+      returnBaseFare: returnBaseFare || null,
+      returnBaseDistance: returnBaseDistance || null,
+      fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
     });
 
     if (!newRule) {
@@ -173,6 +179,9 @@ const editCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId,
       merchants,
+      returnBaseFare,
+      returnBaseDistance,
+      fareAfterBaseReturnDistance,
     } = req.body;
 
     const normalizedRuleName = ruleName
@@ -228,6 +237,9 @@ const editCustomerPricingController = async (req, res, next) => {
         vehicleType,
         businessCategoryId: businessCategoryId || null,
         merchants,
+        returnBaseFare: returnBaseFare || null,
+        returnBaseDistance: returnBaseDistance || null,
+        fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
       },
       { new: true }
     );

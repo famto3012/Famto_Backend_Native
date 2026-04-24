@@ -61,17 +61,17 @@ const getDistanceFromPickupToDelivery = async (
 
 console.log("Cordinated", pickupCoordinates , deliveryCoordinates , profile);
 
-  if (process.env.NODE_ENV === "development") {
-    const getRandomFloat = (min, max) => {
-      const random = Math.random() * (max - min) + min;
-      return Number(random.toFixed(2));
-    };
+  // if (process.env.NODE_ENV === "development") {
+  //   const getRandomFloat = (min, max) => {
+  //     const random = Math.random() * (max - min) + min;
+  //     return Number(random.toFixed(2));
+  //   };
 
-    return {
-      distanceInKM: getRandomFloat(2, 10),
-      durationInMinutes: getRandomFloat(5.5, 30),
-    };
-  }
+  //   return {
+  //     distanceInKM: getRandomFloat(2, 10),
+  //     durationInMinutes: getRandomFloat(5.5, 30),
+  //   };
+  // }
 
   const { data } = await axios.get(
     `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${pickupCoordinates[1]},${pickupCoordinates[0]};${deliveryCoordinates[1]},${deliveryCoordinates[0]}`
@@ -212,7 +212,31 @@ const calculateDeliveryCharges = (
     }
   }
 };
-
+const calculateReturnCharges = (
+  distance,
+  baseDistance,
+  fareAfterBaseDistance
+) => {
+  if (fareAfterBaseDistance) {
+    if (distance <= baseDistance) {
+      return Number(parseFloat(fareAfterBaseDistance).toFixed(2) || 0);
+    } else {
+      return Number(
+        parseFloat(
+          (distance - baseDistance) * fareAfterBaseDistance
+        ).toFixed(2) || 0
+      );
+    }
+  } else {
+    if (distance <= baseDistance) {
+      return Number(parseFloat(fareAfterBaseDistance).toFixed(2) || 0);
+    } else {
+      return Number(
+        parseFloat((distance - baseDistance)).toFixed(2) || 0
+      );
+    }
+  }
+};
 const getTaxAmount = async (
   businessCategoryId,
   geofenceId,
@@ -1206,6 +1230,7 @@ module.exports = {
   sortMerchantsBySponsorship,
   getDistanceFromPickupToDelivery,
   calculateDeliveryCharges,
+  calculateReturnCharges,
   getTaxAmount,
   createOrdersFromScheduled,
   createOrdersFromScheduledPickAndDrop,

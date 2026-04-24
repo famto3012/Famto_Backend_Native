@@ -21,6 +21,7 @@ const {
   getTaxAmount,
   getDistanceFromPickupToDelivery,
   filterProductIdAndQuantity,
+  calculateReturnCharges,
 } = require("./customerAppHelpers");
 const CustomerAppCustomization = require("../models/CustomerAppCustomization");
 const Tax = require("../models/Tax");
@@ -724,37 +725,60 @@ const calculateDeliveryChargesHelper = async ({
   selectedBusinessCategory,
   isSuperMarketOrder,
 }) => {
+  console.log("🚀 START calculateDeliveryChargesHelper");
+  console.log("📥 INPUT:", {
+    deliveryMode,
+    distanceInKM,
+    merchantId: merchant?._id,
+    customerId: customer?._id,
+    selectedBusinessCategory,
+    isSuperMarketOrder,
+    scheduledDetails,
+  });
+
   let oneTimeDeliveryCharge = null;
   let surgeCharges = null;
   let deliveryChargeForScheduledOrder = null;
   let taxAmount = null;
+  let returnCharge = null;
 
   const itemTotal = ["Take Away", "Home Delivery"].includes(deliveryMode)
     ? calculateItemTotal(items, scheduledDetails?.numOfDays)
     : 0;
 
+  console.log("💰 ITEM TOTAL:", itemTotal);
+
   if (deliveryMode === "Home Delivery") {
+    console.log("🏠 Processing Home Delivery");
+
     const businessCategoryId = selectedBusinessCategory;
 
-    if (!businessCategoryId) throw new Error("Business category not found");
+    if (!businessCategoryId) {
+      console.error("❌ Business category missing");
+      throw new Error("Business category not found");
+    }
 
     let customerPricing;
 
     if (isSuperMarketOrder) {
+      console.log("🛒 Supermarket order detected");
       oneTimeDeliveryCharge = 40;
     } else {
-
-      console.log('DATA',deliveryMode , businessCategoryId);
+      console.log("🔍 Fetching CustomerPricing...");
 
       customerPricing = await CustomerPricing.findOne({
         deliveryMode,
         businessCategoryId,
-        // geofenceId: customer.customerDetails.geofenceId,
         status: true,
         merchants: { $in: [merchant._id] },
       });
 
-      if (!customerPricing) throw new Error("Customer pricing not found");
+      console.log("📦 CustomerPricing Result:", customerPricing);
+
+      if (!customerPricing) {
+        console.error("❌ Customer pricing not found");
+        throw new Error("Customer pricing not found");
+      }
 
       oneTimeDeliveryCharge = calculateDeliveryCharges(
         distanceInKM,
@@ -762,12 +786,31 @@ const calculateDeliveryChargesHelper = async ({
         customerPricing.baseDistance,
         customerPricing.fareAfterBaseDistance
       );
-    }
 
+      console.log("🚚 Delivery Charge:", oneTimeDeliveryCharge);
+
+      if (customerPricing.fareAfterBaseReturnDistance && customerPricing.returnBaseDistance) {
+        returnCharge = calculateReturnCharges(
+          distanceInKM,
+          customerPricing.returnBaseDistance,
+          customerPricing.fareAfterBaseReturnDistance
+        );
+
+        console.log("🔄 Return Charge:", returnCharge);
+      }
+    }
+// ✅ ADD HERE
+if (returnCharge) {
+  console.log("➕ Adding Return Charge to Delivery Charge");
+  oneTimeDeliveryCharge += returnCharge;
+}
+    console.log("⚡ Fetching Surge Pricing...");
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
       status: true,
     });
+
+    console.log("📦 CustomerSurge Result:", customerSurge);
 
     if (customerSurge) {
       surgeCharges = calculateDeliveryCharges(
@@ -776,6 +819,8 @@ const calculateDeliveryChargesHelper = async ({
         customerSurge.baseDistance,
         customerSurge.fareAfterBaseDistance
       );
+
+      console.log("⚡ Surge Charges:", surgeCharges);
     }
 
     if (
@@ -786,17 +831,24 @@ const calculateDeliveryChargesHelper = async ({
       deliveryChargeForScheduledOrder = (
         oneTimeDeliveryCharge * scheduledDetails.numOfDays
       ).toFixed(2);
+
+      console.log("📅 Scheduled Delivery Charge:", deliveryChargeForScheduledOrder);
     }
 
+    console.log("🧾 Calculating Tax...");
     taxAmount = await getTaxAmount(
       businessCategoryId,
       merchant.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
     );
+
+    console.log("💸 Tax Amount:", taxAmount);
   }
 
   if (deliveryMode === "Pick and Drop") {
+    console.log("📦 Processing Pick and Drop");
+
     const customerPricing = await CustomerPricing.findOne({
       deliveryMode: "Home Delivery",
       geofenceId: customer.customerDetails.geofenceId,
@@ -804,7 +856,12 @@ const calculateDeliveryChargesHelper = async ({
       merchants: { $in: [merchant._id] },
     });
 
-    if (!customerPricing) throw new Error("Customer pricing not found");
+    console.log("📦 CustomerPricing Result:", customerPricing);
+
+    if (!customerPricing) {
+      console.error("❌ Customer pricing not found");
+      throw new Error("Customer pricing not found");
+    }
 
     oneTimeDeliveryCharge = calculateDeliveryCharges(
       distanceInKM,
@@ -813,10 +870,26 @@ const calculateDeliveryChargesHelper = async ({
       customerPricing.fareAfterBaseDistance
     );
 
+    console.log("🚚 Delivery Charge:", oneTimeDeliveryCharge);
+
+    if (customerPricing.returnBaseFare && customerPricing.returnBaseDistance) {
+      returnCharge = calculateDeliveryCharges(
+        distanceInKM,
+        customerPricing.returnBaseFare,
+        customerPricing.returnBaseDistance,
+        customerPricing.fareAfterBaseReturnDistance
+      );
+
+      console.log("🔄 Return Charge:", returnCharge);
+    }
+
+    console.log("⚡ Fetching Surge Pricing...");
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
       status: true,
     });
+
+    console.log("📦 CustomerSurge Result:", customerSurge);
 
     if (customerSurge) {
       surgeCharges = calculateDeliveryCharges(
@@ -825,6 +898,8 @@ const calculateDeliveryChargesHelper = async ({
         customerSurge.baseDistance,
         customerSurge.fareAfterBaseDistance
       );
+
+      console.log("⚡ Surge Charges:", surgeCharges);
     }
 
     if (
@@ -835,24 +910,44 @@ const calculateDeliveryChargesHelper = async ({
       deliveryChargeForScheduledOrder = (
         oneTimeDeliveryCharge * scheduledDetails.numOfDays
       ).toFixed(2);
+
+      console.log("📅 Scheduled Delivery Charge:", deliveryChargeForScheduledOrder);
     }
 
+    console.log("🧾 Fetching Tax Config...");
     const tax = await CustomerAppCustomization.findOne({}).select(
       "pickAndDropOrderCustomization"
     );
+
+    console.log("📦 Tax Config:", tax);
 
     const taxFound = await Tax.findOne({
       _id: tax.pickAndDropOrderCustomization.taxId,
       status: true,
     });
 
+    console.log("📦 Tax Found:", taxFound);
+
     const charge = deliveryChargeForScheduledOrder ?? oneTimeDeliveryCharge;
 
     if (taxFound) {
       const calculatedTax = (charge * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
+
+      console.log("💸 Tax Amount:", taxAmount);
     }
   }
+
+  console.log("✅ FINAL OUTPUT:", {
+    oneTimeDeliveryCharge,
+    surgeCharges,
+    deliveryChargeForScheduledOrder,
+    taxAmount,
+    itemTotal,
+    returnCharge,
+  });
+
+  console.log("🏁 END calculateDeliveryChargesHelper\n");
 
   return {
     oneTimeDeliveryCharge,
@@ -860,9 +955,9 @@ const calculateDeliveryChargesHelper = async ({
     deliveryChargeForScheduledOrder,
     taxAmount,
     itemTotal,
+    returnCharge,
   };
 };
-
 // Function to apply discounts
 const applyDiscounts = async ({ items, itemTotal, merchantId }) => {
   let merchantDiscountAmount = 0;
@@ -926,7 +1021,8 @@ const calculateBill = (
   flatDiscount,
   merchantDiscountAmount,
   taxAmount,
-  addedTip = 0
+  addedTip = 0,
+  returnCharge = 0
 ) => {
   // Calculate total discount amount once
   const totalDiscountAmount =
@@ -965,6 +1061,7 @@ const calculateBill = (
     discountedAmount: totalDiscountAmount > 0 ? totalDiscountAmount : null,
     originalGrandTotal: Math.round(grandTotal),
     discountedGrandTotal: Math.round(discountedGrandTotal),
+    returnCharge: returnCharge ? parseFloat(returnCharge.toFixed(2)) : null,
   };
 };
 
@@ -1210,6 +1307,17 @@ const pickAndDropCharges = async (
     vehiclePrice.fareAfterBaseDistance
   );
 
+  // Calculate return charge if configured
+  let returnCharge = null;
+  if (vehiclePrice.returnBaseFare && vehiclePrice.returnBaseDistance) {
+    returnCharge = calculateDeliveryCharges(
+      distanceInKM,
+      vehiclePrice.returnBaseFare,
+      vehiclePrice.returnBaseDistance,
+      vehiclePrice.fareAfterBaseReturnDistance
+    );
+  }
+
   // Calculate total weight of items for additional weight charges
   const totalWeight = getTotalItemWeight("Pick and Drop", items);
 
@@ -1260,6 +1368,7 @@ const pickAndDropCharges = async (
     deliveryChargeForScheduledOrder: deliveryChargeForScheduledOrder || null,
     taxAmount,
     itemTotal: null,
+    returnCharge,
   };
 };
 

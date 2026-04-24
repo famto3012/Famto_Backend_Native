@@ -2211,6 +2211,7 @@ const createInvoiceController = async (req, res, next) => {
       deliveryChargeForScheduledOrder,
       taxAmount,
       itemTotal,
+      returnCharge,
     } = await calculateDeliveryChargesHelper({
       deliveryMode,
       distanceInKM,
@@ -2238,7 +2239,8 @@ const createInvoiceController = async (req, res, next) => {
       flatDiscount || 0,
       merchantDiscountAmount,
       taxAmount || 0,
-      addedTip
+      addedTip,
+      returnCharge || 0
     );
 
     let customerCart;

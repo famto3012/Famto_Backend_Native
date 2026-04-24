@@ -70,6 +70,7 @@ const billSchema = mongoose.Schema(
     taxAmount: { type: Number, default: null },
     promoCodeUsed: { type: String, default: null },
     promoCodeDiscount: { type: Number, default: null },
+    returnCharge: { type: Number, default: null },
   },
   { _id: false }
 );
