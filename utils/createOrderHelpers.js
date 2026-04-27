@@ -701,11 +701,20 @@ const handleDeliveryMode = async (
 
   // Calculate distance only if the delivery mode is not "Take Away"
   if (deliveryMode !== "Take Away") {
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
-      merchant.merchantDetail.location,
-      addressDetails.deliveryLocation
-    );
-    distance = distanceInKM;
+    // For Pick and Drop, use the actual pickup location (could be customer address or merchant shop).
+    // For Home Delivery, pickup is always the merchant's shop.
+    const fromLocation =
+      deliveryMode === "Pick and Drop"
+        ? addressDetails.pickupLocation
+        : merchant.merchantDetail.location;
+
+    if (fromLocation?.length === 2 && addressDetails.deliveryLocation?.length === 2) {
+      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        fromLocation,
+        addressDetails.deliveryLocation
+      );
+      distance = distanceInKM;
+    }
   }
 
   return {
@@ -849,12 +858,18 @@ if (returnCharge) {
   if (deliveryMode === "Pick and Drop") {
     console.log("📦 Processing Pick and Drop");
 
-    const customerPricing = await CustomerPricing.findOne({
+    // For Pick and Drop with a merchant, use that merchant's Home Delivery pricing.
+    // Filter by businessCategoryId when provided; otherwise just match by merchant.
+    const pricingQuery = {
       deliveryMode: "Home Delivery",
-      geofenceId: customer.customerDetails.geofenceId,
       status: true,
       merchants: { $in: [merchant._id] },
-    });
+    };
+    if (selectedBusinessCategory) {
+      pricingQuery.businessCategoryId = selectedBusinessCategory;
+    }
+
+    const customerPricing = await CustomerPricing.findOne(pricingQuery);
 
     console.log("📦 CustomerPricing Result:", customerPricing);
 
@@ -935,6 +950,26 @@ if (returnCharge) {
       taxAmount = parseFloat(calculatedTax.toFixed(2));
 
       console.log("💸 Tax Amount:", taxAmount);
+    }
+  }
+
+  if (deliveryMode === "Take Away") {
+    console.log("🥡 Processing Take Away tax");
+
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "takeAwayOrderCustomization"
+    );
+
+    const takeAwayTaxId = appCustomization?.takeAwayOrderCustomization?.taxId;
+
+    if (takeAwayTaxId) {
+      const taxFound = await Tax.findOne({ _id: takeAwayTaxId, status: true });
+
+      if (taxFound) {
+        const calculatedTax = (itemTotal * taxFound.tax) / 100;
+        taxAmount = parseFloat(calculatedTax.toFixed(2));
+        console.log("💸 Take Away Tax Amount:", taxAmount);
+      }
     }
   }
 
@@ -1193,14 +1228,33 @@ const calculateDeliveryChargeHelperForAdmin = async (
 ) => {
   // Handle each delivery mode with a switch statement for clarity
   switch (deliveryMode) {
-    case "Take Away":
+    case "Take Away": {
+      const takeAwayItemTotal = calculateItemTotal(items, scheduledDetails?.numOfDays);
+
+      let takeAwayTaxAmount = 0;
+
+      const appCustomization = await CustomerAppCustomization.findOne({}).select(
+        "takeAwayOrderCustomization"
+      );
+      const takeAwayTaxId = appCustomization?.takeAwayOrderCustomization?.taxId;
+
+      if (takeAwayTaxId) {
+        const taxFound = await Tax.findOne({ _id: takeAwayTaxId, status: true });
+        if (taxFound) {
+          takeAwayTaxAmount = parseFloat(
+            ((takeAwayItemTotal * taxFound.tax) / 100).toFixed(2)
+          );
+        }
+      }
+
       return {
         oneTimeDeliveryCharge: 0,
         surgeCharges: 0,
         deliveryChargeForScheduledOrder: 0,
-        taxAmount: 0,
-        itemTotal: calculateItemTotal(items, scheduledDetails?.numOfDays),
+        taxAmount: takeAwayTaxAmount,
+        itemTotal: takeAwayItemTotal,
       };
+    }
 
     case "Home Delivery":
       return await calculateDeliveryChargesHelper({
@@ -1214,6 +1268,20 @@ const calculateDeliveryChargeHelperForAdmin = async (
       });
 
     case "Pick and Drop":
+      // When a merchant is selected, use that merchant's Home Delivery pricing
+      // (same rule as Home Delivery but keyed by merchant._id)
+      if (merchant) {
+        return await calculateDeliveryChargesHelper({
+          deliveryMode: "Pick and Drop",
+          distanceInKM,
+          merchant,
+          customer,
+          items,
+          scheduledDetails,
+          selectedBusinessCategory,
+        });
+      }
+      // No merchant selected — fall back to generic vehicle-based pricing
       return await pickAndDropCharges(
         distanceInKM,
         scheduledDetails,

@@ -3,7 +3,6 @@ const { validationResult } = require("express-validator");
 const MerchantSubscription = require("../../../models/MerchantSubscription");
 const CustomerSubscription = require("../../../models/CustomerSubscription");
 const ActivityLog = require("../../../models/ActivityLog");
-const Tax = require("../../../models/Tax");
 const Merchant = require("../../../models/Merchant");
 const SubscriptionLog = require("../../../models/SubscriptionLog");
 
@@ -26,16 +25,9 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
     const { name, amount, duration, taxId, renewalReminder, description } =
       req.body;
 
-    let totalAmount = amount;
-    if (taxId) {
-      const tax = await Tax.findById(taxId);
-      const taxAmount = amount * (tax.tax / 100);
-      totalAmount = parseFloat(amount) + taxAmount;
-    }
-
     const subscriptionPlan = new MerchantSubscription({
       name,
-      amount: Math.round(totalAmount),
+      amount: parseFloat(amount),
       duration,
       taxId: taxId || null,
       renewalReminder,
@@ -101,25 +93,10 @@ const editMerchantSubscriptionPlanController = async (req, res, next) => {
       return res.status(404).json({ message: "Subscription plan not found" });
     }
 
-    // TODO:Need to recheck the amount calculation when updating only the price
-    // Calculate the new total amount only if the taxId changes
-    let totalAmount = amount;
-    if (
-      amount !== subscriptionPlan.amount ||
-      taxId.toString() !== subscriptionPlan.taxId?.toString()
-    ) {
-      const oldTax = await Tax.findById(subscriptionPlan.taxId);
-      const baseAmount = amount / (1 + oldTax?.tax / 100);
-
-      const newTax = await Tax.findById(taxId);
-      const taxAmount = baseAmount * (newTax?.tax / 100);
-      totalAmount = Math.round(baseAmount + taxAmount);
-    }
-
     // Update subscription plan fields if provided
     const updatedFields = {
       ...(name && { name }),
-      ...(amount && { amount: totalAmount }),
+      ...(amount && { amount: parseFloat(amount) }),
       ...(duration && { duration }),
       ...(taxId && { taxId }),
       ...(renewalReminder && { renewalReminder }),
@@ -281,17 +258,10 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
       description,
     } = req.body;
 
-    let totalAmount = amount;
-    if (taxId) {
-      const tax = await Tax.findById(taxId);
-      const taxAmount = amount * (tax.tax / 100);
-      totalAmount = parseFloat(amount) + taxAmount;
-    }
-
     const [newPlan, _] = await Promise.all([
       await CustomerSubscription.create({
         name,
-        amount: Math.round(totalAmount),
+        amount: parseFloat(amount),
         duration,
         taxId: taxId || null,
         renewalReminder,
@@ -367,37 +337,12 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
       return next(appError("Subscription plan not found", 404));
     }
 
-    let totalAmount = amount;
-
-    if (!subscriptionPlan.taxId && taxId) {
-      // Scenario 1: Tax not set initially, add tax now
-      const tax = await Tax.findById(taxId);
-      const taxAmount = amount * (tax.tax / 100);
-      totalAmount = parseFloat(amount) + taxAmount;
-    } else if (
-      subscriptionPlan.taxId &&
-      taxId &&
-      taxId.toString() !== subscriptionPlan.taxId.toString()
-    ) {
-      // Scenario 2: Existing tax is being changed to a new tax
-      const oldTax = await Tax.findById(subscriptionPlan.taxId);
-      const baseAmount = amount / (1 + oldTax.tax / 100);
-      const newTax = await Tax.findById(taxId);
-      const taxAmount = baseAmount * (newTax.tax / 100);
-      totalAmount = parseFloat(baseAmount) + taxAmount;
-    } else if (subscriptionPlan.taxId && !taxId) {
-      // Scenario 3: Existing tax is being removed
-      const oldTax = await Tax.findById(subscriptionPlan.taxId);
-      const baseAmount = amount / (1 + oldTax.tax / 100);
-      totalAmount = parseFloat(baseAmount); // No new tax is applied, use base amount only
-    }
-
     let [updatedPlan, _] = await Promise.all([
       await CustomerSubscription.findByIdAndUpdate(
         id,
         {
           name,
-          amount: Math.round(totalAmount),
+          amount: parseFloat(amount),
           duration,
           taxId: taxId || null,
           renewalReminder,

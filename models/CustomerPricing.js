@@ -47,6 +47,10 @@ const customerPricingSchema = new mongoose.Schema({
     type: Number,
     default: null,
   },
+  returnBaseFare: {
+    type: Number,
+    default: null,
+  },
   returnBaseDistance: {
     type: Number,
     default: null,

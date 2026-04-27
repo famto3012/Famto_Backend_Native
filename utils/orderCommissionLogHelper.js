@@ -23,7 +23,14 @@ const orderCommissionLogHelper = async (order) => {
 
     const commission = commissions[0];
 
-    const totalAmount = order.billDetail.itemTotal;
+    const purchasedItems = order.purchasedItems || [];
+    const totalAmount =
+      purchasedItems.length > 0
+        ? purchasedItems.reduce(
+            (total, item) => total + (item.costPrice || 0) * item.quantity,
+            0
+          )
+        : order.billDetail.itemTotal;
 
     let payableAmountToMerchant = 0;
     let payableAmountToFamto = 0;

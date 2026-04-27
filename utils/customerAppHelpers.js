@@ -729,12 +729,14 @@ const filterProductIdAndQuantity = async (items) => {
         let price, costPrice;
 
         if (item.variantTypeId) {
+          // variantTypeId may be a raw ObjectId or a populated { _id, ... } object
+          const variantTypeIdStr = (
+            item?.variantTypeId?._id ?? item?.variantTypeId
+          )?.toString();
+
           const variantType = product.variants
             .flatMap((variant) => variant.variantTypes)
-            .find(
-              (vType) =>
-                vType._id.toString() === item?.variantTypeId?._id?.toString()
-            );
+            .find((vType) => vType._id.toString() === variantTypeIdStr);
 
           if (variantType) {
             price = variantType?.price || 0;
