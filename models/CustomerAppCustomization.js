@@ -42,6 +42,19 @@ const pickAndDropOrderCustomizationSchema = new mongoose.Schema(
   }
 );
 
+const takeAwayOrderCustomizationSchema = new mongoose.Schema(
+  {
+    taxId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tax",
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const customerAppCustomizationSchema = new mongoose.Schema(
   {
     splashScreenUrl: {
@@ -82,6 +95,7 @@ const customerAppCustomizationSchema = new mongoose.Schema(
     },
     customOrderCustomization: customOrderCustomizationSchema,
     pickAndDropOrderCustomization: pickAndDropOrderCustomizationSchema,
+    takeAwayOrderCustomization: takeAwayOrderCustomizationSchema,
     appUpdateType: {
       type: String,
       enum: ["IMMEDIATE", "FLEXIBLE"],

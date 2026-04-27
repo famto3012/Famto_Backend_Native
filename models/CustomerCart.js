@@ -165,6 +165,10 @@ const billSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    returnCharge: {
+      type: Number,
+      default: null,
+    },
   },
   {
     _id: false,

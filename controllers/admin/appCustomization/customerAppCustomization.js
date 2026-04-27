@@ -31,6 +31,9 @@ const getCustomerCustomizationController = async (req, res, next) => {
         endTime: customization?.pickAndDropOrderCustomization?.endTime || null,
         taxId: customization?.pickAndDropOrderCustomization?.taxId || null,
       },
+      takeAwayOrderCustomization: {
+        taxId: customization?.takeAwayOrderCustomization?.taxId || null,
+      },
       appUpdateType: customization.appUpdateType,
     };
 
@@ -80,6 +83,7 @@ const createOrUpdateCustomerCustomizationController = async (
       loginViaFacebook,
       customOrderCustomization,
       pickAndDropOrderCustomization,
+      takeAwayOrderCustomization,
       appUpdateType,
     } = req.body;
 
@@ -96,28 +100,36 @@ const createOrUpdateCustomerCustomizationController = async (
     }
 
     if (customization) {
-      await CustomerAppCustomization.findOneAndUpdate({
-        email,
-        phoneNumber,
-        emailVerification,
-        otpVerification,
-        loginViaOtp,
-        loginViaGoogle,
-        loginViaApple,
-        loginViaFacebook,
-        splashScreenUrl,
-        customOrderCustomization: {
-          startTime: customOrderCustomization.startTime,
-          endTime: customOrderCustomization.endTime,
-          taxId: customOrderCustomization.taxId,
-        },
-        pickAndDropOrderCustomization: {
-          startTime: pickAndDropOrderCustomization.startTime,
-          endTime: pickAndDropOrderCustomization.endTime,
-          taxId: pickAndDropOrderCustomization.taxId,
-        },
-        appUpdateType,
-      });
+      await CustomerAppCustomization.findOneAndUpdate(
+        {},
+        {
+          $set: {
+            email,
+            phoneNumber,
+            emailVerification,
+            otpVerification,
+            loginViaOtp,
+            loginViaGoogle,
+            loginViaApple,
+            loginViaFacebook,
+            splashScreenUrl,
+            customOrderCustomization: {
+              startTime: customOrderCustomization.startTime,
+              endTime: customOrderCustomization.endTime,
+              taxId: customOrderCustomization.taxId || null,
+            },
+            pickAndDropOrderCustomization: {
+              startTime: pickAndDropOrderCustomization.startTime,
+              endTime: pickAndDropOrderCustomization.endTime,
+              taxId: pickAndDropOrderCustomization.taxId || null,
+            },
+            takeAwayOrderCustomization: {
+              taxId: takeAwayOrderCustomization?.taxId || null,
+            },
+            appUpdateType,
+          },
+        }
+      );
     } else {
       await CustomerAppCustomization.create({
         email,
@@ -138,6 +150,9 @@ const createOrUpdateCustomerCustomizationController = async (
           startTime: pickAndDropOrderCustomization.startTime,
           endTime: pickAndDropOrderCustomization.endTime,
           taxId: pickAndDropOrderCustomization.taxId,
+        },
+        takeAwayOrderCustomization: {
+          taxId: takeAwayOrderCustomization?.taxId || null,
         },
         appUpdateType,
       });
