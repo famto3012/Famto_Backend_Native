@@ -11,9 +11,9 @@ const getUserProfileController = async (req, res, next) => {
     const currentUserId = req.userAuth;
 
     // Find the user in Admin collection
-    const adminFound = await Admin.findById(currentUserId).select(
-      "fullName email phoneNumber"
-    );
+    const adminFound = await Admin.findById(currentUserId)
+      .select("fullName email phoneNumber")
+      .lean();
 
     if (adminFound) {
       return res.status(200).json({
@@ -23,9 +23,9 @@ const getUserProfileController = async (req, res, next) => {
     }
 
     // Find the user in Merchant collection if not found in Admin
-    const merchantFound = await Merchant.findById(currentUserId).select(
-      "fullName email phoneNumber"
-    );
+    const merchantFound = await Merchant.findById(currentUserId)
+      .select("fullName email phoneNumber")
+      .lean();
 
     if (merchantFound) {
       return res.status(200).json({
@@ -63,11 +63,11 @@ const updateUserProfileController = async (req, res, next) => {
     const adminExists = await Admin.findOne({
       email: normalizedEmail,
       _id: { $ne: currentUserId },
-    });
+    }).lean();
     const merchantExists = await Merchant.findOne({
       email: normalizedEmail,
       _id: { $ne: currentUserId },
-    });
+    }).lean();
 
     if (normalizedEmail && (adminExists || merchantExists)) {
       formattedErrors.email = "Email already exists";
@@ -83,7 +83,9 @@ const updateUserProfileController = async (req, res, next) => {
     userFound = await Admin.findByIdAndUpdate(currentUserId, updateData, {
       new: true,
       runValidators: true,
-    }).select("fullName email phoneNumber");
+    })
+      .select("fullName email phoneNumber")
+      .lean();
 
     if (userFound) {
       return res.status(200).json({
@@ -96,7 +98,9 @@ const updateUserProfileController = async (req, res, next) => {
     userFound = await Merchant.findByIdAndUpdate(currentUserId, updateData, {
       new: true,
       runValidators: true,
-    }).select("fullName email phoneNumber");
+    })
+      .select("fullName email phoneNumber")
+      .lean();
 
     if (userFound) {
       return res.status(200).json({

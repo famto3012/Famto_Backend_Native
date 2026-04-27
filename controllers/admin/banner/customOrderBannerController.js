@@ -49,7 +49,7 @@ const editCustomOrderBannerController = async (req, res, next) => {
     const { id } = req.params;
     const { title, description } = req.body;
 
-    const banner = await CustomOrderBanner.findOne({ _id: id });
+    const banner = await CustomOrderBanner.findOne({ _id: id }).lean();
 
     let imageUrl = banner?.imageUrl;
     if (req.file) {
@@ -86,7 +86,7 @@ const editCustomOrderBannerController = async (req, res, next) => {
 
 const getAllCustomOrderBannersController = async (req, res, next) => {
   try {
-    const banners = await CustomOrderBanner.find();
+    const banners = await CustomOrderBanner.find().lean();
 
     if (!banners) {
       return next(appError("No custom order banners found", 404));
@@ -104,7 +104,7 @@ const getAllCustomOrderBannersController = async (req, res, next) => {
 const getCustomOrderBannerByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const banners = await CustomOrderBanner.findOne({ _id: id });
+    const banners = await CustomOrderBanner.findOne({ _id: id }).lean();
 
     if (!banners) {
       return next(appError("No custom order banners found", 404));
@@ -124,7 +124,7 @@ const deleteCustomOrderBannerController = async (req, res, next) => {
     const { id } = req.params;
 
     // Find the banner by ID and delete it
-    const deletedBanner = await CustomOrderBanner.findOne({ _id: id });
+    const deletedBanner = await CustomOrderBanner.findOne({ _id: id }).lean();
 
     // Check if the banner was found and deleted
     if (!deletedBanner) {

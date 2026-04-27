@@ -37,6 +37,7 @@ const cron = require("node-cron");
 const {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
+  checkOrdersNearDelivery,
 } = require("../libs/automatic");
 const BatchOrder = require("../models/BatchOrder");
 
@@ -241,10 +242,15 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
 // };
 
 const createNotificationLog = async (notificationSettings, message) => {
+  const baseDescription = notificationSettings?.description || message?.body || "";
+  const description = message?.agentName
+    ? `${message.agentName} ${baseDescription}`
+    : baseDescription;
+
   const logData = {
     imageUrl: message?.image,
     title: notificationSettings?.title || message?.title,
-    description: notificationSettings?.description || message?.body,
+    description,
     ...(!notificationSettings?.customer && { orderId: message?.orderId }),
   };
 
@@ -838,6 +844,35 @@ mongoose.connection.once("open", () => {
   // Backup check every 10 minutes (in case Mongo Change Streams miss anything)
   cron.schedule("* * * * *", async () => {
     await automaticStatusToggleForMerchant();
+  });
+});
+
+// **Check for orders approaching delivery time every minute**
+mongoose.connection.once("open", async () => {
+  // Ensure the notification setting exists (upsert)
+  await NotificationSetting.findOneAndUpdate(
+    { event: "order-delay-alert" },
+    {
+      $setOnInsert: {
+        event: "order-delay-alert",
+        title: "Order Delay Alert",
+        description: "An order is approaching its scheduled delivery time.",
+        admin: true,
+        manager: [],
+        merchant: false,
+        driver: false,
+        customer: false,
+        whatsapp: false,
+        sms: false,
+        email: false,
+        status: true,
+      },
+    },
+    { upsert: true }
+  );
+
+  cron.schedule("* * * * *", async () => {
+    await checkOrdersNearDelivery(io, userSocketMap);
   });
 });
 
@@ -1783,7 +1818,7 @@ io.on("connection", async (socket) => {
                 await sendNotification(
                   roleId,
                   eventName,
-                  { fcm: { customerId: orderFound.customerId } },
+                  { fcm: { customerId: orderFound.customerId, agentName: agentFound.fullName } },
                   role.charAt(0).toUpperCase() + role.slice(1)
                 );
               }
@@ -3076,6 +3111,7 @@ io.on("connection", async (socket) => {
                 fcm: {
                   customerId: orderFound?.customerId?._id,
                   orderId: drop.orderId,
+                  agentName: agentFound?.fullName,
                 },
               };
               await sendNotification(
@@ -3195,6 +3231,7 @@ io.on("connection", async (socket) => {
                 fcm: {
                   customerId: orderFound.customerId?._id,
                   orderId: taskFound.orderId,
+                  agentName: agentFound.fullName,
                 },
               };
               await sendNotification(

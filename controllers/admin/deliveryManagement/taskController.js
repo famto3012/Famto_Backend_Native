@@ -2,6 +2,8 @@ const turf = require("@turf/turf");
 const moment = require("moment-timezone");
 
 const Agent = require("../../../models/Agent");
+const Customer = require("../../../models/Customer");
+const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const Task = require("../../../models/Task");
 const AutoAllocation = require("../../../models/AutoAllocation");
@@ -187,10 +189,10 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       },
     });
 
-    const deliveryMode = task?.orderId?.orderDetail?.deliveryMode;
-    // const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+    const deliveryMode = task?.orderId?.deliveryMode;
+    const deliveryLocation = task?.orderId?.pickups?.[0]?.location;
     const merchant = task?.orderId?.merchantId;
-    // const merchantLocation = merchant?.merchantDetail?.location;
+    const merchantLocation = merchant?.merchantDetail?.location;
     const geofence = merchant?.merchantDetail?.geofenceId;
 
     // Match Criteria
@@ -244,20 +246,25 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         let distance = 0;
 
-        // TODO: When uncommenting the condition make sure to exclude the distance calculation of Inactive agents (make it default to 0)
-        // if (deliveryMode === "Pick and Drop") {
-        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        //     agentLocation,
-        //     deliveryLocation
-        //   );
-        //   distance = distanceInKM;
-        // } else if (deliveryMode !== "Custom Order") {
-        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        //     agentLocation,
-        //     merchantLocation
-        //   );
-        //   distance = distanceInKM;
-        // }
+        // Only calculate distance for Free/Busy agents; Inactive agents default to 0
+        if (agent.status === "Free" || agent.status === "Busy") {
+          if (deliveryMode === "Pick and Drop" && deliveryLocation?.length === 2) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              agentLocation,
+              deliveryLocation
+            );
+            distance = distanceInKM;
+          } else if (
+            deliveryMode !== "Custom Order" &&
+            merchantLocation?.length === 2
+          ) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              agentLocation,
+              merchantLocation
+            );
+            distance = distanceInKM;
+          }
+        }
 
         return {
           _id: agent._id,
@@ -311,19 +318,27 @@ const getTasksController = async (req, res, next) => {
       query.taskStatus = filter;
     }
 
-    // If manager, restrict tasks to orders belonging to their geofence's merchants
+    // If manager, restrict tasks to orders belonging to their geofence's merchants/customers
     if (req.geofenceId && req.geofenceId.length > 0) {
-      const Merchant = require("../../../models/Merchant");
-      const Order = require("../../../models/Order");
 
-      const merchantsInGeofence = await Merchant.find({
-        "merchantDetail.geofenceId": { $in: req.geofenceId },
-      }).select("_id");
+      const [merchantsInGeofence, customersInGeofence] = await Promise.all([
+        Merchant.find({
+          "merchantDetail.geofenceId": { $in: req.geofenceId },
+        }).select("_id"),
+        Customer.find({
+          "customerDetails.geofenceId": { $in: req.geofenceId },
+        }).select("_id"),
+      ]);
 
       const merchantIds = merchantsInGeofence.map((m) => m._id);
+      const customerIds = customersInGeofence.map((c) => c._id);
 
+      // Include merchant orders AND pick & drop / custom orders (merchantId: null, linked via customer)
       const ordersInGeofence = await Order.find({
-        merchantId: { $in: merchantIds },
+        $or: [
+          { merchantId: { $in: merchantIds } },
+          { merchantId: null, customerId: { $in: customerIds } },
+        ],
       }).select("_id");
 
       const orderIds = ordersInGeofence.map((o) => o._id);

@@ -171,13 +171,13 @@ const getReferralDetailController = async (req, res, next) => {
       const customersInGeofence = await Customer.find(
         { "customerDetails.geofenceId": { $in: req.geofenceId } },
         "_id"
-      );
+      ).lean();
       filter.customerId = {
         $in: customersInGeofence.map((c) => c._id.toString()),
       };
     }
 
-    const referrals = await ReferralCode.find(filter);
+    const referrals = await ReferralCode.find(filter).lean();
 
     const formattedResponse = referrals?.map((referral) => ({
       customerId: referral.customerId,

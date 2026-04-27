@@ -7,6 +7,12 @@ const path = require("path");
 const { errorLogger } = require("../middlewares/errorLogger");
 const moment = require("moment-timezone");
 const Task = require("../models/Task");
+const Order = require("../models/Order");
+const Admin = require("../models/Admin");
+const Manager = require("../models/Manager");
+const NotificationSetting = require("../models/NotificationSetting");
+const AdminNotificationLogs = require("../models/AdminNotificationLog");
+const FcmToken = require("../models/fcmToken");
 
 const automaticStatusOfflineForAgent = async () => {
   const nowUTC = new Date();
@@ -15,7 +21,7 @@ const automaticStatusOfflineForAgent = async () => {
   );
 
   // Fetch all free and approved agents at once
-  const agents = await Agent.find({ isApproved: "Approved", status: "Free" });
+  const agents = await Agent.find({ isApproved: "Approved", status: "Free" }).lean();
 
   if (!agents.length) return;
 
@@ -117,9 +123,9 @@ const automaticStatusToggleForMerchant = async () => {
     isApproved: "Approved",
     isBlocked: false,
     statusManualToggle: false,
-  }).select(
-    "_id merchantDetail.availability.type merchantDetail.availability.specificDays"
-  );
+  })
+    .select("_id merchantDetail.availability.type merchantDetail.availability.specificDays")
+    .lean();
 
   let merchantsToOpen = [];
   let merchantsToClose = [];
@@ -258,10 +264,99 @@ const deleteOldTasks = async () => {
   }
 };
 
+const checkOrdersNearDelivery = async (io, userSocketMap) => {
+  try {
+    const notificationSetting = await NotificationSetting.findOne({
+      event: "order-delay-alert",
+      status: true,
+    });
+
+    // Only run if the notification setting is enabled
+    if (!notificationSetting) return;
+
+    const now = new Date();
+    const tenMinutesLater = new Date(now.getTime() + 10 * 60 * 1000);
+
+    // Find on-going orders with deliveryTime within the next 10 minutes, not already alerted
+    const orders = await Order.find({
+      status: "On-going",
+      deliveryTime: { $gte: now, $lte: tenMinutesLater },
+      delayAlertSent: { $ne: true },
+    }).lean();
+
+    if (!orders.length) return;
+
+    // Mark all matched orders as alerted (bulk update to avoid duplicate notifications)
+    const orderIds = orders.map((o) => o._id);
+    await Order.updateMany(
+      { _id: { $in: orderIds } },
+      { $set: { delayAlertSent: true } }
+    );
+
+    const title = notificationSetting.title || "Order Delay Alert";
+    const description =
+      notificationSetting.description ||
+      "An order is approaching its scheduled delivery time.";
+
+    // Fetch all admins and managers
+    const [admins, managers] = await Promise.all([
+      Admin.find().lean(),
+      Manager.find().lean(),
+    ]);
+
+    const allUsers = [...admins, ...managers];
+
+    for (const order of orders) {
+      const notificationData = {
+        title,
+        description: `Order ${order._id} is due for delivery in ~10 minutes.`,
+        orderId: order._id,
+      };
+
+      for (const user of allUsers) {
+        const userId = user._id.toString();
+
+        // Send socket notification if user is connected
+        if (userSocketMap && userSocketMap[userId]?.socketId) {
+          io.to(userSocketMap[userId].socketId).emit("orderDelayAlert", {
+            ...notificationData,
+          });
+        }
+
+        // Send FCM push notification
+        try {
+          const fcmTokenDoc = await FcmToken.findOne({ userId });
+          if (fcmTokenDoc?.token?.length) {
+            // Log the admin notification
+            await AdminNotificationLogs.create({
+              title,
+              description: notificationData.description,
+              orderId: order._id ? [order._id] : [],
+              merchantId: order.merchantId || null,
+            });
+          }
+        } catch (err) {
+          console.log(
+            `Error logging delay alert notification for user ${userId}: ${err.message}`
+          );
+        }
+      }
+    }
+
+    console.log(
+      `[orderDelayAlert] Sent alerts for ${orders.length} order(s): ${orderIds.join(", ")}`
+    );
+  } catch (err) {
+    console.error(`Error in checkOrdersNearDelivery: ${err.message}`);
+    errorLogger(`Error in checkOrdersNearDelivery: ${JSON.stringify(err)}`);
+  }
+};
+
 module.exports = {
   automaticStatusOfflineForAgent,
   automaticStatusToggleForMerchant,
   deleteOldLogs,
   removeOldNotifications,
   deleteOldTasks,
+  checkOrdersNearDelivery,
 };

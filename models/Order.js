@@ -301,9 +301,20 @@ const orderSchema = mongoose.Schema(
     orderRating: orderRatingSchema,
     commissionDetail: commissionDetailSchema,
     isReady: { type: Boolean, default: false },
+    delayAlertSent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
+
+// Indexes for frequently-queried fields
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ merchantId: 1, createdAt: -1 });
+orderSchema.index({ customerId: 1, createdAt: -1 });
+orderSchema.index({ agentId: 1 });
+orderSchema.index({ deliveryMode: 1 });
+orderSchema.index({ deliveryOption: 1 });
+orderSchema.index({ deliveryTime: 1, status: 1, delayAlertSent: 1 });
+orderSchema.index({ scheduledOrderId: 1 });
 
 orderSchema.pre("save", async function (next) {
   if (this.isNew) {

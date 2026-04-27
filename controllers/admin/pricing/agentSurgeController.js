@@ -70,10 +70,9 @@ const getAllAgentSurgeController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const allSurge = await AgentSurge.find(filter).populate(
-      "geofenceId",
-      "name"
-    );
+    const allSurge = await AgentSurge.find(filter)
+      .populate("geofenceId", "name")
+      .sort({ ruleName: 1 });
 
     res.status(200).json({
       message: "All customer surge",

@@ -12,15 +12,9 @@ const getAllActivityLogsController = async (req, res, next) => {
 
     if (req.geofenceId && req.geofenceId.length > 0) {
       const [customers, agents, merchants] = await Promise.all([
-        Customer.find(
-          { "customerDetails.geofenceId": { $in: req.geofenceId } },
-          "_id"
-        ),
-        Agent.find({ geofenceId: { $in: req.geofenceId } }, "_id"),
-        Merchant.find(
-          { "merchantDetail.geofenceId": { $in: req.geofenceId } },
-          "_id"
-        ),
+        Customer.find({ "customerDetails.geofenceId": { $in: req.geofenceId } }, "_id").lean(),
+        Agent.find({ geofenceId: { $in: req.geofenceId } }, "_id").lean(),
+        Merchant.find({ "merchantDetail.geofenceId": { $in: req.geofenceId } }, "_id").lean(),
       ]);
 
       const userIds = [
@@ -32,7 +26,7 @@ const getAllActivityLogsController = async (req, res, next) => {
       filter.userId = { $in: userIds };
     }
 
-    const allLogs = await ActivityLog.find(filter).sort({ createdAt: -1 });
+    const allLogs = await ActivityLog.find(filter).sort({ createdAt: -1 }).lean();
 
     const formattedResponse = allLogs?.map((logs) => ({
       date: formatDate(logs.createdAt),

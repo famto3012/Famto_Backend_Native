@@ -38,7 +38,7 @@ const addProductDiscountController = async (req, res, next) => {
     const existingDiscounts = await ProductDiscount.find({
       merchantId,
       productId: { $in: productId },
-    });
+    }).lean();
 
     if (existingDiscounts.length > 0) {
       const conflictingProductIds = existingDiscounts
@@ -47,7 +47,9 @@ const addProductDiscountController = async (req, res, next) => {
 
       const conflictingProducts = await Product.find({
         _id: { $in: conflictingProductIds },
-      }).select("productName");
+      })
+        .select("productName")
+        .lean();
 
       const conflictingProductNames = conflictingProducts.map(
         (product) => product.productName
@@ -81,7 +83,8 @@ const addProductDiscountController = async (req, res, next) => {
 
     const populatedDiscount = await ProductDiscount.findById(discount._id)
       .populate("productId", "productName")
-      .populate("geofenceId", "name");
+      .populate("geofenceId", "name")
+      .lean();
 
     const formattedResponse = {
       discountId: populatedDiscount._id,
@@ -112,7 +115,7 @@ const editProductDiscountController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    let existingDiscount = await ProductDiscount.findById(id);
+    let existingDiscount = await ProductDiscount.findById(id).lean();
     if (!existingDiscount) return next(appError("Discount not found", 404));
 
     const {
@@ -134,7 +137,7 @@ const editProductDiscountController = async (req, res, next) => {
       _id: { $ne: id }, // Exclude the current discount
       merchantId,
       productId: { $in: productId },
-    });
+    }).lean();
 
     if (conflictingDiscounts.length > 0) {
       // Extract conflicting product IDs
@@ -145,7 +148,9 @@ const editProductDiscountController = async (req, res, next) => {
       // Fetch product names for conflicting product IDs
       const conflictingProducts = await Product.find({
         _id: { $in: conflictingProductIds },
-      }).select("productName");
+      })
+        .select("productName")
+        .lean();
 
       const conflictingProductNames = conflictingProducts.map(
         (product) => product.productName
@@ -224,7 +229,7 @@ const deleteProductDiscountController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const discount = await ProductDiscount.findById(id);
+    const discount = await ProductDiscount.findById(id).lean();
     if (!discount) return next(appError("Discount not found", 404));
 
     await Promise.all([
@@ -246,7 +251,8 @@ const getAllProductDiscountController = async (req, res, next) => {
 
     const discounts = await ProductDiscount.find({ merchantId })
       .populate("geofenceId", "name")
-      .populate("productId", "productName");
+      .populate("productId", "productName")
+      .lean();
 
     const formattedResponse = discounts?.map((discount) => ({
       discountId: discount._id,
@@ -301,7 +307,7 @@ const getProductDiscountByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const discount = await ProductDiscount.findById(id);
+    const discount = await ProductDiscount.findById(id).lean();
 
     if (!discount) return next(appError("Discount not found", 404));
 
@@ -361,7 +367,7 @@ const addProductDiscountAdminController = async (req, res, next) => {
     const existingDiscounts = await ProductDiscount.find({
       merchantId,
       productId: { $in: productId },
-    });
+    }).lean();
 
     if (existingDiscounts.length > 0) {
       const conflictingProductIds = existingDiscounts
@@ -370,7 +376,9 @@ const addProductDiscountAdminController = async (req, res, next) => {
 
       const conflictingProducts = await Product.find({
         _id: { $in: conflictingProductIds },
-      }).select("productName");
+      })
+        .select("productName")
+        .lean();
 
       const conflictingProductNames = conflictingProducts.map(
         (product) => product.productName
@@ -404,7 +412,8 @@ const addProductDiscountAdminController = async (req, res, next) => {
 
     const populatedDiscount = await ProductDiscount.findById(discount._id)
       .populate("productId", "productName")
-      .populate("geofenceId", "name");
+      .populate("geofenceId", "name")
+      .lean();
 
     const formattedResponse = {
       discountId: populatedDiscount._id,
@@ -439,7 +448,8 @@ const getAllProductDiscountAdminController = async (req, res, next) => {
       merchantId: id,
     })
       .populate("geofenceId", "name")
-      .populate("productId", "productName");
+      .populate("productId", "productName")
+      .lean();
 
     const formattedResponse = discounts?.map((discount) => ({
       discountId: discount._id,

@@ -2118,6 +2118,7 @@ const completeOrderController = async (req, res, next) => {
               orderId: orderFound._id || batchOrderFound?._id,
               customerId: customerFound._id,
               merchantId: orderFound?.merchantId || batchOrderFound?.merchantId,
+              agentName: agentFound.fullName,
             },
           },
           role.charAt(0).toUpperCase() + role.slice(1)

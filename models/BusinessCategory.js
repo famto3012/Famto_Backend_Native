@@ -41,6 +41,10 @@ const BusinessCategorySchema = new mongoose.Schema(
       enum: ["cover", "contain"],
       default: "cover",
     },
+    hasFoodType: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

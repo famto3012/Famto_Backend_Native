@@ -8,7 +8,7 @@ const {
 
 const getCustomerCustomizationController = async (req, res, next) => {
   try {
-    const customization = await CustomerAppCustomization.findOne({});
+    const customization = await CustomerAppCustomization.findOne({}).lean();
 
     const formattedResponse = {
       splashScreenUrl: customization?.splashScreenUrl || null,
@@ -45,9 +45,9 @@ const getCustomerCustomizationController = async (req, res, next) => {
 
 const getTimingsForCustomerApp = async (req, res, next) => {
   try {
-    const customization = await CustomerAppCustomization.findOne({}).select(
-      "customOrderCustomization pickAndDropOrderCustomization"
-    );
+    const customization = await CustomerAppCustomization.findOne({})
+      .select("customOrderCustomization pickAndDropOrderCustomization")
+      .lean();
 
     const formattedResponse = {
       customOrderTimings: {
@@ -87,7 +87,7 @@ const createOrUpdateCustomerCustomizationController = async (
       appUpdateType,
     } = req.body;
 
-    const customization = await CustomerAppCustomization.findOne({});
+    const customization = await CustomerAppCustomization.findOne({}).lean();
 
     let splashScreenUrl = customization?.splashScreenUrl;
 
@@ -168,9 +168,9 @@ const createOrUpdateCustomerCustomizationController = async (
 
 const getCustomerAppAppUpdateType = async (req, res, next) => {
   try {
-    const customization = await CustomerAppCustomization.findOne({}).select(
-      "appUpdateType"
-    );
+    const customization = await CustomerAppCustomization.findOne({})
+      .select("appUpdateType")
+      .lean();
 
     res.status(200).json({
       success: true,

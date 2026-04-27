@@ -846,7 +846,7 @@ const filterAgentPayoutController = async (req, res, next) => {
 
     const matchedAgents = await Agent.find(filterCriteria).select(
       "_id fullName phoneNumber workStructure.cashInHand"
-    );
+    ).lean();
 
     const agentIds = matchedAgents.map((a) => a._id);
 
@@ -1064,7 +1064,7 @@ const downloadAgentCSVController = async (req, res, next) => {
       .populate("workStructure.managerId", "name")
       .populate("workStructure.salaryStructureId", "ruleName")
       .sort({ createdAt: -1 })
-      .exec();
+      .lean();
 
     let formattedResponse = [];
 
@@ -1169,9 +1169,8 @@ const downloadAgentPayoutCSVController = async (req, res, next) => {
     // Fetch agents with geofence details
     const matchedAgents = await Agent.find(filterCriteria)
       .populate("geofenceId", "name")
-      .select(
-        "_id fullName phoneNumber workStructure.cashInHand geofenceId bankDetail"
-      );
+      .select("_id fullName phoneNumber workStructure.cashInHand geofenceId bankDetail")
+      .lean();
 
     const agentIds = matchedAgents.map((a) => a._id);
 

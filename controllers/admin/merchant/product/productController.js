@@ -54,10 +54,10 @@ const addProductController = async (req, res, next) => {
   } = req.body;
 
   try {
-    const existingProduct = await Product.findOne({ productName, categoryId });
-    const category = await Category.findById(categoryId).populate(
-      "businessCategoryId"
-    );
+    const existingProduct = await Product.findOne({ productName, categoryId }).lean();
+    const category = await Category.findById(categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -67,7 +67,7 @@ const addProductController = async (req, res, next) => {
     }
 
     // Find the highest order number
-    const lastCategory = await Product.findOne().sort({ order: -1 });
+    const lastCategory = await Product.findOne().sort({ order: -1 }).lean();
     const newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
     // Determine the price based on user role
@@ -125,7 +125,7 @@ const getAllProductsByMerchant = async (req, res) => {
   try {
     const { merchantId } = req.params;
 
-    const categories = await Category.find({ merchantId }).select("_id");
+    const categories = await Category.find({ merchantId }).select("_id").lean();
 
     const categoryIds = categories.map((category) => category._id);
 
@@ -133,7 +133,8 @@ const getAllProductsByMerchant = async (req, res) => {
       categoryId: { $in: categoryIds },
     })
       .select("productName")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -148,7 +149,7 @@ const getProductController = async (req, res, next) => {
   try {
     const { productId } = req.params;
 
-    const productFound = await Product.findById(productId);
+    const productFound = await Product.findById(productId).lean();
 
     if (!productFound) return next(appError("Product not found", 404));
 
@@ -191,10 +192,10 @@ const editProductController = async (req, res, next) => {
 
   try {
     const { productId } = req.params;
-    const productToUpdate = await Product.findById(productId);
-    const category = await Category.findById(
-      productToUpdate.categoryId
-    ).populate("businessCategoryId");
+    const productToUpdate = await Product.findById(productId).lean();
+    const category = await Category.findById(productToUpdate.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -266,7 +267,7 @@ const editProductController = async (req, res, next) => {
 
 const deleteProductController = async (req, res, next) => {
   try {
-    const productToDelete = await Product.findById(req.params.productId);
+    const productToDelete = await Product.findById(req.params.productId).lean();
 
     if (!productToDelete) {
       return next(appError("Product not found", 404));
@@ -303,7 +304,7 @@ const searchProductController = async (req, res, next) => {
         { productName: { $regex: searchTerm, $options: "i" } },
         { searchTags: { $regex: searchTerm, $options: "i" } },
       ],
-    });
+    }).lean();
 
     res.status(200).json({
       message: "Searched product results",
@@ -322,7 +323,8 @@ const getProductByCategoryController = async (req, res, next) => {
       categoryId: categoryId,
     })
       .select("productName inventory")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       message: "Products By category",
@@ -429,9 +431,9 @@ const addVariantToProductController = async (req, res, next) => {
     if (!product) {
       return next(appError("Product not found", 404));
     }
-    const category = await Category.findById(product.categoryId).populate(
-      "businessCategoryId"
-    );
+    const category = await Category.findById(product.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -465,8 +467,8 @@ const addVariantToProductController = async (req, res, next) => {
     product.variants.push(newVariant);
 
     await Promise.all([
-      await product.save(),
-      await ActivityLog.create({
+      product.save(),
+      ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
         description: `Variants added to product (${product.productName}) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
@@ -489,9 +491,9 @@ const editVariantController = async (req, res, next) => {
 
     const product = await Product.findById(productId);
     if (!product) return next(appError("Product not found", 404));
-    const category = await Category.findById(product.categoryId).populate(
-      "businessCategoryId"
-    );
+    const category = await Category.findById(product.categoryId)
+      .populate("businessCategoryId")
+      .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
 
@@ -860,177 +862,160 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
     const categoryTypeArray = ["Veg", "Non-veg", "Both"];
     const productTypeArray = ["Veg", "Non-veg", "Other"];
 
-    // Parse the CSV data
+    // Collect raw rows synchronously — no async work here so "end" always
+    // fires after all rows are collected and before any response is sent.
+    const rawRows = [];
+
     stream
       .pipe(csvParser())
-      .on("data", async (row) => {
+      .on("data", (row) => {
         const isRowEmpty = Object.values(row).every(
           (value) => value.trim() === ""
         );
-
-        if (!isRowEmpty) {
-          const businessCategoryName = row["Business Category Name*"]?.trim();
-          const categoryName = row["Category Name*"]?.trim();
-          const productName = row["Product Name*"]?.trim();
-          const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
-          const categoryType = row["Category Type*"]?.trim();
-          const productType = row["Product Type*"]?.trim();
-
-          if (!businessCategoryTitles.includes(businessCategoryName)) {
-            await deleteFromFirebase(fileUrl);
-            return next(
-              appError(
-                "One or more business categories does not match the merchant's business categories",
-                400
-              )
-            );
-          }
-
-          if (!categoryTypeArray.includes(categoryType)) {
-            await deleteFromFirebase(fileUrl);
-            return next(
-              appError("One or more category types are invalid", 400)
-            );
-          }
-
-          if (!productTypeArray.includes(productType)) {
-            await deleteFromFirebase(fileUrl);
-            return next(appError("One or more product types are invalid", 400));
-          }
-
-          if (!categoriesMap.has(categoryKey)) {
-            categoriesMap.set(categoryKey, {
-              categoryData: {
-                merchantId,
-                businessCategoryName, // Ensure businessCategoryName is set correctly
-                categoryName,
-                type: categoryType,
-                status:
-                  row["Category Status*"]?.trim() === "TRUE" ||
-                  row["Category Status*"]?.trim() === "true"
-                    ? true
-                    : false,
-              },
-              products: [], // Array to store products under this category
-            });
-          }
-
-          // console.log(
-          //   "Parsed Category Data:",
-          //   categoriesMap.get(categoryKey).categoryData
-          // );
-
-          // Get the category entry from the map
-          const categoryEntry = categoriesMap.get(categoryKey);
-
-          const businessCategory = await BusinessCategory.findOne({
-            title: businessCategoryName,
-          });
-
-          let increasedPercentage = 0; // Default 5% if no business category is found
-          if (businessCategory) {
-            increasedPercentage = businessCategory?.increasedPercentage || 5;
-          }
-
-          // Check if the product already exists in the category
-          let existingProduct = categoryEntry.products.find((p) => {
-            return p.productName.toLowerCase() === productName.toLowerCase();
-          });
-
-          // console.log("Existing product out", existingProduct);
-
-          if (!existingProduct) {
-            // Create a new product if it doesn't exist
-            existingProduct = {
-              productName,
-              price: Math.round(
-                req.userRole === "Merchant"
-                  ? parseFloat(row["Product Cost Price*"]?.trim()) *
-                      (1 + increasedPercentage / 100)
-                  : row["Product Price*"]?.trim()
-                  ? parseFloat(row["Product Price*"]?.trim())
-                  : parseFloat(row["Product Cost Price*"]?.trim()) *
-                    (1 + increasedPercentage / 100)
-              ),
-              minQuantityToOrder:
-                parseInt(row["Min Quantity To Order"]?.trim()) || 0,
-              maxQuantityPerOrder:
-                parseInt(row["Max Quantity Per Order"]?.trim()) || 0,
-              costPrice: parseFloat(row["Product Cost Price*"]?.trim()),
-              sku: row["SKU"]?.trim() || null,
-              preparationTime: row["Preparation Time"]?.trim() || "",
-              description: row["Description"]?.trim() || "",
-              longDescription: row["Long Description"]?.trim() || "",
-              type: productType,
-              inventory:
-                row["Inventory"]?.trim() === "TRUE" ||
-                row["Inventory"]?.trim() === "true"
-                  ? true
-                  : false,
-              productImageURL: row["Product Image"]?.trim() || "",
-              availableQuantity:
-                parseInt(row["Available quantity"]?.trim()) || 0,
-              alert: parseInt(row["Alert"]?.trim()) || 0,
-              variants: [], // Initialize empty variants array
-            };
-
-            // Add the new product to the category's product list
-            categoryEntry.products.push(existingProduct);
-            // console.log("New Product Added:", existingProduct.productName);
-          }
-
-          // Now handle the variant part
-          const variantName = row["Variant Name"]?.trim();
-          const variantTypeName = row["Variant Type Name"]?.trim();
-          const variantTypeCostPrice = parseFloat(
-            row["Variant Type Cost Price"]?.trim()
-          );
-          const variantTypePrice = Math.round(
-            req.userRole === "Merchant"
-              ? variantTypeCostPrice * (1 + increasedPercentage / 100)
-              : row["Variant Type Price"]?.trim()
-              ? parseFloat(row["Variant Type Price"]?.trim())
-              : variantTypeCostPrice * (1 + increasedPercentage / 100)
-          );
-
-          if (
-            variantName &&
-            variantTypeName &&
-            variantTypePrice !== null &&
-            variantTypePrice !== undefined
-          ) {
-            // Check if the product already has the variant
-            let existingVariant = existingProduct.variants.find(
-              (v) => v.variantName.toLowerCase() === variantName.toLowerCase()
-            );
-
-            if (!existingVariant) {
-              // If the variant doesn't exist, create a new one
-              existingVariant = {
-                variantName,
-                variantTypes: [],
-              };
-
-              // Add the new variant to the product's variants array
-              existingProduct.variants.push(existingVariant);
-              // console.log("New Variant Added:", existingVariant);
-            }
-
-            // Add the variant type to the existing or newly created variant
-            existingVariant.variantTypes.push({
-              typeName: variantTypeName,
-              price: variantTypePrice,
-              costPrice: variantTypeCostPrice,
-            });
-
-            // console.log("Updated Variant:", existingVariant);
-          }
-
-          // console.log("Final Updated Product Data:", existingProduct);
-        }
+        if (!isRowEmpty) rawRows.push(row);
       })
       .on("end", async () => {
         try {
+          // ── Validation + categoriesMap building (all async work here) ──
+          for (const row of rawRows) {
+            const businessCategoryName = row["Business Category Name*"]?.trim();
+            const categoryName = row["Category Name*"]?.trim();
+            const productName = row["Product Name*"]?.trim();
+            const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
+            const categoryType = row["Category Type*"]?.trim();
+            const productType = row["Product Type*"]?.trim();
+
+            if (!businessCategoryTitles.includes(businessCategoryName)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError(
+                  "One or more business categories does not match the merchant's business categories",
+                  400
+                )
+              );
+            }
+
+            if (!categoryTypeArray.includes(categoryType)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError("One or more category types are invalid", 400)
+              );
+            }
+
+            if (!productTypeArray.includes(productType)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError("One or more product types are invalid", 400)
+              );
+            }
+
+            if (!categoriesMap.has(categoryKey)) {
+              categoriesMap.set(categoryKey, {
+                categoryData: {
+                  merchantId,
+                  businessCategoryName,
+                  categoryName,
+                  type: categoryType,
+                  status:
+                    row["Category Status*"]?.trim() === "TRUE" ||
+                    row["Category Status*"]?.trim() === "true"
+                      ? true
+                      : false,
+                },
+                products: [],
+              });
+            }
+
+            const categoryEntry = categoriesMap.get(categoryKey);
+
+            const businessCategory = await BusinessCategory.findOne({
+              title: businessCategoryName,
+            }).lean();
+
+            let increasedPercentage = 0;
+            if (businessCategory) {
+              increasedPercentage = businessCategory?.increasedPercentage || 5;
+            }
+
+            let existingProduct = categoryEntry.products.find(
+              (p) => p.productName.toLowerCase() === productName.toLowerCase()
+            );
+
+            if (!existingProduct) {
+              existingProduct = {
+                productName,
+                price: Math.round(
+                  req.userRole === "Merchant"
+                    ? parseFloat(row["Product Cost Price*"]?.trim()) *
+                        (1 + increasedPercentage / 100)
+                    : row["Product Price*"]?.trim()
+                    ? parseFloat(row["Product Price*"]?.trim())
+                    : parseFloat(row["Product Cost Price*"]?.trim()) *
+                      (1 + increasedPercentage / 100)
+                ),
+                minQuantityToOrder:
+                  parseInt(row["Min Quantity To Order"]?.trim()) || 0,
+                maxQuantityPerOrder:
+                  parseInt(row["Max Quantity Per Order"]?.trim()) || 0,
+                costPrice: parseFloat(row["Product Cost Price*"]?.trim()),
+                sku: row["SKU"]?.trim() || null,
+                preparationTime: row["Preparation Time"]?.trim() || "",
+                description: row["Description"]?.trim() || "",
+                longDescription: row["Long Description"]?.trim() || "",
+                type: productType,
+                inventory:
+                  row["Inventory"]?.trim() === "TRUE" ||
+                  row["Inventory"]?.trim() === "true"
+                    ? true
+                    : false,
+                productImageURL: row["Product Image"]?.trim() || "",
+                availableQuantity:
+                  parseInt(row["Available Quantity"]?.trim()) || 0,
+                alert: parseInt(row["Alert"]?.trim()) || 0,
+                variants: [],
+              };
+
+              categoryEntry.products.push(existingProduct);
+            }
+
+            const variantName = row["Variant Name"]?.trim();
+            const variantTypeName = row["Variant Type Name"]?.trim();
+            const variantTypeCostPrice = parseFloat(
+              row["Variant Type Cost Price"]?.trim()
+            );
+            const variantTypePrice = Math.round(
+              req.userRole === "Merchant"
+                ? variantTypeCostPrice * (1 + increasedPercentage / 100)
+                : row["Variant Type Price"]?.trim()
+                ? parseFloat(row["Variant Type Price"]?.trim())
+                : variantTypeCostPrice * (1 + increasedPercentage / 100)
+            );
+
+            if (
+              variantName &&
+              variantTypeName &&
+              variantTypePrice !== null &&
+              variantTypePrice !== undefined
+            ) {
+              let existingVariant = existingProduct.variants.find(
+                (v) =>
+                  v.variantName.toLowerCase() === variantName.toLowerCase()
+              );
+
+              if (!existingVariant) {
+                existingVariant = { variantName, variantTypes: [] };
+                existingProduct.variants.push(existingVariant);
+              }
+
+              existingVariant.variantTypes.push({
+                typeName: variantTypeName,
+                price: variantTypePrice,
+                costPrice: variantTypeCostPrice,
+              });
+            }
+          }
+
+          // ── All rows valid — now save to DB ──
           for (const [
             _,
             { categoryData, products },
@@ -1041,7 +1026,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
             // Find or create the business category using businessCategoryName
             const businessCategoryFound = await BusinessCategory.findOne({
               title: categoryData.businessCategoryName,
-            });
+            }).lean();
 
             if (!businessCategoryFound) {
               // console.log(
@@ -1061,7 +1046,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
             const existingCategory = await Category.findOne({
               merchantId,
               categoryName: categoryData.categoryName,
-            });
+            }).lean();
             // console.log("existingCategory", existingCategory._id)
 
             let newCategory;
@@ -1081,7 +1066,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
               //   `Creating new category: ${categoryData.categoryName}`
               // );
               // Get the last category order
-              let lastCategory = await Category.findOne().sort({ order: -1 });
+              let lastCategory = await Category.findOne().sort({ order: -1 }).lean();
               let newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
               categoryData.order = newOrder++;
@@ -1106,7 +1091,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
                 productName: productData.productName,
                 categoryId: productData.categoryId,
                 sku: productData.sku,
-              });
+              }).lean();
               // console.log("Existing product:", existingProduct);
 
               if (existingProduct) {
@@ -1119,7 +1104,7 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
               } else {
                 // console.log(`Creating new product: ${productData.productName}`);
                 // Get the last product order
-                let lastProduct = await Product.findOne().sort({ order: -1 });
+                let lastProduct = await Product.findOne().sort({ order: -1 }).lean();
                 let newOrder = lastProduct ? lastProduct.order + 1 : 1;
 
                 productData.order = newOrder++;
@@ -1135,7 +1120,8 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
           // Fetch all categories after adding, ordered by the 'order' field in ascending order
           const allCategories = await Category.find({ merchantId })
             .select("categoryName status")
-            .sort({ order: 1 });
+            .sort({ order: 1 })
+            .lean();
 
           await ActivityLog.create({
             userId: req.userAuth,

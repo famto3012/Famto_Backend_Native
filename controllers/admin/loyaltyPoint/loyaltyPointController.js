@@ -73,7 +73,7 @@ const addLoyaltyPointController = async (req, res, next) => {
 // Get loyalty point criteria
 const getLoyaltyPointController = async (req, res, next) => {
   try {
-    const loyaltyPointCriteriaFound = await LoyaltyPoint.findOne({});
+    const loyaltyPointCriteriaFound = await LoyaltyPoint.findOne({}).lean();
 
     const formattedResponse = {
       status: loyaltyPointCriteriaFound?.status || false,

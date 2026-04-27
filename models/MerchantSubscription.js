@@ -22,6 +22,10 @@ const merchantSubscriptionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tax",
     },
+    businessCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BusinessCategory",
+    },
     renewalReminder: {
       type: Number,
       required: true,

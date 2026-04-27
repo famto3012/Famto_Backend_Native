@@ -6,6 +6,7 @@ const appError = require("../../../utils/appError");
 
 const Manager = require("../../../models/Manager");
 const ManagerRoles = require("../../../models/ManagerRoles");
+const { invalidateManagerGeofenceCache } = require("../../../middlewares/isAuthenticated");
 
 //Add manager
 const addManagerController = async (req, res, next) => {
@@ -128,6 +129,9 @@ const editManagerController = async (req, res, next) => {
       return next(appError("Error in updating manager"));
     }
 
+    // Invalidate cached geofence so updated geofence takes effect immediately
+    invalidateManagerGeofenceCache(req.params.managerId);
+
     res.status(200).json({ message: "Manager updated successfully" });
   } catch (err) {
     next(appError(err.message));
@@ -156,7 +160,8 @@ const fetchAllManagersController = async (req, res, next) => {
     const allManagers = await Manager.find(matchCriteria)
       .populate("geofenceId", "name")
       .populate("role", "roleName")
-      .select("-password -resetPasswordToken -resetPasswordExpiry");
+      .select("-password -resetPasswordToken -resetPasswordExpiry")
+      .lean();
 
     const formattedResponse = allManagers?.map((manager) => ({
       managerId: manager?._id,
@@ -177,13 +182,11 @@ const fetchAllManagersController = async (req, res, next) => {
 //Delete manager
 const deleteManagerController = async (req, res, next) => {
   try {
-    const managerFound = await Manager.findById(req.params.managerId);
+    const deleted = await Manager.findByIdAndDelete(req.params.managerId);
 
-    if (!managerFound) {
+    if (!deleted) {
       return next(appError("Manager not found", 404));
     }
-
-    await Manager.findByIdAndDelete(req.params.managerId);
 
     res.status(200).json({
       message: "Manager deleted successfully",

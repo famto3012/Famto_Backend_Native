@@ -22,14 +22,20 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
   }
 
   try {
-    const { name, amount, duration, taxId, renewalReminder, description } =
+    const { name, amount, duration, taxId, businessCategoryId, renewalReminder, description } =
       req.body;
-
+    let totalAmount = amount;
+    if (taxId) {
+      const tax = await Tax.findById(taxId).lean();
+      const taxAmount = amount * (tax.tax / 100);
+      totalAmount = parseFloat(amount) + taxAmount;
+    }
     const subscriptionPlan = new MerchantSubscription({
       name,
       amount: parseFloat(amount),
       duration,
       taxId: taxId || null,
+      businessCategoryId: businessCategoryId || null,
       renewalReminder,
       description,
     });
@@ -53,10 +59,28 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
 
 const getAllMerchantSubscriptionPlansController = async (req, res, next) => {
   try {
-    const plans = await MerchantSubscription.find().populate(
-      "taxId",
-      "taxName"
-    );
+    let query = {};
+
+    if (req.userRole === "Merchant") {
+      const merchant = await Merchant.findById(req.userAuth)
+        .select("merchantDetail.businessCategoryId")
+        .lean();
+
+      const merchantCategoryIds = merchant?.merchantDetail?.businessCategoryId || [];
+
+      // Show plans that match the merchant's business category or have no category set
+      query = {
+        $or: [
+          { businessCategoryId: { $in: merchantCategoryIds } },
+          { businessCategoryId: null },
+        ],
+      };
+    }
+
+    const plans = await MerchantSubscription.find(query)
+      .populate("taxId", "taxName")
+      .populate("businessCategoryId", "title")
+      .lean();
 
     const formattedResponse = plans?.map((plan) => ({
       planId: plan?._id,
@@ -64,6 +88,8 @@ const getAllMerchantSubscriptionPlansController = async (req, res, next) => {
       amount: plan?.amount || null,
       duration: plan?.duration || null,
       taxName: plan?.taxId?.taxName || null,
+      businessCategoryId: plan?.businessCategoryId?._id || null,
+      businessCategoryName: plan?.businessCategoryId?.title || null,
       renewalReminder: plan?.renewalReminder || null,
     }));
 
@@ -85,20 +111,34 @@ const editMerchantSubscriptionPlanController = async (req, res, next) => {
 
   try {
     const { id } = req.params;
-    const { name, amount, duration, taxId, renewalReminder, description } =
+    const { name, amount, duration, taxId, businessCategoryId, renewalReminder, description } =
       req.body;
 
-    const subscriptionPlan = await MerchantSubscription.findById(id);
+    const subscriptionPlan = await MerchantSubscription.findById(id).lean();
     if (!subscriptionPlan) {
       return res.status(404).json({ message: "Subscription plan not found" });
     }
+    // TODO:Need to recheck the amount calculation when updating only the price
+    // Calculate the new total amount only if the taxId changes
+    let totalAmount = amount;
+    if (
+      amount !== subscriptionPlan.amount ||
+      taxId.toString() !== subscriptionPlan.taxId?.toString()
+    ) {
+      const oldTax = await Tax.findById(subscriptionPlan.taxId).lean();
+      const baseAmount = amount / (1 + oldTax?.tax / 100);
 
+      const newTax = await Tax.findById(taxId).lean();
+      const taxAmount = baseAmount * (newTax?.tax / 100);
+      totalAmount = Math.round(baseAmount + taxAmount);
+    }
     // Update subscription plan fields if provided
     const updatedFields = {
       ...(name && { name }),
       ...(amount && { amount: parseFloat(amount) }),
       ...(duration && { duration }),
       ...(taxId && { taxId }),
+      businessCategoryId: businessCategoryId || null,
       ...(renewalReminder && { renewalReminder }),
       ...(description && { description }),
     };
@@ -129,7 +169,9 @@ const getSingleMerchantSubscriptionPlanController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const plan = await MerchantSubscription.findById(id);
+    const plan = await MerchantSubscription.findById(id)
+      .populate("businessCategoryId", "title")
+      .lean();
 
     if (!plan) return next(appError("Subscription plan not found", 404));
 
@@ -139,6 +181,8 @@ const getSingleMerchantSubscriptionPlanController = async (req, res, next) => {
       amount: plan.amount || null,
       duration: plan.duration || null,
       taxId: plan.taxId || null,
+      businessCategoryId: plan?.businessCategoryId?._id || null,
+      businessCategoryName: plan?.businessCategoryId?.title || null,
       renewalReminder: plan.renewalReminder || null,
     };
 
@@ -206,7 +250,9 @@ const currentSubscriptionDetailOfMerchant = async (req, res, next) => {
 
     const planLog = await SubscriptionLog.findById(
       subscriptionPlan.modelId
-    ).populate("planId");
+    )
+      .populate("planId")
+      .lean();
 
     if (!planLog) {
       console.log("Plan log length is null");
@@ -220,7 +266,7 @@ const currentSubscriptionDetailOfMerchant = async (req, res, next) => {
       0
     );
 
-    const planDetails = await MerchantSubscription.findById(planLog.planId);
+    const planDetails = await MerchantSubscription.findById(planLog.planId).lean();
 
     const formattedResponse = {
       planName: planDetails?.name || null,
@@ -257,9 +303,14 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
       renewalReminder,
       description,
     } = req.body;
-
+    let totalAmount = amount;
+    if (taxId) {
+      const tax = await Tax.findById(taxId).lean();
+      const taxAmount = amount * (tax.tax / 100);
+      totalAmount = parseFloat(amount) + taxAmount;
+    }
     const [newPlan, _] = await Promise.all([
-      await CustomerSubscription.create({
+      CustomerSubscription.create({
         name,
         amount: parseFloat(amount),
         duration,
@@ -268,7 +319,7 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
         noOfOrder,
         description,
       }),
-      await ActivityLog.create({
+      ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
         description: `New Customer subscription plan (${name}) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
@@ -286,10 +337,9 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
 
 const getAllCustomerSubscriptionPlansController = async (req, res, next) => {
   try {
-    const plans = await CustomerSubscription.find().populate(
-      "taxId",
-      "taxName"
-    );
+    const plans = await CustomerSubscription.find()
+      .populate("taxId", "taxName")
+      .lean();
 
     const formattedResponse = plans?.map((plan) => ({
       planId: plan._id,
@@ -331,14 +381,37 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
       description,
     } = req.body;
 
-    const subscriptionPlan = await CustomerSubscription.findById(id);
+    const subscriptionPlan = await CustomerSubscription.findById(id).lean();
 
     if (!subscriptionPlan) {
       return next(appError("Subscription plan not found", 404));
     }
+    let totalAmount = amount;
 
+    if (!subscriptionPlan.taxId && taxId) {
+      // Scenario 1: Tax not set initially, add tax now
+      const tax = await Tax.findById(taxId).lean();
+      const taxAmount = amount * (tax.tax / 100);
+      totalAmount = parseFloat(amount) + taxAmount;
+    } else if (
+      subscriptionPlan.taxId &&
+      taxId &&
+      taxId.toString() !== subscriptionPlan.taxId.toString()
+    ) {
+      // Scenario 2: Existing tax is being changed to a new tax
+      const oldTax = await Tax.findById(subscriptionPlan.taxId).lean();
+      const baseAmount = amount / (1 + oldTax.tax / 100);
+      const newTax = await Tax.findById(taxId).lean();
+      const taxAmount = baseAmount * (newTax.tax / 100);
+      totalAmount = parseFloat(baseAmount) + taxAmount;
+    } else if (subscriptionPlan.taxId && !taxId) {
+      // Scenario 3: Existing tax is being removed
+      const oldTax = await Tax.findById(subscriptionPlan.taxId).lean();
+      const baseAmount = amount / (1 + oldTax.tax / 100);
+      totalAmount = parseFloat(baseAmount); // No new tax is applied, use base amount only
+    }
     let [updatedPlan, _] = await Promise.all([
-      await CustomerSubscription.findByIdAndUpdate(
+      CustomerSubscription.findByIdAndUpdate(
         id,
         {
           name,
@@ -351,7 +424,7 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
         },
         { new: true }
       ),
-      await ActivityLog.create({
+      ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
         description: `Customer subscription plan (${name}) is updated by ${req.userRole} (${req.userName} - ${req.userAuth})`,
@@ -373,7 +446,7 @@ const getSingleCustomerSubscriptionPlanController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const plan = await CustomerSubscription.findById(id);
+    const plan = await CustomerSubscription.findById(id).lean();
 
     if (!plan) return next(appError("Subscription plan not found", 404));
 

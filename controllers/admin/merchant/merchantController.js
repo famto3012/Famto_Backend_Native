@@ -695,6 +695,12 @@ const fetchAllMerchantsController = async (req, res, next) => {
             $options: "i",
           },
         },
+        {
+          _id: {
+            $regex: name.trim(),
+            $options: "i",
+          },
+        },
       ];
     }
 
@@ -1547,6 +1553,52 @@ const verifyPaymentController = async (req, res, next) => {
   }
 };
 
+// Directly activate sponsorship by admin/manager (no Razorpay)
+const adminAddSponsorshipController = async (req, res, next) => {
+  try {
+    const { merchantId } = req.params;
+    const { currentPlan } = req.body;
+
+    if (!currentPlan) {
+      return next(appError("Sponsorship plan is required", 400));
+    }
+
+    const merchantFound = await Merchant.findById(merchantId);
+    if (!merchantFound) {
+      return next(appError("Merchant not found", 404));
+    }
+
+    let startDate = new Date();
+
+    const existingSponsorships = merchantFound?.sponsorshipDetail || [];
+    if (existingSponsorships.length > 0) {
+      const lastSponsorship = existingSponsorships[existingSponsorships.length - 1];
+      if (new Date(lastSponsorship.endDate) > new Date()) {
+        startDate = new Date(lastSponsorship.endDate);
+      }
+    }
+
+    const endDate = calculateEndDate(startDate, currentPlan);
+
+    merchantFound.sponsorshipDetail.push({
+      sponsorshipStatus: true,
+      currentPlan,
+      startDate,
+      endDate,
+      paymentDetails: JSON.stringify({ addedBy: req.userRole, addedById: req.userAuth }),
+    });
+
+    await merchantFound.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Sponsorship activated successfully",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 // Block a merchant
 const blockMerchant = async (req, res, next) => {
   try {
@@ -2347,6 +2399,7 @@ module.exports = {
   rejectRegistrationController,
   sponsorshipPaymentController,
   verifyPaymentController,
+  adminAddSponsorshipController,
   blockMerchant,
   addMerchantController,
   editMerchantController,

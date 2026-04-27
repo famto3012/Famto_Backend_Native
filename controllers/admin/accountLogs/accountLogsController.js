@@ -13,15 +13,9 @@ const { formatDate, formatTime } = require("../../../utils/formatters");
 
 const getGeofenceUserIds = async (geofenceId) => {
   const [customers, agents, merchants] = await Promise.all([
-    Customer.find(
-      { "customerDetails.geofenceId": { $in: geofenceId } },
-      "_id"
-    ),
-    Agent.find({ geofenceId: { $in: geofenceId } }, "_id"),
-    Merchant.find(
-      { "merchantDetail.geofenceId": { $in: geofenceId } },
-      "_id"
-    ),
+    Customer.find({ "customerDetails.geofenceId": { $in: geofenceId } }, "_id").lean(),
+    Agent.find({ geofenceId: { $in: geofenceId } }, "_id").lean(),
+    Merchant.find({ "merchantDetail.geofenceId": { $in: geofenceId } }, "_id").lean(),
   ]);
 
   return [
@@ -63,7 +57,7 @@ const filterUserInAccountLogs = async (req, res, next) => {
       filterCriteria.userId = { $in: userIds };
     }
 
-    const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 });
+    const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 }).lean();
 
     const formattedResponse = logs.map((log) => ({
       logId: log._id,
@@ -156,7 +150,7 @@ const downloadUserCSVInAccountLogs = async (req, res, next) => {
       filterCriteria.userId = { $in: userIds };
     }
 
-    const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 });
+    const logs = await AccountLogs.find(filterCriteria).sort({ createdAt: -1 }).lean();
 
     const formattedResponse = logs.map((log) => ({
       userId: log.userId,

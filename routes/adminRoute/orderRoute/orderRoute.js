@@ -38,6 +38,7 @@ const {
   markOrderAsCompletedByAdminController,
   markPaymentCollectedFromCustomer,
   markOrderAsCancelled,
+  getOrderChatByAdminController,
 } = require("../../../controllers/admin/order/adminOrderController");
 const isAdmin = require("../../../middlewares/isAdmin");
 const { upload } = require("../../../utils/imageOperation");
@@ -271,6 +272,13 @@ orderRoute.patch(
   isAuthenticated,
   isAdmin,
   markOrderAsCancelled
+);
+
+// Get customer-agent chat for a specific order
+orderRoute.get(
+  "/admin/order-chat/:orderId",
+  isAuthenticated,
+  getOrderChatByAdminController
 );
 
 module.exports = orderRoute;

@@ -106,7 +106,7 @@ const createOrUpdateMerchantCustomizationController = async (
 
 const getMerchantCustomizationController = async (req, res, next) => {
   try {
-    const customization = await MerchantAppCustomization.findOne();
+    const customization = await MerchantAppCustomization.findOne().lean();
 
     if (!customization) {
       return res.status(200).json({
@@ -125,9 +125,9 @@ const getMerchantCustomizationController = async (req, res, next) => {
 
 const getMerchantAppAppUpdateType = async (req, res, next) => {
   try {
-    const customization = await MerchantAppCustomization.findOne({}).select(
-      "appUpdateType"
-    );
+    const customization = await MerchantAppCustomization.findOne({})
+      .select("appUpdateType")
+      .lean();
 
     res.status(200).json({
       success: true,

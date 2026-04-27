@@ -65,5 +65,9 @@ const taskSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+taskSchema.index({ orderId: 1 });
+taskSchema.index({ agentId: 1 });
+taskSchema.index({ taskStatus: 1, createdAt: -1 });
+
 const Task = mongoose.model("Task", taskSchema);
 module.exports = Task;

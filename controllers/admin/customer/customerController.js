@@ -35,7 +35,8 @@ const getAllCustomersController = async (req, res, next) => {
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails averageRating"
       )
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     // Count total documents
     const totalDocuments = await Customer.countDocuments({
@@ -368,10 +369,12 @@ const getSingleCustomerController = async (req, res, next) => {
           select: "merchantDetail",
         })
         .sort({ createdAt: -1 })
-        .limit(50),
+        .limit(50)
+        .lean(),
       CustomerWalletTransaction.find({ customerId })
         .sort({ date: -1 })
-        .limit(50),
+        .limit(50)
+        .lean(),
     ]);
 
     const formattedCustomerOrders = orders?.map((order) => {
@@ -485,7 +488,9 @@ const editCustomerDetailsController = async (req, res, next) => {
   } = req.body;
 
   try {
-    const customer = await Customer.findById(req.params.customerId);
+    const customer = await Customer.findById(req.params.customerId)
+      .select("customerDetails.customerImageURL")
+      .lean();
 
     if (!customer) {
       return next(appError("Customer not found", 404));
@@ -696,8 +701,8 @@ const addCustomerFromCSVController = async (req, res, next) => {
           };
 
           // Validate required fields
-          if (!customer.email && !customer.phoneNumber) {
-            return next(appError("Either email or phoneNumber is required."));
+          if (!customer.phoneNumber) {
+            return next(appError("Phone number is required."));
           }
 
           customers.push(customer);
@@ -707,49 +712,40 @@ const addCustomerFromCSVController = async (req, res, next) => {
         console.log("Finished parsing CSV data. Customers:", customers); // Log the final customers array
 
         try {
-          const customerPromise = customers.map(async (customerData) => {
-            // Check if the customer already exists
-            const existingCustomer = await Customer.findOne({
-              $or: [
-                { email: customerData.email },
-                { phoneNumber: customerData.phoneNumber },
-              ],
-            });
+          const created = [];
+          const skipped = [];
 
-            console.log("Existing customer check:", existingCustomer); // Log if customer exists
+          const customerPromise = customers.map(async (customerData) => {
+            // Check uniqueness by phone number only
+            const existingCustomer = customerData.phoneNumber
+              ? await Customer.findOne({ phoneNumber: customerData.phoneNumber }).select("_id phoneNumber").lean()
+              : null;
 
             if (existingCustomer) {
-              // Prepare the update object
-              const updateData = {};
-
-              // Update only the provided fields
-              if (customerData.fullName)
-                updateData.fullName = customerData.fullName;
-              if (customerData.email) updateData.email = customerData.email;
-              if (customerData.phoneNumber)
-                updateData.phoneNumber = customerData.phoneNumber;
-
-              console.log("Updating customer:", existingCustomer._id); // Log the update operation
-              await Customer.findByIdAndUpdate(
-                existingCustomer._id,
-                { $set: updateData },
-                { new: true }
-              );
+              // Customer already exists — skip without overwriting
+              skipped.push({
+                fullName: customerData.fullName || "",
+                email: customerData.email || "",
+                phoneNumber: customerData.phoneNumber || "",
+                reason: "Customer already exists",
+              });
             } else {
-              console.log("Creating new customer:", customerData); // Log the creation operation
               await Customer.create({
                 ...customerData,
                 "customerDetails.isBlocked": false,
               });
+              created.push(customerData.phoneNumber || customerData.email);
             }
           });
 
           // Wait for all customer processing promises to finish
           await Promise.all(customerPromise);
 
-          // Send success response
           res.status(200).json({
-            message: "Customers added successfully.",
+            message: `Import complete. ${created.length} customer(s) added, ${skipped.length} skipped.`,
+            created: created.length,
+            skipped: skipped.length,
+            skippedDetails: skipped,
           });
         } catch (err) {
           console.error("Error during customer processing:", err); // Log any error during processing
@@ -947,29 +943,28 @@ const getCustomersOfMerchant = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
       ...new Set(ordersOfMerchant.map((order) => order.customerId.toString())),
     ];
 
-    // Fetch customer names for the unique customer IDs
-    const customers = await Customer.find({
-      _id: { $in: uniqueCustomerIds },
-    })
-      .select(
-        "fullName phoneNumber email lastPlatformUsed createdAt averageRating"
-      )
-      .skip(skip)
-      .limit(limit);
+    const customerQuery = { _id: { $in: uniqueCustomerIds } };
 
-    // Count total documents
-    const totalDocuments = await Customer.countDocuments({
-      _id: { $in: uniqueCustomerIds },
-    });
+    // Fetch customer names for the unique customer IDs (parallel)
+    const [customers, totalDocuments] = await Promise.all([
+      Customer.find(customerQuery)
+        .select(
+          "fullName phoneNumber email lastPlatformUsed createdAt averageRating"
+        )
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Customer.countDocuments(customerQuery),
+    ]);
 
     const formattedResponse = customers?.map((customer) => {
       return {
@@ -1020,32 +1015,31 @@ const searchCustomerByNameForMerchantController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Find orders placed with this merchant to get customer IDs
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs from the orders
     const uniqueCustomerIds = [
       ...new Set(ordersOfMerchant.map((order) => order.customerId.toString())),
     ];
 
-    // Find customers by name who belong to this merchant
-    const searchResults = await Customer.find({
+    const searchCriteria = {
       _id: { $in: uniqueCustomerIds },
       fullName: { $regex: query.trim(), $options: "i" },
-    })
-      .select(
-        "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
-      )
-      .skip(skip)
-      .limit(limit)
-      .lean({ virtuals: true });
+    };
 
-    // Count total documents for pagination (only for this merchant)
-    const totalDocuments = await Customer.countDocuments({
-      _id: { $in: uniqueCustomerIds },
-      fullName: { $regex: query.trim(), $options: "i" },
-    });
+    // Find customers by name who belong to this merchant (parallel count)
+    const [searchResults, totalDocuments] = await Promise.all([
+      Customer.find(searchCriteria)
+        .select(
+          "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
+        )
+        .skip(skip)
+        .limit(limit)
+        .lean({ virtuals: true }),
+      Customer.countDocuments(searchCriteria),
+    ]);
 
     // Format customers with necessary fields
     const formattedCustomers = searchResults.map((customer) => {
@@ -1108,9 +1102,9 @@ const filterCustomerByGeofenceForMerchantController = async (
     const merchantId = req.userAuth;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
@@ -1184,9 +1178,9 @@ const fetchCustomersOfMerchantController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Fetch all orders of the merchant
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs
     const uniqueCustomerIds = [
@@ -1259,9 +1253,9 @@ const searchCustomerByNameForMerchantToOrderController = async (
     }
 
     // Find orders placed with this merchant to get customer IDs
-    const ordersOfMerchant = await Order.find({ merchantId }).select(
-      "customerId"
-    );
+    const ordersOfMerchant = await Order.find({ merchantId })
+      .select("customerId")
+      .lean();
 
     // Extract unique customer IDs from the orders
     const uniqueCustomerIds = [
@@ -1310,6 +1304,46 @@ const searchCustomerByNameForMerchantToOrderController = async (
   }
 };
 
+const addCustomerByAdminController = async (req, res, next) => {
+  try {
+    const { fullName, email, phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ errors: { phoneNumber: "Phone number is required" } });
+    }
+
+    // Check for duplicate by phone number only
+    const existingCustomer = await Customer.findOne({ phoneNumber })
+      .select("_id phoneNumber")
+      .lean();
+
+    if (existingCustomer) {
+      return res.status(409).json({
+        errors: { phoneNumber: "Customer with this phone number already exists" },
+      });
+    }
+
+    const newCustomer = await Customer.create({
+      fullName: fullName || "",
+      email: email ? email.toLowerCase().trim() : undefined,
+      phoneNumber,
+      customerDetails: { isBlocked: false },
+    });
+
+    res.status(201).json({
+      message: "Customer created successfully",
+      data: {
+        customerId: newCustomer._id,
+        fullName: newCustomer.fullName,
+        email: newCustomer.email || "",
+        phoneNumber: newCustomer.phoneNumber,
+      },
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   getAllCustomersController,
   searchCustomerByNameController,
@@ -1326,6 +1360,7 @@ module.exports = {
   deductMoneyFromWalletCOntroller,
   getCustomersOfMerchant,
   addCustomerFromCSVController,
+  addCustomerByAdminController,
   downloadCustomerSampleCSVController,
   downloadCustomerCSVController,
   fetchAllCustomersByAdminController,

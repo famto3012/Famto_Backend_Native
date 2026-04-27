@@ -162,7 +162,7 @@ const deleteNotificationSettingController = async (req, res, next) => {
 
 const getAllNotificationSettingController = async (req, res, next) => {
   try {
-    const notificationSettings = await NotificationSetting.find();
+    const notificationSettings = await NotificationSetting.find().lean();
     res.status(200).json({
       success: "Notification setting found",
       data: notificationSettings,

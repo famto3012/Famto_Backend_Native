@@ -55,6 +55,10 @@ const subscriptionLogSchema = new mongoose.Schema(
   }
 );
 
+subscriptionLogSchema.index({ userId: 1, typeOfUser: 1 });
+subscriptionLogSchema.index({ typeOfUser: 1, endDate: -1 });
+subscriptionLogSchema.index({ endDate: 1 });
+
 const SubscriptionLog = mongoose.model(
   "SubscriptionLog",
   subscriptionLogSchema

@@ -148,10 +148,7 @@ const getAllPromoCodesController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const promoCodes = await PromoCode.find(filter).populate(
-      "geofenceId",
-      "name"
-    );
+    const promoCodes = await PromoCode.find(filter).populate("geofenceId", "name").lean();
 
     const formattedResponse = promoCodes?.map((promoCode) => ({
       promoCodeId: promoCode._id,
@@ -182,7 +179,7 @@ const getSinglePromoCodeController = async (req, res, next) => {
   try {
     const { promoCodeId } = req.params;
 
-    const promoCode = await PromoCode.findById(promoCodeId);
+    const promoCode = await PromoCode.findById(promoCodeId).lean();
 
     if (!promoCode) return next(appError("Promo code not found", 404));
 

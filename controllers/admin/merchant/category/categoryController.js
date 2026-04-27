@@ -21,7 +21,8 @@ const getSelectedBusinessCategoriesOfMerchant = async (req, res, next) => {
 
     const merchantFound = await Merchant.findById(merchantId)
       .select("merchantDetail.businessCategoryId")
-      .populate("merchantDetail.businessCategoryId", "title");
+      .populate("merchantDetail.businessCategoryId", "title")
+      .lean();
 
     if (!merchantFound) return next(appError("Merchant not found", 404));
 
@@ -44,7 +45,8 @@ const getAllCategoriesOfMerchantByAdminController = async (req, res, next) => {
 
     const categoriesOfMerchant = await Category.find({ merchantId })
       .select("categoryName merchantId status")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       message: "Categories of merchant",
@@ -62,7 +64,8 @@ const getSingleCategoryOfMerchantByAdminController = async (req, res, next) => {
       merchantId: req.params.merchantId,
     })
       .populate("businessCategoryId", "title")
-      .select("-merchantId");
+      .select("-merchantId")
+      .lean();
 
     if (!categoryFound) {
       return next(appError("Category not found", 404));
@@ -95,7 +98,7 @@ const addCategoryByAdminController = async (req, res, next) => {
     const existingCategory = await Category.findOne({
       merchantId,
       categoryName,
-    });
+    }).lean();
 
     if (existingCategory) {
       formattedErrors.categoryName =
@@ -111,7 +114,7 @@ const addCategoryByAdminController = async (req, res, next) => {
 
     const lastCategory = await Category.findOne().sort({
       order: -1,
-    });
+    }).lean();
 
     const newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
@@ -162,7 +165,7 @@ const editCategoryByAdminController = async (req, res, next) => {
     const categoryToUpdate = await Category.findOne({
       _id: req.params.categoryId,
       merchantId: req.params.merchantId,
-    });
+    }).lean();
 
     if (!categoryToUpdate) {
       return next(appError("Category not found", 404));
@@ -211,7 +214,7 @@ const deleteCategoryByAdminController = async (req, res, next) => {
     const categoryToDelete = await Category.findOne({
       _id: req.params.categoryId,
       merchantId: req.params.merchantId,
-    });
+    }).lean();
 
     if (!categoryToDelete) {
       return next(appError("Category not found", 404));
@@ -227,7 +230,7 @@ const deleteCategoryByAdminController = async (req, res, next) => {
 
     const allProducts = await Product.find({
       categoryId: req.params.categoryId,
-    });
+    }).lean();
 
     allProducts.forEach(async (product) => {
       let productImageURL = product?.productImageURL;
@@ -367,7 +370,7 @@ const addCategoryByMerchantController = async (req, res, next) => {
     const existingCategory = await Category.findOne({
       merchantId,
       categoryName,
-    });
+    }).lean();
 
     if (existingCategory) {
       formattedErrors.categoryName =
@@ -378,7 +381,7 @@ const addCategoryByMerchantController = async (req, res, next) => {
     // Find the highest order number
     const lastCategory = await Category.findOne().sort({
       order: -1,
-    });
+    }).lean();
 
     const newOrder = lastCategory ? lastCategory.order + 1 : 1;
 
@@ -423,7 +426,8 @@ const getAllCategoriesByMerchantController = async (req, res, next) => {
 
     const categoriesOfMerchant = await Category.find({ merchantId })
       .select("categoryName merchantId status")
-      .sort({ order: 1 });
+      .sort({ order: 1 })
+      .lean();
 
     res.status(200).json({
       message: "Categories of merchant",
@@ -441,7 +445,8 @@ const getSingleCategoryByMerchantController = async (req, res, next) => {
       merchantId: req.userAuth,
     })
       .populate("businessCategoryId", "title")
-      .select("-merchantId");
+      .select("-merchantId")
+      .lean();
 
     if (!categoryFound) {
       return next(appError("Category not found", 404));
@@ -475,7 +480,7 @@ const editCategoryByMerchantController = async (req, res, next) => {
     const categoryToUpdate = await Category.findOne({
       _id: req.params.categoryId,
       merchantId,
-    });
+    }).lean();
 
     if (!categoryToUpdate) {
       return next(appError("Category not found", 404));
@@ -528,7 +533,7 @@ const deleteCategoryByMerchantController = async (req, res, next) => {
     const categoryToDelete = await Category.findOne({
       _id: req.params.categoryId,
       merchantId,
-    });
+    }).lean();
 
     if (!categoryToDelete) {
       return next(appError("Category not found", 404));
@@ -544,7 +549,7 @@ const deleteCategoryByMerchantController = async (req, res, next) => {
 
     const allProducts = await Product.find({
       categoryId: req.params.categoryId,
-    });
+    }).lean();
 
     allProducts.forEach(async (product) => {
       let productImageURL = product?.productImageURL;

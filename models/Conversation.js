@@ -8,6 +8,10 @@ const conversationSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    orderId: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     lastMessage: {
       text: String,
       sender: {
@@ -25,6 +29,9 @@ const conversationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+conversationSchema.index({ orderId: 1 });
+conversationSchema.index({ participants: 1, orderId: 1 });
 
 // Pre-save hook to set deletionDate 7 days after createdAt
 conversationSchema.pre("save", function (next) {

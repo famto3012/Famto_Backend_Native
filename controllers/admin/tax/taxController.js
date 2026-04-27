@@ -81,12 +81,10 @@ const getAllTaxController = async (req, res, next) => {
         : {};
 
     const allTaxes = await Tax.find(filter)
-      .populate({
-        path: "geofences",
-        select: "name",
-      })
+      .populate({ path: "geofences", select: "name" })
       .populate("assignToBusinessCategory", "title")
-      .sort({ taxName: 1 });
+      .sort({ taxName: 1 })
+      .lean();
 
     const formattedResponse = allTaxes.map((tax) => {
       return {
@@ -114,7 +112,7 @@ const getAllTaxController = async (req, res, next) => {
 //Get single Tax
 const getSingleTaxController = async (req, res, next) => {
   try {
-    const taxFound = await Tax.findById(req.params.taxId);
+    const taxFound = await Tax.findById(req.params.taxId).lean();
 
     if (!taxFound) {
       return next(appError("Tax not found", 404));
@@ -216,13 +214,11 @@ const editTaxController = async (req, res, next) => {
 //Delete tax
 const deleteTaxController = async (req, res, next) => {
   try {
-    const taxFound = await Tax.findById(req.params.taxId);
+    const deleted = await Tax.findByIdAndDelete(req.params.taxId);
 
-    if (!taxFound) {
+    if (!deleted) {
       return next(appError("Tax not found", 404));
     }
-
-    await Tax.findByIdAndDelete(req.params.taxId);
 
     res.status(200).json({ message: "Tax deleted successfully" });
   } catch (err) {

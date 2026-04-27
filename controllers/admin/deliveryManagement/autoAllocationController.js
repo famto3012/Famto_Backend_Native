@@ -9,7 +9,7 @@ const addAndUpdateAutoAllocationController = async (req, res, next) => {
 
     const adjustedMaxRadius = maxRadius !== undefined ? maxRadius : 0;
 
-    const autoAllocation = await AutoAllocation.findOne();
+    const autoAllocation = await AutoAllocation.findOne().lean();
 
     if (autoAllocation) {
       await AutoAllocation.findByIdAndUpdate(autoAllocation._id, {
@@ -41,7 +41,7 @@ const addAndUpdateAutoAllocationController = async (req, res, next) => {
 
 const getAutoAllocationController = async (req, res, next) => {
   try {
-    const autoAllocation = await AutoAllocation.findOne();
+    const autoAllocation = await AutoAllocation.findOne().lean();
 
     res.status(200).json({
       message: "Auto allocation found",
@@ -54,7 +54,7 @@ const getAutoAllocationController = async (req, res, next) => {
 
 const updateAutoAllocationStatus = async (req, res, next) => {
   try {
-    const autoAllocation = await AutoAllocation.findOne();
+    const autoAllocation = await AutoAllocation.findOne().lean();
 
     if (autoAllocation) {
       if (autoAllocation.isActive) {

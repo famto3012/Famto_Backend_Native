@@ -100,7 +100,7 @@ const createOrUpdateAgentCustomizationController = async (req, res, next) => {
 
 const getAgentCustomizationController = async (req, res, next) => {
   try {
-    const customization = await AgentAppCustomization.findOne();
+    const customization = await AgentAppCustomization.findOne().lean();
 
     if (!customization) {
       return res.status(200).json({
@@ -137,9 +137,9 @@ const getAgentWorkTimings = async (req, res, next) => {
 
 const getAgentAppAppUpdateType = async (req, res, next) => {
   try {
-    const customization = await AgentAppCustomization.findOne({}).select(
-      "appUpdateType"
-    );
+    const customization = await AgentAppCustomization.findOne({})
+      .select("appUpdateType")
+      .lean();
 
     res.status(200).json({
       success: true,

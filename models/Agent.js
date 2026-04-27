@@ -327,5 +327,10 @@ agentSchema.virtual("loggedInHours").get(function () {
   return formatToHours(difference);
 });
 
+agentSchema.index({ geofenceId: 1 });
+agentSchema.index({ status: 1 });
+agentSchema.index({ isApproved: 1, isBlocked: 1 });
+agentSchema.index({ fullName: 1 });
+
 const Agent = mongoose.model("Agent", agentSchema);
 module.exports = Agent;

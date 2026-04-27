@@ -1,7 +1,11 @@
+const NodeCache = require("node-cache");
 const appError = require("../utils/appError");
 const getTokenFromHeader = require("../utils/getTokenFromHeaders");
 const verifyToken = require("../utils/verifyToken");
 const Manager = require("../models/Manager");
+
+// Cache manager geofence IDs for 5 minutes to avoid DB hit on every request
+const managerGeofenceCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
 const isAuthenticated = async (req, res, next) => {
   const token = getTokenFromHeader(req);
@@ -23,11 +27,25 @@ const isAuthenticated = async (req, res, next) => {
     decodedUser.role !== "Merchant" &&
     decodedUser.role !== "Customer"
   ) {
-    const manager = await Manager.findById(decodedUser.id).select("geofenceId");
-    req.geofenceId = manager?.geofenceId || [];
+    const cacheKey = `manager_geofence_${decodedUser.id}`;
+    let geofenceId = managerGeofenceCache.get(cacheKey);
+
+    if (geofenceId === undefined) {
+      const manager = await Manager.findById(decodedUser.id).select("geofenceId").lean();
+      geofenceId = manager?.geofenceId || [];
+      managerGeofenceCache.set(cacheKey, geofenceId);
+    }
+
+    req.geofenceId = geofenceId;
   }
 
   next();
 };
 
+// Call this whenever a manager's geofence is updated so cache is refreshed
+const invalidateManagerGeofenceCache = (managerId) => {
+  managerGeofenceCache.del(`manager_geofence_${managerId}`);
+};
+
 module.exports = isAuthenticated;
+module.exports.invalidateManagerGeofenceCache = invalidateManagerGeofenceCache;
