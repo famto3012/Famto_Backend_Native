@@ -790,7 +790,8 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
         paymentMode: log.paymentMode || null,
         startDate: formatDate(log.startDate),
         endDate: formatDate(log.endDate),
-        status: log.paymentStatus || null,
+        status: new Date(log.endDate) > now ? "Active" : "Expired",
+        paymentStatus: log.paymentStatus || null,
       }));
 
       return res
@@ -870,7 +871,8 @@ const fetchAllMerchantSubscriptionLogs = async (req, res, next) => {
       paymentMode: log.paymentMode || null,
       startDate: formatDate(log.startDate),
       endDate: formatDate(log.endDate),
-      status: log.paymentStatus || null,
+      status: new Date(log.endDate) > now ? "Active" : "Expired",
+      paymentStatus: log.paymentStatus || null,
     }));
 
     res.status(200).json({ data: formattedResponse, total: totalDocuments });

@@ -189,10 +189,10 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       },
     });
 
-    const deliveryMode = task?.orderId?.orderDetail?.deliveryMode;
-    // const deliveryLocation = task?.orderId?.orderDetail?.pickupLocation;
+    const deliveryMode = task?.orderId?.deliveryMode;
+    const deliveryLocation = task?.orderId?.pickups?.[0]?.location;
     const merchant = task?.orderId?.merchantId;
-    // const merchantLocation = merchant?.merchantDetail?.location;
+    const merchantLocation = merchant?.merchantDetail?.location;
     const geofence = merchant?.merchantDetail?.geofenceId;
 
     // Match Criteria
@@ -246,20 +246,25 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
 
         let distance = 0;
 
-        // TODO: When uncommenting the condition make sure to exclude the distance calculation of Inactive agents (make it default to 0)
-        // if (deliveryMode === "Pick and Drop") {
-        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        //     agentLocation,
-        //     deliveryLocation
-        //   );
-        //   distance = distanceInKM;
-        // } else if (deliveryMode !== "Custom Order") {
-        //   const { distanceInKM } = await getDistanceFromPickupToDelivery(
-        //     agentLocation,
-        //     merchantLocation
-        //   );
-        //   distance = distanceInKM;
-        // }
+        // Only calculate distance for Free/Busy agents; Inactive agents default to 0
+        if (agent.status === "Free" || agent.status === "Busy") {
+          if (deliveryMode === "Pick and Drop" && deliveryLocation?.length === 2) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              agentLocation,
+              deliveryLocation
+            );
+            distance = distanceInKM;
+          } else if (
+            deliveryMode !== "Custom Order" &&
+            merchantLocation?.length === 2
+          ) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              agentLocation,
+              merchantLocation
+            );
+            distance = distanceInKM;
+          }
+        }
 
         return {
           _id: agent._id,

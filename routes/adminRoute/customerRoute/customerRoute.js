@@ -21,6 +21,7 @@ const {
   searchCustomerByNameForMerchantToOrderController,
   fetchAllCustomersByAdminController,
   fetchCustomersOfMerchantController,
+  addCustomerByAdminController,
 } = require("../../../controllers/admin/customer/customerController");
 const isAdminOrMerchant = require("../../../middlewares/isAdminOrMerchant");
 const { upload } = require("../../../utils/imageOperation");
@@ -173,6 +174,14 @@ adminCustomerRoute.post(
   isAdminOrMerchant,
   upload.single("customerCSV"),
   addCustomerFromCSVController
+);
+
+// Add a single customer (with duplicate validation)
+adminCustomerRoute.post(
+  "/add-customer",
+  isAuthenticated,
+  isAdmin,
+  addCustomerByAdminController
 );
 
 module.exports = adminCustomerRoute;

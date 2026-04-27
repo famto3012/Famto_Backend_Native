@@ -1,6 +1,8 @@
 const { validationResult } = require("express-validator");
 
 const BusinessCategory = require("../../../models/BusinessCategory");
+const Category = require("../../../models/Category");
+const Product = require("../../../models/Product");
 
 const appError = require("../../../utils/appError");
 const {
@@ -16,6 +18,7 @@ const addBusinessCategoryController = async (req, res, next) => {
     merchantFilters,
     productFilters,
     imageDisplayType,
+    hasFoodType,
   } = req.body;
 
   const errors = validationResult(req);
@@ -53,6 +56,7 @@ const addBusinessCategoryController = async (req, res, next) => {
       merchantFilters,
       productFilters,
       imageDisplayType,
+      hasFoodType: hasFoodType === "true" || hasFoodType === true,
     });
 
     if (!newBusinessCategory) {
@@ -86,6 +90,7 @@ const getAllBusinessCategoryController = async (req, res, next) => {
         status: category.status,
         merchantFilters: category.merchantFilters,
         productFilters: category.productFilters,
+        hasFoodType: category.hasFoodType ?? false,
       };
     });
 
@@ -117,6 +122,7 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
       merchantFilters: businessCategory.merchantFilters,
       productFilters: businessCategory.productFilters,
       imageDisplayType: businessCategory.imageDisplayType ?? "cover",
+      hasFoodType: businessCategory.hasFoodType ?? false,
     };
 
     res.status(200).json({
@@ -136,6 +142,7 @@ const editBusinessCategoryController = async (req, res, next) => {
     merchantFilters,
     productFilters,
     imageDisplayType,
+    hasFoodType,
   } = req.body;
 
   const errors = validationResult(req);
@@ -170,6 +177,9 @@ const editBusinessCategoryController = async (req, res, next) => {
       );
     }
 
+    const oldPercentage = businessCategoryFound.increasedPercentage ?? 0;
+    const newPercentage = increasedPercentage ?? oldPercentage;
+
     let updatedCategory = await BusinessCategory.findByIdAndUpdate(
       req.params.businessCategoryId,
       {
@@ -182,9 +192,53 @@ const editBusinessCategoryController = async (req, res, next) => {
         merchantFilters,
         productFilters,
         imageDisplayType,
+        hasFoodType: hasFoodType === "true" || hasFoodType === true,
       },
       { new: true }
     );
+
+    // If the price percentage changed, recalculate all product prices
+    if (newPercentage !== oldPercentage) {
+      const categories = await Category.find({
+        businessCategoryId: req.params.businessCategoryId,
+      }).select("_id");
+
+      const categoryIds = categories.map((c) => c._id);
+
+      const products = await Product.find({
+        categoryId: { $in: categoryIds },
+      });
+
+      const bulkOps = products.map((product) => {
+        const newPrice = Math.round(
+          product.costPrice * (1 + newPercentage / 100)
+        );
+
+        const updatedVariants = product.variants.map((variant) => ({
+          ...variant.toObject(),
+          variantTypes: variant.variantTypes.map((vt) => ({
+            ...vt.toObject(),
+            price: Math.round(vt.costPrice * (1 + newPercentage / 100)),
+          })),
+        }));
+
+        return {
+          updateOne: {
+            filter: { _id: product._id },
+            update: {
+              $set: {
+                price: newPrice,
+                variants: updatedVariants,
+              },
+            },
+          },
+        };
+      });
+
+      if (bulkOps.length > 0) {
+        await Product.bulkWrite(bulkOps);
+      }
+    }
 
     res.status(200).json({
       message: "Business category updated successfully",

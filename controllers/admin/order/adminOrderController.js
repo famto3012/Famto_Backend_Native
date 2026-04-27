@@ -9,6 +9,8 @@ const { validationResult } = require("express-validator");
 const Customer = require("../../../models/Customer");
 const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
+const Conversation = require("../../../models/Conversation");
+const Message = require("../../../models/Message");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
 const CustomerCart = require("../../../models/CustomerCart");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
@@ -844,62 +846,39 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     console.log("allOrders", allOrders);
 
     allOrders?.forEach((order) => {
-      if (order?.purchasedItems && Array.isArray(order.purchasedItems)) {
-        order.purchasedItems.forEach((item) => {
-          formattedResponse.push({
-            orderId: order._id,
-            status: order?.status || "-",
-            merchantId: order?.merchantId?._id || "-",
-            merchantName:
-              order?.merchantId?.merchantDetail?.merchantName || "-",
-            customerName: order?.customerId?.fullName || "-",
-            customerPhoneNumber: order?.drops?.[0]?.address?.phoneNumber || "-",
-            // customerEmail: order?.customerId?.email || "-",
-            agentName: order?.agentId?.fullName || "-",
-            agentPhoneNumber: order?.agentId?.phoneNumber || "-",
-            deliveryMode: order?.deliveryMode || "-",
-            orderTime:
-              `${formatDate(order?.createdAt)} | ${formatTime(
-                order?.createdAt
-              )}` || "-",
-            deliveryTime:
-              `${formatDate(order?.deliveryTime)} | ${formatTime(
-                order?.deliveryTime
-              )}` || "-",
-            paymentMode: order?.paymentMode || "-",
-            deliveryOption: order?.deliveryOption || "-",
-            totalAmount: order?.billDetail?.grandTotal || "-",
-            deliveryAddress:
-              `${order?.drops?.[0]?.address?.fullName || ""}, ${order?.drops?.[0]?.address?.flat || ""
-              }, ${order?.drops?.[0]?.address?.area || ""}, ${order?.drops?.[0]?.address?.landmark || ""
-              }` || "-",
-            distanceInKM: order?.distance || "-",
-            distanceTravelledByAgent: order?.distanceCoveredByAgent || "-",
-            agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
-            cancellationReason: order?.cancellationReason || "-",
-            cancellationDescription: order?.cancellationDescription || "-",
-            merchantEarnings: order?.merchantEarnings || "-",
-            famtoEarnings: order?.famtoEarnings || "-",
-            deliveryCharge: order?.billDetail?.deliveryCharge || "-",
-            taxAmount: order?.billDetail?.taxAmount || "-",
-            discountedAmount: order?.billDetail?.discountedAmount || "-",
-            itemTotal: order?.billDetail?.itemTotal || "-",
-            addedTip: order?.billDetail?.addedTip || "-",
-            subTotal: order?.billDetail?.subTotal || "-",
-            surgePrice: order?.billDetail?.surgePrice || "-",
-            transactionId: order?.paymentId || "-",
-            itemName: item?.itemName || "-",
-            quantity: item?.quantity || "-",
-            length: item?.length || "-",
-            width: item?.width || "-",
-            height: item?.height || "-",
-          });
-        });
-      } else {
-        console.log(
-          `Order ID ${order._id} has no items array or it's not an array.`
-        );
-      }
+      formattedResponse.push({
+        orderId: order._id,
+        status: order?.status || "-",
+        merchantId: order?.merchantId?._id || "-",
+        merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
+        customerName: order?.customerId?.fullName || "-",
+        customerPhoneNumber: order?.drops?.[0]?.address?.phoneNumber || order?.pickups?.[0]?.address?.phoneNumber || "-",
+        agentName: order?.agentId?.fullName || "-",
+        agentPhoneNumber: order?.agentId?.phoneNumber || "-",
+        deliveryMode: order?.deliveryMode || "-",
+        orderTime: `${formatDate(order?.createdAt)} | ${formatTime(order?.createdAt)}`,
+        deliveryTime: `${formatDate(order?.deliveryTime)} | ${formatTime(order?.deliveryTime)}`,
+        paymentMode: order?.paymentMode || "-",
+        deliveryOption: order?.deliveryOption || "-",
+        totalAmount: order?.billDetail?.grandTotal || "-",
+        deliveryAddress:
+          `${order?.drops?.[0]?.address?.fullName || ""}, ${order?.drops?.[0]?.address?.flat || ""}, ${order?.drops?.[0]?.address?.area || ""}, ${order?.drops?.[0]?.address?.landmark || ""}`.trim().replace(/^,|,$/g, "").trim() || "-",
+        distanceInKM: order?.distance || "-",
+        distanceTravelledByAgent: order?.distanceCoveredByAgent || "-",
+        agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
+        cancellationReason: order?.cancellationReason || "-",
+        cancellationDescription: order?.cancellationDescription || "-",
+        merchantEarnings: order?.merchantEarnings || "-",
+        famtoEarnings: order?.famtoEarnings || "-",
+        deliveryCharge: order?.billDetail?.deliveryCharge || "-",
+        taxAmount: order?.billDetail?.taxAmount || "-",
+        discountedAmount: order?.billDetail?.discountedAmount || "-",
+        itemTotal: order?.billDetail?.itemTotal || "-",
+        addedTip: order?.billDetail?.addedTip || "-",
+        subTotal: order?.billDetail?.subTotal || "-",
+        surgePrice: order?.billDetail?.surgePrice || "-",
+        transactionId: order?.paymentId || "-",
+      });
     });
 
     // allOrders?.forEach((order) => {
@@ -995,11 +974,6 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       { id: "subTotal", title: "Sub Total" },
       { id: "surgePrice", title: "Surge Price" },
       { id: "transactionId", title: "Transaction ID" },
-      { id: "itemName", title: "Item name" },
-      { id: "quantity", title: "Quantity" },
-      { id: "length", title: "Length" },
-      { id: "width", title: "Width" },
-      { id: "height", title: "height" },
     ];
 
     let writer = csvWriter({
@@ -3146,6 +3120,89 @@ const markOrderAsCancelled = async (req, res, next) => {
   }
 };
 
+// Get customer-agent chat for a specific order (for admin dashboard)
+const getOrderChatByAdminController = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    // First try to find conversation directly by orderId (string match)
+    let conversation = await Conversation.findOne({ orderId }).lean();
+
+    // Fallback: look up by the order's customerId + agentId participants
+    if (!conversation) {
+      const order = await Order.findById(orderId)
+        .select("customerId agentId")
+        .lean();
+
+      if (!order || !order.agentId) {
+        return res.status(200).json({ messages: [], participants: [] });
+      }
+
+      conversation = await Conversation.findOne({
+        participants: { $all: [order.customerId, order.agentId] },
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+    }
+
+    if (!conversation) {
+      return res.status(200).json({ messages: [], participants: [] });
+    }
+
+    // Fetch all messages in this conversation
+    const messages = await Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Resolve participant names (customer + agent)
+    const participantIds = conversation.participants || [];
+
+    const [customers, agents] = await Promise.all([
+      Customer.find({ _id: { $in: participantIds } })
+        .select("_id fullName phoneNumber")
+        .lean(),
+      require("../../../models/Agent")
+        .find({ _id: { $in: participantIds } })
+        .select("_id fullName phoneNumber")
+        .lean(),
+    ]);
+
+    // Build a quick ID → name map
+    const nameMap = {};
+    [...customers, ...agents].forEach((u) => {
+      nameMap[u._id.toString()] = {
+        fullName: u.fullName || "Unknown",
+        phoneNumber: u.phoneNumber || "",
+      };
+    });
+
+    const formattedMessages = messages.map((msg) => ({
+      id: msg._id,
+      sender: msg.sender,
+      senderName: nameMap[msg.sender?.toString()]?.fullName || "Unknown",
+      text: msg.text || "",
+      img: msg.img || "",
+      seen: msg.seen || false,
+      createdAt: msg.createdAt,
+    }));
+
+    const formattedParticipants = participantIds.map((id) => ({
+      id,
+      fullName: nameMap[id?.toString()]?.fullName || "Unknown",
+      phoneNumber: nameMap[id?.toString()]?.phoneNumber || "",
+    }));
+
+    res.status(200).json({
+      conversationId: conversation._id,
+      orderId,
+      participants: formattedParticipants,
+      messages: formattedMessages,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   confirmOrderByAdminController,
   rejectOrderByAdminController,
@@ -3164,4 +3221,5 @@ module.exports = {
   markOrderAsCompletedByAdminController,
   markPaymentCollectedFromCustomer,
   markOrderAsCancelled,
+  getOrderChatByAdminController,
 };

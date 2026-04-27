@@ -23,7 +23,7 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
   }
 
   try {
-    const { name, amount, duration, taxId, renewalReminder, description } =
+    const { name, amount, duration, taxId, businessCategoryId, renewalReminder, description } =
       req.body;
 
     let totalAmount = amount;
@@ -38,6 +38,7 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
       amount: Math.round(totalAmount),
       duration,
       taxId: taxId || null,
+      businessCategoryId: businessCategoryId || null,
       renewalReminder,
       description,
     });
@@ -61,8 +62,27 @@ const addMerchantSubscriptionPlanController = async (req, res, next) => {
 
 const getAllMerchantSubscriptionPlansController = async (req, res, next) => {
   try {
-    const plans = await MerchantSubscription.find()
+    let query = {};
+
+    if (req.userRole === "Merchant") {
+      const merchant = await Merchant.findById(req.userAuth)
+        .select("merchantDetail.businessCategoryId")
+        .lean();
+
+      const merchantCategoryIds = merchant?.merchantDetail?.businessCategoryId || [];
+
+      // Show plans that match the merchant's business category or have no category set
+      query = {
+        $or: [
+          { businessCategoryId: { $in: merchantCategoryIds } },
+          { businessCategoryId: null },
+        ],
+      };
+    }
+
+    const plans = await MerchantSubscription.find(query)
       .populate("taxId", "taxName")
+      .populate("businessCategoryId", "title")
       .lean();
 
     const formattedResponse = plans?.map((plan) => ({
@@ -71,6 +91,8 @@ const getAllMerchantSubscriptionPlansController = async (req, res, next) => {
       amount: plan?.amount || null,
       duration: plan?.duration || null,
       taxName: plan?.taxId?.taxName || null,
+      businessCategoryId: plan?.businessCategoryId?._id || null,
+      businessCategoryName: plan?.businessCategoryId?.title || null,
       renewalReminder: plan?.renewalReminder || null,
     }));
 
@@ -92,7 +114,7 @@ const editMerchantSubscriptionPlanController = async (req, res, next) => {
 
   try {
     const { id } = req.params;
-    const { name, amount, duration, taxId, renewalReminder, description } =
+    const { name, amount, duration, taxId, businessCategoryId, renewalReminder, description } =
       req.body;
 
     const subscriptionPlan = await MerchantSubscription.findById(id).lean();
@@ -121,6 +143,7 @@ const editMerchantSubscriptionPlanController = async (req, res, next) => {
       ...(amount && { amount: totalAmount }),
       ...(duration && { duration }),
       ...(taxId && { taxId }),
+      businessCategoryId: businessCategoryId || null,
       ...(renewalReminder && { renewalReminder }),
       ...(description && { description }),
     };
@@ -151,7 +174,9 @@ const getSingleMerchantSubscriptionPlanController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const plan = await MerchantSubscription.findById(id).lean();
+    const plan = await MerchantSubscription.findById(id)
+      .populate("businessCategoryId", "title")
+      .lean();
 
     if (!plan) return next(appError("Subscription plan not found", 404));
 
@@ -161,6 +186,8 @@ const getSingleMerchantSubscriptionPlanController = async (req, res, next) => {
       amount: plan.amount || null,
       duration: plan.duration || null,
       taxId: plan.taxId || null,
+      businessCategoryId: plan?.businessCategoryId?._id || null,
+      businessCategoryName: plan?.businessCategoryId?.title || null,
       renewalReminder: plan.renewalReminder || null,
     };
 

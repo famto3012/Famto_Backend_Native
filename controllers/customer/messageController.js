@@ -12,7 +12,7 @@ const { uploadToFirebase } = require("../../utils/imageOperation");
 
 const sendMessage = async (req, res) => {
   try {
-    const { recipientId, message } = req.body;
+    const { recipientId, message, orderId } = req.body;
     const senderId = req.userAuth;
 
     let img = "";
@@ -21,13 +21,17 @@ const sendMessage = async (req, res) => {
       img = uploadedResponse;
     }
 
-    let conversation = await Conversation.findOne({
-      participants: { $all: [senderId, recipientId] },
-    });
+    // Build conversation lookup — if orderId provided, scope conversation to that order
+    const conversationQuery = orderId
+      ? { participants: { $all: [senderId, recipientId] }, orderId }
+      : { participants: { $all: [senderId, recipientId] }, orderId: null };
+
+    let conversation = await Conversation.findOne(conversationQuery);
 
     if (!conversation) {
       conversation = new Conversation({
         participants: [senderId, recipientId],
+        orderId: orderId || null,
         lastMessage: {
           text: message,
           sender: senderId,
@@ -89,31 +93,37 @@ const sendMessage = async (req, res) => {
 
 const getMessages = async (req, res) => {
   const { otherUserId } = req.params;
+  const { orderId } = req.query;
   const userId = req.userAuth;
 
   try {
-    const conversation = await Conversation.findOne({
-      participants: { $all: [userId, otherUserId] },
-    });
+    // If orderId provided, fetch conversation scoped to that order
+    const conversationQuery = orderId
+      ? { participants: { $all: [userId, otherUserId] }, orderId }
+      : { participants: { $all: [userId, otherUserId] } };
+
+    const conversation = await Conversation.findOne(conversationQuery);
 
     if (!conversation) {
       return res.status(200).json([]);
     }
 
     const messages = await Message.find({
-      conversationId: conversation?._id,
-    }).sort({ createdAt: 1 });
+      conversationId: conversation._id,
+    })
+      .sort({ createdAt: 1 })
+      .lean();
 
     const formattedMessages = messages?.map((message) => ({
       id: message?._id,
       conversationId: message?.conversationId,
       sender: message?.sender,
-      seen: message?.seen || false, // Assuming `seen` is false if not present
+      seen: message?.seen || false,
       img: message?.img || "",
       text: message?.text || "",
       createdAt: message?.createdAt,
       updatedAt: message?.updatedAt,
-      deletionDate: message?.deletionDate, // Deletion date set to 7 days after creation
+      deletionDate: message?.deletionDate,
     }));
 
     res.status(200).json(formattedMessages);

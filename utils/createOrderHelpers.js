@@ -108,12 +108,10 @@ const findOrCreateCustomer = async ({
     }
   }
 
-  const existingCustomer = await Customer.findOne({
-    $or: [
-      { phoneNumber: newCustomer?.phoneNumber },
-      { email: newCustomer?.email },
-    ],
-  });
+  // Look up existing customer by phone number only (email is not unique per customer)
+  const existingCustomer = newCustomer?.phoneNumber
+    ? await Customer.findOne({ phoneNumber: newCustomer.phoneNumber })
+    : null;
 
   if (existingCustomer && existingCustomer.customerDetails.geofenceId)
     return existingCustomer;
@@ -221,6 +219,20 @@ const findOrCreateCustomer = async ({
     };
 
     return await Customer.create(updatedNewCustomer);
+  }
+
+  // Take Away (or similar) — no customer address required.
+  // If existing customer found by phone, return them as-is.
+  // If brand new customer, create a minimal record without geofence/address.
+  if (newCustomer) {
+    if (existingCustomer) return existingCustomer;
+
+    return await Customer.create({
+      fullName: newCustomer.fullName,
+      email: newCustomer.email,
+      phoneNumber: newCustomer.phoneNumber,
+      customerDetails: { isBlocked: false },
+    });
   }
 };
 

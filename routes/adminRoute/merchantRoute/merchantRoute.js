@@ -8,6 +8,7 @@ const {
   updateMerchantDetailsController,
   sponsorshipPaymentController,
   verifyPaymentController,
+  adminAddSponsorshipController,
   changeMerchantStatusController,
   changeMerchantStatusByMerchantController,
   searchMerchantForOrderController,
@@ -96,6 +97,13 @@ merchantRoute.post(
   "/verify-payment/:merchantId",
   isAuthenticated,
   verifyPaymentController
+);
+
+// Admin/Manager: directly activate sponsorship without Razorpay
+merchantRoute.post(
+  "/admin-add-sponsorship/:merchantId",
+  isAuthenticated,
+  adminAddSponsorshipController
 );
 
 // -------------------------------

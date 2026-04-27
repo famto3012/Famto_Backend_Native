@@ -862,177 +862,160 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
     const categoryTypeArray = ["Veg", "Non-veg", "Both"];
     const productTypeArray = ["Veg", "Non-veg", "Other"];
 
-    // Parse the CSV data
+    // Collect raw rows synchronously — no async work here so "end" always
+    // fires after all rows are collected and before any response is sent.
+    const rawRows = [];
+
     stream
       .pipe(csvParser())
-      .on("data", async (row) => {
+      .on("data", (row) => {
         const isRowEmpty = Object.values(row).every(
           (value) => value.trim() === ""
         );
-
-        if (!isRowEmpty) {
-          const businessCategoryName = row["Business Category Name*"]?.trim();
-          const categoryName = row["Category Name*"]?.trim();
-          const productName = row["Product Name*"]?.trim();
-          const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
-          const categoryType = row["Category Type*"]?.trim();
-          const productType = row["Product Type*"]?.trim();
-
-          if (!businessCategoryTitles.includes(businessCategoryName)) {
-            await deleteFromFirebase(fileUrl);
-            return next(
-              appError(
-                "One or more business categories does not match the merchant's business categories",
-                400
-              )
-            );
-          }
-
-          if (!categoryTypeArray.includes(categoryType)) {
-            await deleteFromFirebase(fileUrl);
-            return next(
-              appError("One or more category types are invalid", 400)
-            );
-          }
-
-          if (!productTypeArray.includes(productType)) {
-            await deleteFromFirebase(fileUrl);
-            return next(appError("One or more product types are invalid", 400));
-          }
-
-          if (!categoriesMap.has(categoryKey)) {
-            categoriesMap.set(categoryKey, {
-              categoryData: {
-                merchantId,
-                businessCategoryName, // Ensure businessCategoryName is set correctly
-                categoryName,
-                type: categoryType,
-                status:
-                  row["Category Status*"]?.trim() === "TRUE" ||
-                  row["Category Status*"]?.trim() === "true"
-                    ? true
-                    : false,
-              },
-              products: [], // Array to store products under this category
-            });
-          }
-
-          // console.log(
-          //   "Parsed Category Data:",
-          //   categoriesMap.get(categoryKey).categoryData
-          // );
-
-          // Get the category entry from the map
-          const categoryEntry = categoriesMap.get(categoryKey);
-
-          const businessCategory = await BusinessCategory.findOne({
-            title: businessCategoryName,
-          }).lean();
-
-          let increasedPercentage = 0; // Default 5% if no business category is found
-          if (businessCategory) {
-            increasedPercentage = businessCategory?.increasedPercentage || 5;
-          }
-
-          // Check if the product already exists in the category
-          let existingProduct = categoryEntry.products.find((p) => {
-            return p.productName.toLowerCase() === productName.toLowerCase();
-          });
-
-          // console.log("Existing product out", existingProduct);
-
-          if (!existingProduct) {
-            // Create a new product if it doesn't exist
-            existingProduct = {
-              productName,
-              price: Math.round(
-                req.userRole === "Merchant"
-                  ? parseFloat(row["Product Cost Price*"]?.trim()) *
-                      (1 + increasedPercentage / 100)
-                  : row["Product Price*"]?.trim()
-                  ? parseFloat(row["Product Price*"]?.trim())
-                  : parseFloat(row["Product Cost Price*"]?.trim()) *
-                    (1 + increasedPercentage / 100)
-              ),
-              minQuantityToOrder:
-                parseInt(row["Min Quantity To Order"]?.trim()) || 0,
-              maxQuantityPerOrder:
-                parseInt(row["Max Quantity Per Order"]?.trim()) || 0,
-              costPrice: parseFloat(row["Product Cost Price*"]?.trim()),
-              sku: row["SKU"]?.trim() || null,
-              preparationTime: row["Preparation Time"]?.trim() || "",
-              description: row["Description"]?.trim() || "",
-              longDescription: row["Long Description"]?.trim() || "",
-              type: productType,
-              inventory:
-                row["Inventory"]?.trim() === "TRUE" ||
-                row["Inventory"]?.trim() === "true"
-                  ? true
-                  : false,
-              productImageURL: row["Product Image"]?.trim() || "",
-              availableQuantity:
-                parseInt(row["Available quantity"]?.trim()) || 0,
-              alert: parseInt(row["Alert"]?.trim()) || 0,
-              variants: [], // Initialize empty variants array
-            };
-
-            // Add the new product to the category's product list
-            categoryEntry.products.push(existingProduct);
-            // console.log("New Product Added:", existingProduct.productName);
-          }
-
-          // Now handle the variant part
-          const variantName = row["Variant Name"]?.trim();
-          const variantTypeName = row["Variant Type Name"]?.trim();
-          const variantTypeCostPrice = parseFloat(
-            row["Variant Type Cost Price"]?.trim()
-          );
-          const variantTypePrice = Math.round(
-            req.userRole === "Merchant"
-              ? variantTypeCostPrice * (1 + increasedPercentage / 100)
-              : row["Variant Type Price"]?.trim()
-              ? parseFloat(row["Variant Type Price"]?.trim())
-              : variantTypeCostPrice * (1 + increasedPercentage / 100)
-          );
-
-          if (
-            variantName &&
-            variantTypeName &&
-            variantTypePrice !== null &&
-            variantTypePrice !== undefined
-          ) {
-            // Check if the product already has the variant
-            let existingVariant = existingProduct.variants.find(
-              (v) => v.variantName.toLowerCase() === variantName.toLowerCase()
-            );
-
-            if (!existingVariant) {
-              // If the variant doesn't exist, create a new one
-              existingVariant = {
-                variantName,
-                variantTypes: [],
-              };
-
-              // Add the new variant to the product's variants array
-              existingProduct.variants.push(existingVariant);
-              // console.log("New Variant Added:", existingVariant);
-            }
-
-            // Add the variant type to the existing or newly created variant
-            existingVariant.variantTypes.push({
-              typeName: variantTypeName,
-              price: variantTypePrice,
-              costPrice: variantTypeCostPrice,
-            });
-
-            // console.log("Updated Variant:", existingVariant);
-          }
-
-          // console.log("Final Updated Product Data:", existingProduct);
-        }
+        if (!isRowEmpty) rawRows.push(row);
       })
       .on("end", async () => {
         try {
+          // ── Validation + categoriesMap building (all async work here) ──
+          for (const row of rawRows) {
+            const businessCategoryName = row["Business Category Name*"]?.trim();
+            const categoryName = row["Category Name*"]?.trim();
+            const productName = row["Product Name*"]?.trim();
+            const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
+            const categoryType = row["Category Type*"]?.trim();
+            const productType = row["Product Type*"]?.trim();
+
+            if (!businessCategoryTitles.includes(businessCategoryName)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError(
+                  "One or more business categories does not match the merchant's business categories",
+                  400
+                )
+              );
+            }
+
+            if (!categoryTypeArray.includes(categoryType)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError("One or more category types are invalid", 400)
+              );
+            }
+
+            if (!productTypeArray.includes(productType)) {
+              await deleteFromFirebase(fileUrl);
+              return next(
+                appError("One or more product types are invalid", 400)
+              );
+            }
+
+            if (!categoriesMap.has(categoryKey)) {
+              categoriesMap.set(categoryKey, {
+                categoryData: {
+                  merchantId,
+                  businessCategoryName,
+                  categoryName,
+                  type: categoryType,
+                  status:
+                    row["Category Status*"]?.trim() === "TRUE" ||
+                    row["Category Status*"]?.trim() === "true"
+                      ? true
+                      : false,
+                },
+                products: [],
+              });
+            }
+
+            const categoryEntry = categoriesMap.get(categoryKey);
+
+            const businessCategory = await BusinessCategory.findOne({
+              title: businessCategoryName,
+            }).lean();
+
+            let increasedPercentage = 0;
+            if (businessCategory) {
+              increasedPercentage = businessCategory?.increasedPercentage || 5;
+            }
+
+            let existingProduct = categoryEntry.products.find(
+              (p) => p.productName.toLowerCase() === productName.toLowerCase()
+            );
+
+            if (!existingProduct) {
+              existingProduct = {
+                productName,
+                price: Math.round(
+                  req.userRole === "Merchant"
+                    ? parseFloat(row["Product Cost Price*"]?.trim()) *
+                        (1 + increasedPercentage / 100)
+                    : row["Product Price*"]?.trim()
+                    ? parseFloat(row["Product Price*"]?.trim())
+                    : parseFloat(row["Product Cost Price*"]?.trim()) *
+                      (1 + increasedPercentage / 100)
+                ),
+                minQuantityToOrder:
+                  parseInt(row["Min Quantity To Order"]?.trim()) || 0,
+                maxQuantityPerOrder:
+                  parseInt(row["Max Quantity Per Order"]?.trim()) || 0,
+                costPrice: parseFloat(row["Product Cost Price*"]?.trim()),
+                sku: row["SKU"]?.trim() || null,
+                preparationTime: row["Preparation Time"]?.trim() || "",
+                description: row["Description"]?.trim() || "",
+                longDescription: row["Long Description"]?.trim() || "",
+                type: productType,
+                inventory:
+                  row["Inventory"]?.trim() === "TRUE" ||
+                  row["Inventory"]?.trim() === "true"
+                    ? true
+                    : false,
+                productImageURL: row["Product Image"]?.trim() || "",
+                availableQuantity:
+                  parseInt(row["Available Quantity"]?.trim()) || 0,
+                alert: parseInt(row["Alert"]?.trim()) || 0,
+                variants: [],
+              };
+
+              categoryEntry.products.push(existingProduct);
+            }
+
+            const variantName = row["Variant Name"]?.trim();
+            const variantTypeName = row["Variant Type Name"]?.trim();
+            const variantTypeCostPrice = parseFloat(
+              row["Variant Type Cost Price"]?.trim()
+            );
+            const variantTypePrice = Math.round(
+              req.userRole === "Merchant"
+                ? variantTypeCostPrice * (1 + increasedPercentage / 100)
+                : row["Variant Type Price"]?.trim()
+                ? parseFloat(row["Variant Type Price"]?.trim())
+                : variantTypeCostPrice * (1 + increasedPercentage / 100)
+            );
+
+            if (
+              variantName &&
+              variantTypeName &&
+              variantTypePrice !== null &&
+              variantTypePrice !== undefined
+            ) {
+              let existingVariant = existingProduct.variants.find(
+                (v) =>
+                  v.variantName.toLowerCase() === variantName.toLowerCase()
+              );
+
+              if (!existingVariant) {
+                existingVariant = { variantName, variantTypes: [] };
+                existingProduct.variants.push(existingVariant);
+              }
+
+              existingVariant.variantTypes.push({
+                typeName: variantTypeName,
+                price: variantTypePrice,
+                costPrice: variantTypeCostPrice,
+              });
+            }
+          }
+
+          // ── All rows valid — now save to DB ──
           for (const [
             _,
             { categoryData, products },
