@@ -10,12 +10,27 @@ const MerchantSubscription = require("../../../models/MerchantSubscription");
 const SubscriptionLog = require("../../../models/SubscriptionLog");
 const CustomerTransaction = require("../../../models/CustomerTransactionDetail");
 
+const Tax = require("../../../models/Tax");
+
 const appError = require("../../../utils/appError");
 const { formatDate } = require("../../../utils/formatters");
 const {
   createRazorpayOrderId,
   verifyPayment,
 } = require("../../../utils/razorpayPayment");
+
+// Compute amount + applicable tax. Returns { totalAmount, taxAmount, taxRate }.
+const computeTotalWithTax = async (baseAmount, taxId) => {
+  if (!taxId) return { totalAmount: baseAmount, taxAmount: 0, taxRate: 0 };
+  const tax = await Tax.findById(taxId);
+  if (!tax || !tax.status) return { totalAmount: baseAmount, taxAmount: 0, taxRate: 0 };
+  const taxAmount = parseFloat((baseAmount * tax.tax) / 100);
+  return {
+    totalAmount: Math.round(baseAmount + taxAmount),
+    taxAmount,
+    taxRate: tax.tax,
+  };
+};
 
 const createSubscriptionLog = async (req, res, next) => {
   const errors = validationResult(req);
@@ -41,10 +56,11 @@ const createSubscriptionLog = async (req, res, next) => {
 
     if (!subscriptionPlan) return next(appError("Subscription not found", 404));
 
-    const { amount, duration } = subscriptionPlan;
+    const { amount, duration, taxId } = subscriptionPlan;
+    const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
-      const { orderId, success, error } = await createRazorpayOrderId(amount);
+      const { orderId, success, error } = await createRazorpayOrderId(totalAmount);
 
       if (!success) {
         return res.status(500).json({
@@ -55,7 +71,7 @@ const createSubscriptionLog = async (req, res, next) => {
 
       return res.status(201).json({
         message: "Subscription order created successfully",
-        amount,
+        amount: totalAmount,
         orderId,
         currentPlan: planId,
         userId,
@@ -85,7 +101,7 @@ const createSubscriptionLog = async (req, res, next) => {
     await SubscriptionLog.create({
       planId,
       userId,
-      amount,
+      amount: totalAmount,
       paymentMode: "Cash",
       startDate,
       endDate,
@@ -96,7 +112,7 @@ const createSubscriptionLog = async (req, res, next) => {
 
     res.status(201).json({
       message: "Subscription order created successfully",
-      amount,
+      amount: totalAmount,
       currentPlan: planId,
       userId,
       paymentMode,
@@ -133,7 +149,8 @@ const verifyRazorpayPayment = async (req, res, next) => {
     const user = merchant || customer;
     if (!user) return next(appError(`${typeOfUser} not found`, 404));
 
-    const { amount, duration, maxOrders } = subscriptionPlan;
+    const { amount, duration, maxOrders, taxId } = subscriptionPlan;
+    const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     const calculateStartDate = (pricingDetails) => {
       if (!pricingDetails?.length) return new Date();
@@ -154,7 +171,7 @@ const verifyRazorpayPayment = async (req, res, next) => {
     const subscriptionLog = await SubscriptionLog.create({
       planId: currentPlan,
       userId,
-      amount,
+      amount: totalAmount,
       paymentMode,
       startDate,
       endDate,
@@ -186,7 +203,7 @@ const verifyRazorpayPayment = async (req, res, next) => {
           user.save(),
           CustomerTransaction.create({
             customerId: customer._id,
-            transactionAmount: amount,
+            transactionAmount: totalAmount,
             transactionType: "Subscription",
             madeOn: new Date(),
             type: "Debit",
@@ -225,10 +242,11 @@ const createSubscriptionLogUser = async (req, res, next) => {
       return res.status(404).json({ message: "Subscription plan not found" });
     }
 
-    const { amount, duration } = subscriptionPlan;
+    const { amount, duration, taxId } = subscriptionPlan;
+    const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
-      const razorpayOrderResponse = await createRazorpayOrderId(amount);
+      const razorpayOrderResponse = await createRazorpayOrderId(totalAmount);
       if (!razorpayOrderResponse.success) {
         return res.status(500).json({
           message: "Failed to create Razorpay order",
@@ -263,7 +281,7 @@ const createSubscriptionLogUser = async (req, res, next) => {
       const subscriptionLog = new SubscriptionLog({
         planId,
         userId,
-        amount,
+        amount: totalAmount,
         paymentMode: "Cash",
         startDate,
         endDate,
@@ -278,7 +296,7 @@ const createSubscriptionLogUser = async (req, res, next) => {
     if (paymentMode === "Online") {
       res.status(201).json({
         message: "Subscription order created successfully",
-        amount,
+        amount: totalAmount,
         orderId: razorpayOrderId,
         currentPlan: planId,
         userId,
@@ -287,7 +305,7 @@ const createSubscriptionLogUser = async (req, res, next) => {
     } else {
       res.status(201).json({
         message: "Subscription order created successfully",
-        amount,
+        amount: totalAmount,
         currentPlan: planId,
         userId,
         paymentMode,

@@ -791,7 +791,7 @@ const searchMerchantForOrderController = async (req, res, next) => {
     // Perform search with geofenceId populated
     const searchResults = await Merchant.find(searchCriteria)
       .select(
-        "merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.businessCategoryId"
+        "merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.businessCategoryId status"
       )
       .populate("merchantDetail.businessCategoryId", "title")
       .sort({

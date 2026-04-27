@@ -608,6 +608,7 @@ const confirmCustomOrderController = async (req, res, next) => {
         0,
       paymentMode: "Cash-on-delivery",
       paymentStatus: "Pending",
+      purchasedItems: [],
     });
 
     if (!tempOrder) return next(appError("Error in creating temporary order"));
@@ -663,6 +664,7 @@ const confirmCustomOrderController = async (req, res, next) => {
 
           paymentMode: storedOrderData.paymentMode,
           paymentStatus: storedOrderData.paymentStatus,
+          purchasedItems: storedOrderData.purchasedItems || [],
           orderDetailStepper: {
             created: {
               by: "Customer",

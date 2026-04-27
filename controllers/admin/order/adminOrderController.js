@@ -2654,12 +2654,7 @@ const createOrderByAdminController = async (req, res, next) => {
 
     const deliveryTime = calculateDeliveryTime(merchant, deliveryMode);
 
-    const orderDetails = await prepareOrderDetails(
-      cartFound,
-      customer,
-      deliveryTime,
-      paymentMode
-    );
+    const orderDetails = await prepareOrderDetails(cartFound, paymentMode);
 
     const isPickAndCustomCart =
       Array.isArray(cartFound.pickups) && Array.isArray(cartFound.drops);
@@ -2739,8 +2734,8 @@ const createOrderByAdminController = async (req, res, next) => {
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
-        ? orderDetails.formattedItems
-        : cartFound.drops[0].items,
+        ? orderDetails.purchasedItems || []
+        : [],
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
         date: new Date(),
