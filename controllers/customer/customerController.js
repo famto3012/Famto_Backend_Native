@@ -2087,6 +2087,144 @@ const deleteCustomerAccount = async (req, res, next) => {
   }
 };
 
+const reOrderController = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const customerId = req.userAuth;
+
+    // 1. Find original completed order belonging to this customer
+    const originalOrder = await Order.findOne({
+      _id: orderId,
+      customerId,
+      // status: "Completed",
+    })
+      .select("merchantId deliveryMode purchasedItems")
+      .lean();
+
+    if (!originalOrder) {
+      return next(appError("Order not found or not eligible for re-order", 404));
+    }
+
+    // Re-order only supports Home Delivery and Take Away
+    if (!["Home Delivery", "Take Away"].includes(originalOrder.deliveryMode)) {
+      return next(
+        appError(
+          "Re-order is only available for Home Delivery and Take Away orders",
+          400
+        )
+      );
+    }
+
+    // 2. Verify merchant is still active
+    const merchant = await Merchant.findById(originalOrder.merchantId)
+      .select("isApproved isBlocked merchantDetail.businessCategoryId")
+      .lean();
+
+    if (!merchant || merchant.isBlocked || merchant.isApproved !== "Approved") {
+      return next(appError("Merchant is no longer available", 400));
+    }
+
+    const purchasedItems = originalOrder.purchasedItems || [];
+    if (!purchasedItems.length) {
+      return next(appError("No items found in the original order", 400));
+    }
+
+    // 3. Fetch current product details (use current price, not historical)
+    const productIds = purchasedItems.map((item) => item.productId);
+    const products = await Product.find({ _id: { $in: productIds } })
+      .select("_id productName price variants inventory availableQuantity")
+      .lean();
+
+    const productMap = {};
+    products.forEach((p) => {
+      productMap[p._id.toString()] = p;
+    });
+
+    const cartItems = [];
+    const unavailableItems = [];
+
+    for (const item of purchasedItems) {
+      const product = productMap[item.productId?.toString()];
+
+      if (!product) {
+        unavailableItems.push({
+          productName: item.productName || "Unknown",
+          reason: "Product no longer available",
+        });
+        continue;
+      }
+
+      // Check stock if inventory is tracked
+      if (
+        product.inventory &&
+        product.availableQuantity !== null &&
+        product.availableQuantity < item.quantity
+      ) {
+        unavailableItems.push({
+          productName: product.productName,
+          reason: "Insufficient stock",
+        });
+        continue;
+      }
+
+      // Resolve current price — use variant price if variant exists, else base price
+      let currentPrice = product.price;
+      if (item.variantId) {
+        const variantType = product.variants
+          ?.flatMap((v) => v.variantTypes)
+          .find((vt) => vt._id?.toString() === item.variantId?.toString());
+        if (variantType) currentPrice = variantType.price;
+      }
+
+      cartItems.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: currentPrice,
+        variantTypeId: item.variantId || null,
+        itemName: product.productName,
+      });
+    }
+
+    if (!cartItems.length) {
+      return next(
+        appError("None of the items from the original order are available", 400)
+      );
+    }
+
+    // 4. Replace the customer's current cart with re-order items
+    const businessCategoryId =
+      merchant.merchantDetail?.businessCategoryId?.[0] || null;
+
+    const cart = await CustomerCart.findOneAndUpdate(
+      { customerId },
+      {
+        $set: {
+          merchantId: originalOrder.merchantId,
+          businessCategoryId,
+          items: cartItems,
+          cartDetail: null,
+          billDetail: null,
+        },
+      },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      message:
+        unavailableItems.length
+          ? `${cartItems.length} item(s) added to cart. ${unavailableItems.length} item(s) unavailable.`
+          : "All items added to cart successfully",
+      cartId: cart._id,
+      merchantId: originalOrder.merchantId,
+      deliveryMode: originalOrder.deliveryMode,
+      itemCount: cartItems.length,
+      unavailableItems,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   sendOtp,
   verifyOtp,
@@ -2129,4 +2267,5 @@ module.exports = {
   updateOrderTipController,
   applyPromoCode,
   deleteCustomerAccount,
+  reOrderController,
 };

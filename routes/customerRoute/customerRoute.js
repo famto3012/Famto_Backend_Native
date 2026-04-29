@@ -49,6 +49,7 @@ const {
   updateOrderTipController,
   applyPromoCode,
   deleteCustomerAccount,
+  reOrderController,
 } = require("../../controllers/customer/customerController");
 const {
   getAllBusinessCategoryController,
@@ -621,5 +622,8 @@ customerRoute.get(
 );
 
 customerRoute.delete("/delete-account", isAuthenticated, deleteCustomerAccount);
+
+// Re-order — rebuild cart from a completed order in one click
+customerRoute.post("/reorder/:orderId", isAuthenticated, reOrderController);
 
 module.exports = customerRoute;

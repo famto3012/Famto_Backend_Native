@@ -584,10 +584,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       baseCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
     }
 
-   let merchants = await Merchant.find(baseCriteria)
-  .skip((page - 1) * limit)
-  .limit(limit)
-  .lean();
+ let merchants = await Merchant.find(baseCriteria).lean();
 
     let sortedCount = 0;
     let merchantsWithProducts = [];

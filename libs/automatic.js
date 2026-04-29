@@ -151,8 +151,12 @@ const automaticStatusToggleForMerchant = async () => {
       return; // Skip further checks
     }
 
-    if (todayAvailability?.specificTime) {
-      let { startTime, endTime } = todayAvailability;
+    const hasTimeDefined =
+      todayAvailability?.startTime && todayAvailability?.endTime;
+
+    if (todayAvailability?.specificTime || hasTimeDefined) {
+      const startTime = todayAvailability.startTime.padStart(5, "0");
+      const endTime = todayAvailability.endTime.padStart(5, "0");
 
       // Handle past-midnight case
       if (
@@ -166,7 +170,11 @@ const automaticStatusToggleForMerchant = async () => {
       } else {
         merchantsToClose.push(merchant._id);
       }
+      return;
     }
+
+    // No valid availability config for today — close the merchant
+    merchantsToClose.push(merchant._id);
   });
 
   // Bulk update merchants who should be OPEN
