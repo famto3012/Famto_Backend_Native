@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(findstr /s /m /l \"require.*Geofence\\\\|Geofence\\\\.find\\\\|new Geofence\" \"C:\\\\Users\\\\sarat\\\\Projects\\\\Famto_Backend_Native\\\\*.js\" \"C:\\\\Users\\\\sarat\\\\Projects\\\\Famto_Backend_Native\\\\**\\\\*.js\")"
+    ]
+  }
+}

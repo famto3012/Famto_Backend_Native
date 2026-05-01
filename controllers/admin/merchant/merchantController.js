@@ -41,6 +41,31 @@ const ActivityLog = require("../../../models/ActivityLog");
 const MerchantSubscription = require("../../../models/MerchantSubscription");
 const Order = require("../../../models/Order");
 const MerchantPayout = require("../../../models/MerchantPayout");
+const Geofence = require("../../../models/Geofence");
+
+// Ray-casting point-in-polygon: returns true if [lat, lng] is inside polygon
+const isPointInPolygon = (lat, lng, polygon) => {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]; // [lat, lng]
+    const [xj, yj] = polygon[j];
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+// Finds the first geofence whose polygon contains the given [lat, lng]
+const getGeofenceByCoordinates = async (latitude, longitude) => {
+  const geofences = await Geofence.find({}).lean();
+  for (const geofence of geofences) {
+    if (isPointInPolygon(latitude, longitude, geofence.coordinates)) {
+      return geofence;
+    }
+  }
+  return null;
+};
 
 // Helper function to handle null or empty string values
 const convertNullValues = (obj) => {
@@ -1129,7 +1154,8 @@ const getSingleMerchantController = async (req, res, next) => {
 
 // Add merchant
 const addMerchantController = async (req, res, next) => {
-  const { fullName, email, phoneNumber, password } = req.body;
+  const { fullName, email, phoneNumber, password, latitude, longitude } =
+    req.body;
 
   const errors = validationResult(req);
 
@@ -1151,6 +1177,15 @@ const addMerchantController = async (req, res, next) => {
       return res.status(409).json({ errors: formattedErrors });
     }
 
+    // Auto-detect geofence from location if provided
+    let assignedGeofence = null;
+    if (latitude != null && longitude != null) {
+      assignedGeofence = await getGeofenceByCoordinates(
+        parseFloat(latitude),
+        parseFloat(longitude)
+      );
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -1159,6 +1194,11 @@ const addMerchantController = async (req, res, next) => {
       email: normalizedEmail,
       phoneNumber,
       password: hashedPassword,
+      ...(assignedGeofence && {
+        merchantDetail: {
+          geofenceId: assignedGeofence._id,
+        },
+      }),
     });
 
     if (!newMerchant) {
@@ -1178,7 +1218,7 @@ const addMerchantController = async (req, res, next) => {
       isApproved: "Pending",
       subscriptionStatus: "Inactive",
       status: false,
-      geofence: "-",
+      geofence: assignedGeofence?.name || "-",
       averageRating: "0",
       isServiceableToday: "Closed",
     };

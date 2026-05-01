@@ -1605,6 +1605,10 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
       return next(appError("Agent access denied", 403));
     }
 
+    if (!orderFound.items || orderFound.items.length === 0) {
+      return next(appError("No items found in order", 404));
+    }
+
     const itemFound = orderFound.items.find(
       (item) => item.itemId.toString() === itemId.toString()
     );
