@@ -2711,7 +2711,14 @@ const createOrderByAdminController = async (req, res, next) => {
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
       purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
         ? orderDetails.purchasedItems || []
-        : [],
+        : (cartFound.purchasedItems || []).map((item) => ({
+            productId: null,
+            productName: item.itemName || null,
+            quantity: item.quantity || 1,
+            price: null,
+            costPrice: null,
+            variantId: null,
+          })),
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
         date: new Date(),

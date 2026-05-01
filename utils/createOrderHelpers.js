@@ -1691,15 +1691,6 @@ const prepareOrderDetails = async (cart, paymentMode) => {
   ) {
     const populatedCartWithVariantNames = await formattedCartItems(cart);
 
-    console.log(
-      "Populated Cart with Variant Names:",
-      populatedCartWithVariantNames
-    );
-
-    const populatedCart = await CustomerCart.findById(cart._id)
-      .populate("items.productId") // <- Ensure productId is populated
-      .populate("items.variantTypeId");
-
     formattedItems = populatedCartWithVariantNames.items.map((item) => ({
       productId: item.productId,
       variantId : item.variantTypeId,

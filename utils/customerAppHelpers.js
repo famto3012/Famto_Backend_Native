@@ -719,52 +719,55 @@ const completeReferralDetail = async (newCustomer, code) => {
 
 const filterProductIdAndQuantity = async (items) => {
   try {
-    const filteredArray = await Promise.all(
-      items.map(async (item) => {
+    if (!items || items.length === 0) return [];
+
+    // Extract the raw ObjectId from productId — handles both raw ObjectId
+    // and a populated object { _id, productName, ... }
+    const extractId = (val) => val?._id ?? val;
+
+    // Batch-fetch all products in one query
+    const rawProductIds = items.map((item) => extractId(item?.productId)).filter(Boolean);
+    const products = await Product.find({ _id: { $in: rawProductIds } }).lean();
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+    return items
+      .map((item) => {
         if (!item.productId) return null;
 
-        console.log("ITEMs",items);
-
-        const product = await Product.findById(item?.productId).lean();
+        const productId = extractId(item.productId);
+        const product = productMap.get(productId?.toString());
         if (!product) return null;
+
+        // variantTypeId may be raw ObjectId or populated { _id, ... }
+        const rawVariantId = item.variantTypeId
+          ? extractId(item.variantTypeId)
+          : null;
+        const variantTypeIdStr = rawVariantId?.toString() ?? null;
 
         let price, costPrice;
 
-        if (item.variantTypeId) {
-          // variantTypeId may be a raw ObjectId or a populated { _id, ... } object
-          const variantTypeIdStr = (
-            item?.variantTypeId?._id ?? item?.variantTypeId
-          )?.toString();
-
-          const variantType = product.variants
-            .flatMap((variant) => variant.variantTypes)
+        if (variantTypeIdStr) {
+          const variantType = (product.variants || [])
+            .flatMap((variant) => variant.variantTypes || [])
             .find((vType) => vType._id.toString() === variantTypeIdStr);
 
-          if (variantType) {
-            price = variantType?.price || 0;
-            costPrice = variantType?.costPrice || 0;
-          } else {
-            price = product?.price || 0;
-            costPrice = product?.costPrice || 0;
-          }
+          price = variantType?.price ?? product?.price ?? 0;
+          costPrice = variantType?.costPrice ?? product?.costPrice ?? 0;
         } else {
-          price = product?.price || 0;
-          costPrice = product?.costPrice || 0;
+          price = product?.price ?? 0;
+          costPrice = product?.costPrice ?? 0;
         }
 
         return {
-          productId: item?.productId,
+          productId,
           productName: product?.productName || "",
-          variantId: item?.variantTypeId?._id || null,
+          variantId: rawVariantId || null,
           price,
           costPrice,
           quantity: item?.quantity,
         };
       })
-    );
-
-    // Filter out any null values from items that were skipped
-    return filteredArray.filter((item) => item !== null);
+      .filter(Boolean);
   } catch (err) {
     throw new Error(`Error filtering items: ${err.message}`);
   }

@@ -211,7 +211,7 @@ const purchasedItemsSchema = mongoose.Schema(
   {
     productId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      default: null, // null for custom orders (no product reference)
     },
     variantId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -223,7 +223,7 @@ const purchasedItemsSchema = mongoose.Schema(
     },
     productName: {
       type: String,
-      required: false,
+      default: null,
     },
     costPrice: {
       type: Number,

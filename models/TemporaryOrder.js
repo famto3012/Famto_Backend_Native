@@ -58,7 +58,7 @@ const purchasedItemsSchema = mongoose.Schema(
   {
     productId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      default: null,
     },
     variantId: {
       type: mongoose.Schema.Types.ObjectId,
