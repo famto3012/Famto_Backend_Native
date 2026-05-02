@@ -1608,6 +1608,12 @@ const adminAddSponsorshipController = async (req, res, next) => {
       return next(appError("Merchant not found", 404));
     }
 
+    // Resolve the subscription plan document to get amount and duration
+    const subscriptionPlan = await MerchantSubscription.findById(currentPlan);
+    if (!subscriptionPlan) {
+      return next(appError("Subscription plan not found", 404));
+    }
+
     let startDate = new Date();
 
     const existingSponsorships = merchantFound?.sponsorshipDetail || [];
@@ -1619,6 +1625,18 @@ const adminAddSponsorshipController = async (req, res, next) => {
     }
 
     const endDate = calculateEndDate(startDate, currentPlan);
+
+    // Create a subscription log so the admin can track and mark it as paid
+    const subscriptionLog = await SubscriptionLog.create({
+      planId: currentPlan,
+      userId: merchantId,
+      amount: subscriptionPlan.amount,
+      paymentMode: "Cash",
+      startDate,
+      endDate,
+      typeOfUser: "Merchant",
+      paymentStatus: "Unpaid",
+    });
 
     merchantFound.sponsorshipDetail.push({
       sponsorshipStatus: true,
