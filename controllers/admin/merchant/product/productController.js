@@ -791,7 +791,7 @@ const downloadCobminedProductAndCategoryController = async (req, res, next) => {
       { id: "longDescription", title: "Long Description" },
       { id: "productImageURL", title: "Product Image" },
       { id: "inventory", title: "Inventory" },
-      { id: "availableQuantity", title: "Available quantity" },
+      { id: "availableQuantity", title: "Available Quantity" },
       { id: "alert", title: "Alert" },
       { id: "variantName", title: "Variant Name" },
       { id: "typeName", title: "Variant Type Name" },

@@ -608,14 +608,16 @@ const confirmCustomOrderController = async (req, res, next) => {
         0,
       paymentMode: "Cash-on-delivery",
       paymentStatus: "Pending",
-      purchasedItems: (cart.purchasedItems || []).map((item) => ({
-        productId: null,
-        productName: item.itemName || null,
-        quantity: item.quantity || 1,
-        price: null,
-        costPrice: null,
-        variantId: null,
-      })),
+      purchasedItems: cart.drops
+        .flatMap((drop) => drop.items || [])
+        .map((item) => ({
+          productId: null,
+          productName: item.itemName || null,
+          quantity: item.quantity || 1,
+          price: null,
+          costPrice: null,
+          variantId: null,
+        })),
     });
 
     if (!tempOrder) return next(appError("Error in creating temporary order"));

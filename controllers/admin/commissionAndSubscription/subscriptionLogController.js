@@ -329,10 +329,17 @@ const setAsPaidController = async (req, res, next) => {
     if (typeOfUser === "Merchant") {
       const merchantFound = await Merchant.findById(log.userId);
 
-      merchantFound.merchantDetail.pricing.push({
-        modelType: "Subscription",
-        modelId: log._id,
-      });
+      // Only add to pricing if not already added (e.g. by adminAddSponsorshipController)
+      const alreadyInPricing = merchantFound.merchantDetail.pricing.some(
+        (p) => p.modelId?.toString() === log._id.toString()
+      );
+
+      if (!alreadyInPricing) {
+        merchantFound.merchantDetail.pricing.push({
+          modelType: "Subscription",
+          modelId: log._id,
+        });
+      }
 
       await Promise.all([
         merchantFound.save(),

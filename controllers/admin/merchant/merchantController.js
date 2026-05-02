@@ -1646,6 +1646,13 @@ const adminAddSponsorshipController = async (req, res, next) => {
       paymentDetails: JSON.stringify({ addedBy: req.userRole, addedById: req.userAuth }),
     });
 
+    // Immediately activate the merchant's subscription so they are not shown
+    // as inactive while awaiting manual payment confirmation
+    merchantFound.merchantDetail.pricing.push({
+      modelType: "Subscription",
+      modelId: subscriptionLog._id,
+    });
+
     await merchantFound.save();
 
     return res.status(200).json({
