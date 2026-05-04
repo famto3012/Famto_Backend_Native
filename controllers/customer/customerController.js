@@ -167,9 +167,8 @@ const registerAndLoginController = async (req, res, next) => {
         phoneNumber,
         customer?.fullName || ""
       ).catch((err) =>
-        console.error("[Interakt] Welcome message error:", err.message);
-        console.log("[Interakt] Welcome message error:", err.message);
-      );
+        console.error("[Interakt] Welcome message error:", err.message
+      ))
     }
 
     const refreshToken = generateToken(

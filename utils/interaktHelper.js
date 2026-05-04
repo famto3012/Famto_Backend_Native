@@ -20,7 +20,7 @@ const sendInteraktMessage = async (
   countryCode = "91"
 ) => {
   if (!process.env.INTERAKT_API_KEY) {
-    console.warn("[Interakt] INTERAKT_API_KEY is not set – skipping message.");
+    console.log("[Interakt] INTERAKT_API_KEY is not set – skipping message.");
     return;
   }
 
