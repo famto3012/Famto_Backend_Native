@@ -19,7 +19,7 @@ const sendInteraktMessage = async (
   languageCode = "en",
   countryCode = "91"
 ) => {
-  if (!INTERAKT_API_KEY) {
+  if (!process.env.INTERAKT_API_KEY) {
     console.warn("[Interakt] INTERAKT_API_KEY is not set – skipping message.");
     return;
   }
@@ -70,6 +70,7 @@ const sendInteraktMessage = async (
  */
 const sendWelcomeMessage = async (phoneNumber, name = "") => {
   // Template name must match exactly what is approved in your Meta / Interakt account
+  console.log("Welcome Message initalized");
   const templateName = process.env.INTERAKT_WELCOME_TEMPLATE || "customer_welcome";
   const bodyParams = name ? [name] : [];
   await sendInteraktMessage(phoneNumber, templateName, bodyParams);
