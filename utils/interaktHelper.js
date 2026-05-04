@@ -16,7 +16,8 @@ const sendInteraktMessage = async (
   templateName,
   bodyParams = [],
   languageCode = "en",
-  countryCode = "91"
+  countryCode = "91",
+  headerImageUrl = null
 ) => {
   if (!process.env.INTERAKT_API_KEY) {
     console.log("[Interakt] INTERAKT_API_KEY is not set – skipping message.");
@@ -34,6 +35,9 @@ const sendInteraktMessage = async (
     template: {
       name: templateName,
       languageCode,
+      ...(headerImageUrl && {
+        headerValues: [headerImageUrl],
+      }),
       ...(bodyParams.length > 0 && {
         bodyValues: bodyParams,
       }),
@@ -70,11 +74,11 @@ const sendInteraktMessage = async (
  * @param {string} [name]      - Customer's name (optional, used as {{1}} if template expects it)
  */
 const sendWelcomeMessage = async (phoneNumber, name = "") => {
-  // Template name must match exactly what is approved in your Meta / Interakt account
-  console.log("Welcome Message initalized");
+  console.log("Welcome Message initialized");
   const templateName = process.env.INTERAKT_WELCOME_TEMPLATE || "customer_welcome";
+  const headerImageUrl = process.env.INTERAKT_WELCOME_HEADER_IMAGE || null;
   const bodyParams = name ? [name] : [];
-  await sendInteraktMessage(phoneNumber, templateName, bodyParams);
+  await sendInteraktMessage(phoneNumber, templateName, bodyParams, "en", "91", headerImageUrl);
 };
 
 /**
