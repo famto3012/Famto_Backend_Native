@@ -1,7 +1,6 @@
 const axios = require("axios");
 
 const INTERAKT_API_URL = "https://api.interakt.ai/v1/public/message/";
-const INTERAKT_API_KEY = process.env.INTERAKT_API_KEY;
 
 /**
  * Send a WhatsApp template message via Interakt.
@@ -42,9 +41,11 @@ const sendInteraktMessage = async (
   };
 
   try {
+    // INTERAKT_API_KEY in .env is already base64-encoded ("rawKey:" → base64)
+    // Use it directly — do NOT re-encode
     const response = await axios.post(INTERAKT_API_URL, payload, {
       headers: {
-        Authorization: `Basic ${INTERAKT_API_KEY}`,
+        Authorization: `Basic ${process.env.INTERAKT_API_KEY}`,
         "Content-Type": "application/json",
       },
     });
