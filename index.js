@@ -6,7 +6,10 @@ const morgan = require("morgan");
 const TemporaryOrder = require("./models/TemporaryOrder");
 const Order = require("./models/Order");
 const CustomerCart = require("./models/CustomerCart");
+const Customer = require("./models/Customer");
+const Merchant = require("./models/Merchant");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
+const { sendCartReminderMessage } = require("./utils/interaktHelper");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
 const authRoute = require("./routes/adminRoute/authRoute");
@@ -370,6 +373,60 @@ cron.schedule("*/10 * * * * *", async () => {
 
 cron.schedule("*/5 * * * *", () => {
   Object.keys(distanceCache).forEach((key) => delete distanceCache[key]);
+});
+
+// ─── Daily 6 PM IST cart reminder via Interakt WhatsApp ──────────────────────
+// 6 PM IST = 12:30 UTC
+cron.schedule("30 12 * * *", async () => {
+  try {
+    console.log("[CartReminder] Running daily 6 PM cart reminder cron...");
+
+    // Fetch all active carts that have at least one item
+    const carts = await CustomerCart.find({
+      "items.0": { $exists: true },
+    })
+      .populate("customerId", "phoneNumber fullName")
+      .populate("merchantId", "merchantName")
+      .populate("items.productId", "productName")
+      .lean();
+
+    if (!carts.length) {
+      console.log("[CartReminder] No active carts found.");
+      return;
+    }
+
+    for (const cart of carts) {
+      try {
+        const customer = cart.customerId;
+        if (!customer?.phoneNumber) continue;
+
+        const merchantName =
+          cart.merchantId?.merchantName || "your favourite store";
+
+        const productNames = (cart.items || [])
+          .map((item) => item.productId?.productName || item.itemName || "item")
+          .filter(Boolean)
+          .join(", ");
+
+        if (!productNames) continue;
+
+        await sendCartReminderMessage(
+          customer.phoneNumber,
+          merchantName,
+          productNames
+        );
+      } catch (innerErr) {
+        console.error(
+          "[CartReminder] Error sending reminder for cart:",
+          innerErr.message
+        );
+      }
+    }
+
+    console.log(`[CartReminder] Sent reminders for ${carts.length} cart(s).`);
+  } catch (err) {
+    console.error("[CartReminder] Cron job failed:", err.message);
+  }
 });
 
 // Global errors

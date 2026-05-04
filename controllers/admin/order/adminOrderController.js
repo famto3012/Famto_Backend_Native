@@ -9,6 +9,7 @@ const { validationResult } = require("express-validator");
 const Customer = require("../../../models/Customer");
 const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
+const Product = require("../../../models/Product");
 const Conversation = require("../../../models/Conversation");
 const Message = require("../../../models/Message");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
@@ -771,6 +772,31 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         ? orderFound.orderDetailStepper
         : [orderFound.orderDetailStepper],
     };
+
+    // Enrich purchasedItems with product image URLs
+    if (formattedResponse.items?.length > 0) {
+      const productIds = formattedResponse.items
+        .filter((item) => item.productId)
+        .map((item) => item.productId);
+
+      if (productIds.length > 0) {
+        const products = await Product.find({ _id: { $in: productIds } })
+          .select("_id productImageURL")
+          .lean();
+
+        const productImageMap = {};
+        products.forEach((p) => {
+          productImageMap[p._id.toString()] = p.productImageURL || null;
+        });
+
+        formattedResponse.items = formattedResponse.items.map((item) => ({
+          ...item,
+          itemImageURL: item.productId
+            ? productImageMap[item.productId.toString()] || null
+            : null,
+        }));
+      }
+    }
 
     res.status(200).json({
       success: true,
