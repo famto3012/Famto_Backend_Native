@@ -1058,11 +1058,12 @@ const processVoiceInstructions = async (req, cart, next) => {
       cart?.cartDetail?.voiceInstructionToMerchant || "";
     let voiceInstructionToAgentURL =
       cart?.cartDetail?.voiceInstructionToAgent || "";
+    let prescriptionURL = null;
 
     if (req.files) {
-      const { voiceInstructionToMerchant, voiceInstructionToAgent } = req.files;
+      const { voiceInstructionToMerchant, voiceInstructionToAgent, prescription } = req.files;
 
-      if (req.files.voiceInstructionToMerchant) {
+      if (voiceInstructionToMerchant) {
         if (voiceInstructionToMerchantURL) {
           await deleteFromFirebase(voiceInstructionToMerchantURL);
         }
@@ -1072,7 +1073,7 @@ const processVoiceInstructions = async (req, cart, next) => {
         );
       }
 
-      if (req.files.voiceInstructionToAgent) {
+      if (voiceInstructionToAgent) {
         if (voiceInstructionToAgentURL) {
           await deleteFromFirebase(voiceInstructionToAgentURL);
         }
@@ -1081,9 +1082,16 @@ const processVoiceInstructions = async (req, cart, next) => {
           "VoiceInstructions"
         );
       }
+
+      if (prescription) {
+        prescriptionURL = await uploadToFirebase(
+          prescription[0],
+          "Prescriptions"
+        );
+      }
     }
 
-    return { voiceInstructionToMerchantURL, voiceInstructionToAgentURL };
+    return { voiceInstructionToMerchantURL, voiceInstructionToAgentURL, prescriptionURL };
   } catch (err) {
     next(appError(err.message));
   }

@@ -294,6 +294,7 @@ customerRoute.post(
   upload.fields([
     { name: "voiceInstructionToMerchant", maxCount: 1 },
     { name: "voiceInstructionToAgent", maxCount: 1 },
+    { name: "prescription",maxCount: 1}
   ]),
   isAuthenticated,
   confirmOrderDetailController

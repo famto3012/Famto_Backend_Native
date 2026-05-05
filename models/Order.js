@@ -302,6 +302,7 @@ const orderSchema = mongoose.Schema(
     commissionDetail: commissionDetailSchema,
     isReady: { type: Boolean, default: false },
     delayAlertSent: { type: Boolean, default: false },
+    prescription: { type: String, default: null }, // URL – required only for medicine orders
   },
   { timestamps: true }
 );

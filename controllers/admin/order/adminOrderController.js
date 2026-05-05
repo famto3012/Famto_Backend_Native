@@ -2643,7 +2643,7 @@ const createOrderByAdminController = async (req, res, next) => {
   }
 
   try {
-    const { paymentMode, deliveryMode, cartId } = req.body;
+    const { paymentMode, deliveryMode, cartId, prescription = null } = req.body;
 
     const cartFound = await getCartByDeliveryMode(cartId, deliveryMode);
     if (!cartFound) return next(appError("Cart not found", 404));
@@ -2747,6 +2747,7 @@ const createOrderByAdminController = async (req, res, next) => {
               costPrice: null,
               variantId: null,
             })),
+      prescription,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
         date: new Date(),

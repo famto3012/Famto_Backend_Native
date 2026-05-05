@@ -148,6 +148,7 @@ const tempOrderSchema = new mongoose.Schema(
     paymentId: { type: String, default: null },
     purchasedItems: [purchasedItemsSchema],
     razorpayOrderId: { type: String, default: null },
+    prescription: { type: String, default: null }, // URL – required only for medicine orders
     expiresAt: { type: Date, required: false }, // ✅ IMPORTANT
     isProcessed: { type: Boolean, default: false },
   },

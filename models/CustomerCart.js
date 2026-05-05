@@ -201,6 +201,7 @@ const CustomerCartSchema = mongoose.Schema(
     items: [cartItemSchema],
     cartDetail: cartDetailSchema,
     billDetail: billSchema,
+    prescription: { type: String, default: null }, // Firebase URL, only for medicine orders
   },
   {
     timestamps: true,

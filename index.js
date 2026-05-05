@@ -331,6 +331,7 @@ cron.schedule("*/10 * * * * *", async () => {
           paymentStatus: o.paymentStatus,
           paymentId: o.paymentId,
           purchasedItems: o.purchasedItems,
+          prescription: o.prescription || null,
           status: "Pending", // 🔥 better than Completed
           "orderDetailStepper.created": {
             by: "Customer",
@@ -377,13 +378,15 @@ cron.schedule("*/5 * * * *", () => {
 
 // ─── Daily 6 PM IST cart reminder via Interakt WhatsApp ──────────────────────
 // 6 PM IST = 12:30 UTC
-cron.schedule("30 12 * * *", async () => {
+cron.schedule("30 18 * * *", async () => {
   try {
     console.log("[CartReminder] Running daily 6 PM cart reminder cron...");
 
-    // Fetch all active carts that have at least one item
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
     const carts = await CustomerCart.find({
       "items.0": { $exists: true },
+      updatedAt: { $gte: last24Hours },
     })
       .populate("customerId", "phoneNumber fullName")
       .populate("merchantId", "merchantName")

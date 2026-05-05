@@ -1398,6 +1398,9 @@ const confirmOrderDetailController = async (req, res, next) => {
       isSuperMarketOrder = false,
     } = req.body;
 
+
+    console.log("PRESCRIPTION",req.body);
+
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
       next
@@ -1417,8 +1420,10 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
 
-    const { voiceInstructionToMerchantURL, voiceInstructionToAgentURL } =
+    const { voiceInstructionToMerchantURL, voiceInstructionToAgentURL, prescriptionURL } =
       await processVoiceInstructions(req, cart, next);
+
+    console.log("[prescription URL]", prescriptionURL);
 
     const {
       pickupLocation,
@@ -1534,6 +1539,8 @@ const confirmOrderDetailController = async (req, res, next) => {
           deliveryChargePerDay: actualDeliveryCharge,
           loyaltyDiscount: loyaltyDiscount ? loyaltyDiscount : null,
         },
+        // Persist prescription URL so orderPaymentController can read it from cart
+        ...(prescriptionURL && { prescription: prescriptionURL }),
       },
       { new: true, upsert: true }
     );
@@ -1714,6 +1721,9 @@ const orderPaymentController = async (req, res, next) => {
       },
     ];
 
+    // Prescription URL saved to cart in the previous add-details step
+    const prescription = cart.prescription || null;
+
     let newOrder;
     if (paymentMode === "Famto-cash") {
       if (customer.customerDetails.walletBalance < orderAmount) {
@@ -1863,6 +1873,7 @@ const orderPaymentController = async (req, res, next) => {
           paymentMode: "Famto-cash",
           paymentStatus: "Completed",
           purchasedItems,
+          prescription,
         });
 
         // Clear the cart
@@ -1916,6 +1927,7 @@ const orderPaymentController = async (req, res, next) => {
               status: storedOrderData.status,
               paymentMode: storedOrderData.paymentMode,
               paymentStatus: storedOrderData.paymentStatus,
+              prescription: storedOrderData.prescription,
               "orderDetailStepper.created": {
                 by: "Customer",
                 userId: storedOrderData.customerId,
@@ -2049,6 +2061,7 @@ const orderPaymentController = async (req, res, next) => {
         paymentMode: "Cash-on-delivery",
         paymentStatus: "Pending",
         purchasedItems,
+        prescription,
       });
 
       if (!tempOrder) {
@@ -2105,6 +2118,7 @@ const orderPaymentController = async (req, res, next) => {
             deliveryOption: storedOrderData.deliveryOption,
             status: storedOrderData.status,
             paymentMode: storedOrderData.paymentMode,
+            prescription: storedOrderData.prescription,
             paymentStatus: storedOrderData.paymentStatus,
             "orderDetailStepper.created": {
               by: "Customer",
@@ -2226,6 +2240,7 @@ const orderPaymentController = async (req, res, next) => {
     paymentMode: "Online-payment",
     paymentStatus: "Pending",
     purchasedItems,
+    prescription,
 
     // ✅ CRITICAL
     expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec
