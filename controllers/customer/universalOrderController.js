@@ -3018,12 +3018,6 @@ const getMerchantTodayAvailability = async (req, res) => {
       return res.status(400).json({ message: "Availability data not found" });
     }
 
-    // Convert current time to IST
-    const nowUTC = new Date();
-    const nowIST = new Date(
-      nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-    const dayIndex = nowIST.getDay(); // 0 = Sunday, 6 = Saturday
     const days = [
       "sunday",
       "monday",
@@ -3033,58 +3027,89 @@ const getMerchantTodayAvailability = async (req, res) => {
       "friday",
       "saturday",
     ];
-    const today = days[dayIndex];
 
-    // If full-time availability
+    // Resolve current day in IST
+    const nowUTC = new Date();
+    const nowIST = new Date(
+      nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const todayIndex = nowIST.getDay();
+    const todayName = days[todayIndex];
+
+    // Helper: convert "HH:MM" (24h) → "H:MM AM/PM"
+    const to12Hour = (timeStr) => {
+      if (!timeStr) return null;
+      const [h, m] = timeStr.split(":").map(Number);
+      const hour12 = h % 12 || 12;
+      const ampm = h >= 12 ? "PM" : "AM";
+      return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+    };
+
+    // Helper: build a normalised day slot for one day entry
+    const buildDaySlot = (dayName, dayData) => {
+      if (!dayData) {
+        return { day: dayName, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+      }
+
+      if (dayData.openAllDay) {
+        return { day: dayName, status: "Open all day", openAllDay: true, closedAllDay: false, startTime: null, endTime: null };
+      }
+
+      if (dayData.closedAllDay) {
+        return { day: dayName, status: "Closed", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+      }
+
+      const hasTime = dayData.startTime && dayData.endTime;
+      if (hasTime) {
+        return {
+          day: dayName,
+          status: "Specific time",
+          openAllDay: false,
+          closedAllDay: false,
+          startTime: to12Hour(dayData.startTime),
+          endTime: to12Hour(dayData.endTime),
+          startTime24: dayData.startTime,
+          endTime24: dayData.endTime,
+        };
+      }
+
+      return { day: dayName, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+    };
+
+    // Full-time: merchant is open every day all day
     if (availability.type === "Full-time") {
+      const week = days.map((day) => ({
+        day,
+        status: "Open all day",
+        openAllDay: true,
+        closedAllDay: false,
+        startTime: null,
+        endTime: null,
+      }));
+
       return res.status(200).json({
         type: "Full-time",
-        day: today,
-        status: "Open all day",
-        nextDay: {
-          day: days[(dayIndex + 1) % 7],
-          startTime: "Anytime",
-        },
+        today: todayName,
+        week,
       });
     }
 
-    // Specific-time availability
-    const todayAvailability = availability.specificDays?.[today];
+    // Specific-time: build a slot for every day of the week
+    // Return in order starting from today so the app can render Mon→Sun starting at current day
+    const week = days.map((day) =>
+      buildDaySlot(day, availability.specificDays?.[day])
+    );
 
-    const nextDayIndex = (dayIndex + 1) % 7;
-    const nextDayName = days[nextDayIndex];
-    const nextDayAvailability = availability.specificDays?.[nextDayName];
-
-    let nextDayStartTime = "Unavailable";
-
-    if (nextDayAvailability) {
-      if (nextDayAvailability.openAllDay) {
-        nextDayStartTime = "Anytime";
-      } else if (
-        nextDayAvailability.specificTime &&
-        nextDayAvailability.startTime
-      ) {
-        const [hours, minutes] = nextDayAvailability.startTime
-          .split(":")
-          .map(Number);
-
-        // Convert 24-hour to 12-hour format manually
-        const hour12 = hours % 12 || 12;
-        const ampm = hours >= 12 ? "PM" : "AM";
-        const formattedMinutes = minutes.toString().padStart(2, "0");
-
-        nextDayStartTime = `${hour12}:${formattedMinutes} ${ampm}`;
-      }
-    }
+    // Rotate the array so today is first
+    const rotated = [
+      ...week.slice(todayIndex),
+      ...week.slice(0, todayIndex),
+    ];
 
     return res.status(200).json({
       type: "Specific-time",
-      day: today,
-      todayAvailability,
-      nextDay: {
-        day: nextDayName,
-        startTime: nextDayStartTime,
-      },
+      today: todayName,
+      week: rotated,
     });
   } catch (error) {
     console.error("Error fetching merchant availability:", error);
