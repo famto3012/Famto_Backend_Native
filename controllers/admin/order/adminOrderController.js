@@ -10,6 +10,7 @@ const Customer = require("../../../models/Customer");
 const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const Product = require("../../../models/Product");
+const AutoAllocation = require("../../../models/AutoAllocation");
 const Conversation = require("../../../models/Conversation");
 const Message = require("../../../models/Message");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
@@ -3239,6 +3240,127 @@ const getOrderChatByAdminController = async (req, res, next) => {
   }
 };
 
+const reassignAgentController = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { newAgentId } = req.body;
+
+    if (!newAgentId) return next(appError("New agent ID is required", 400));
+
+    const [order, task, newAgent, autoAllocation] = await Promise.all([
+      Order.findById(orderId),
+      Task.findOne({ orderId }),
+      Agent.findById(newAgentId),
+      AutoAllocation.findOne(),
+    ]);
+
+    if (!order) return next(appError("Order not found", 404));
+    if (!task) return next(appError("Task not found for this order", 404));
+    if (!newAgent) return next(appError("New agent not found", 404));
+
+    const oldAgentId = order.agentId;
+
+    // Decrement old agent's pending orders and notify them
+    if (oldAgentId && oldAgentId.toString() !== newAgentId.toString()) {
+      const oldAgent = await Agent.findById(oldAgentId);
+      if (oldAgent) {
+        if (!oldAgent.appDetail) oldAgent.appDetail = { pendingOrders: 0 };
+        oldAgent.appDetail.pendingOrders = Math.max(
+          0,
+          (oldAgent.appDetail.pendingOrders || 1) - 1
+        );
+        await oldAgent.save();
+        sendSocketData(oldAgentId.toString(), "orderRemoved", { orderId });
+      }
+    }
+
+    // Update order and task
+    order.agentId = newAgentId;
+    task.agentId = newAgentId;
+    task.taskStatus = "Assigned";
+
+    // Increment new agent's pending orders
+    if (!newAgent.appDetail) {
+      newAgent.appDetail = {
+        totalEarning: 0,
+        orders: 0,
+        pendingOrders: 0,
+        totalDistance: 0,
+        cancelledOrders: 0,
+        loginDuration: 0,
+      };
+    }
+    newAgent.appDetail.pendingOrders += 1;
+
+    await Promise.all([order.save(), task.save(), newAgent.save()]);
+
+    // Notify new agent and related roles
+    const eventName = "newOrder";
+    const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+    for (const role of rolesToNotify) {
+      let roleId;
+      if (role === "admin") roleId = process.env.ADMIN_ID;
+      else if (role === "merchant") roleId = order?.merchantId;
+      else if (role === "driver") roleId = newAgentId;
+      else if (role === "customer") roleId = order?.customerId;
+      else {
+        const roleValue = await ManagerRoles.findOne({ roleName: role });
+        let manager;
+        if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
+        if (manager) roleId = manager._id;
+      }
+
+      if (roleId) {
+        const notificationData = {
+          fcm: {
+            ...data,
+            agentId: newAgentId,
+            orderId: [order._id],
+            merchantName: order?.pickups[0]?.address?.fullName || null,
+            pickAddress: order?.pickups[0]?.address || null,
+            customerName: order?.drops[0]?.address?.fullName || null,
+            orderType: order?.deliveryMode || null,
+            taskDate: formatDate(order?.deliveryTime),
+            taskTime: formatTime(order?.deliveryTime),
+            timer: autoAllocation?.expireTime || null,
+          },
+        };
+        await sendNotification(
+          roleId,
+          eventName,
+          notificationData,
+          role.charAt(0).toUpperCase() + role.slice(1)
+        );
+      }
+    }
+
+    const socketData = {
+      ...data,
+      orderId: order._id,
+      taskId: task._id,
+      merchantName: order?.pickups[0]?.address?.fullName || null,
+      pickAddress: order?.pickups[0]?.address || null,
+      customerName: order?.drops[0]?.address?.fullName || null,
+      customerAddress: order?.drops[0]?.address,
+      agentId: newAgentId,
+      orderType: order?.deliveryMode || null,
+      taskDate: formatDate(order?.deliveryTime),
+      taskTime: formatTime(order?.deliveryTime),
+      timer: autoAllocation?.expireTime || null,
+      batchOrder: false,
+    };
+    sendSocketData(newAgentId.toString(), eventName, socketData);
+
+    res.status(200).json({
+      success: true,
+      message: "Agent reassigned successfully",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   confirmOrderByAdminController,
   rejectOrderByAdminController,
@@ -3258,4 +3380,5 @@ module.exports = {
   markPaymentCollectedFromCustomer,
   markOrderAsCancelled,
   getOrderChatByAdminController,
+  reassignAgentController,
 };

@@ -125,6 +125,76 @@ const homeSearchController = async (req, res, next) => {
   }
 };
 
+// ─── Shared helper: build full 7-day week availability for a merchant ────────
+const WEEK_DAYS = [
+  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+];
+
+const _to12Hour = (timeStr) => {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(":").map(Number);
+  const hour12 = h % 12 || 12;
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+};
+
+const buildMerchantWeekAvailability = (availability) => {
+  if (!availability || !availability.type) return null;
+
+  if (availability.type === "Full-time") {
+    return {
+      type: "Full-time",
+      week: WEEK_DAYS.map((day) => ({
+        day,
+        status: "Open all day",
+        openAllDay: true,
+        closedAllDay: false,
+        startTime: null,
+        endTime: null,
+      })),
+    };
+  }
+
+  // Specific-time — build one slot per day of the week
+  const week = WEEK_DAYS.map((day) => {
+    const d = availability.specificDays?.[day];
+    if (!d) {
+      return { day, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+    }
+    if (d.openAllDay) {
+      return { day, status: "Open all day", openAllDay: true, closedAllDay: false, startTime: null, endTime: null };
+    }
+    if (d.closedAllDay) {
+      return { day, status: "Closed", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+    }
+    const hasTime = d.startTime && d.endTime;
+    if (hasTime) {
+      return {
+        day,
+        status: "Specific time",
+        openAllDay: false,
+        closedAllDay: false,
+        startTime: _to12Hour(d.startTime),
+        endTime: _to12Hour(d.endTime),
+        startTime24: d.startTime,
+        endTime24: d.endTime,
+      };
+    }
+    return { day, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+  });
+
+  // Rotate so today is index 0
+  const todayIndex = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  ).getDay();
+
+  return {
+    type: "Specific-time",
+    week: [...week.slice(todayIndex), ...week.slice(0, todayIndex)],
+  };
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 // List the available restaurants in the customers geofence
 const listRestaurantsController = async (req, res, next) => {
   let {
@@ -578,6 +648,8 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       };
     }
 
+    console.log("Serving area");
+
     if (filterType?.toLowerCase() === "veg") {
       baseCriteria["merchantDetail.merchantFoodType"] = "Veg";
     } else if (filterType?.toLowerCase() === "rating 4.0+") {
@@ -649,6 +721,15 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       cachedDistances = merchantsWithDistance;
     }
 
+    // Filter out merchants whose customer location is outside their serving radius
+    cachedDistances = cachedDistances.filter((merchant) => {
+      const { servingArea, servingRadius } = merchant.merchantDetail;
+      if (servingArea === "Mention-radius" && servingRadius != null) {
+        return merchant.distance <= servingRadius;
+      }
+      return true; // "No-restrictions" — always include
+    });
+
     cachedDistances.sort((a, b) => {
       if (a.status === true && b.status === false) return -1;
       if (a.status === false && b.status === true) return 1;
@@ -674,6 +755,10 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       distance: merchant.distance,
       isFavorite: customer?.customerDetails?.favoriteMerchants?.some(
         (fav) => fav.merchantId === merchant._id
+      ),
+      // Full weekly availability so the app can display hours for any day
+      availability: buildMerchantWeekAvailability(
+        merchant.merchantDetail.availability
       ),
     }));
 
@@ -3033,98 +3118,19 @@ const getMerchantTodayAvailability = async (req, res) => {
       return res.status(400).json({ message: "Availability data not found" });
     }
 
-    const days = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
+    // Resolve today's name in IST
+    const todayIndex = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    ).getDay();
+    const todayName = WEEK_DAYS[todayIndex];
 
-    // Resolve current day in IST
-    const nowUTC = new Date();
-    const nowIST = new Date(
-      nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-    const todayIndex = nowIST.getDay();
-    const todayName = days[todayIndex];
-
-    // Helper: convert "HH:MM" (24h) → "H:MM AM/PM"
-    const to12Hour = (timeStr) => {
-      if (!timeStr) return null;
-      const [h, m] = timeStr.split(":").map(Number);
-      const hour12 = h % 12 || 12;
-      const ampm = h >= 12 ? "PM" : "AM";
-      return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
-    };
-
-    // Helper: build a normalised day slot for one day entry
-    const buildDaySlot = (dayName, dayData) => {
-      if (!dayData) {
-        return { day: dayName, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
-      }
-
-      if (dayData.openAllDay) {
-        return { day: dayName, status: "Open all day", openAllDay: true, closedAllDay: false, startTime: null, endTime: null };
-      }
-
-      if (dayData.closedAllDay) {
-        return { day: dayName, status: "Closed", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
-      }
-
-      const hasTime = dayData.startTime && dayData.endTime;
-      if (hasTime) {
-        return {
-          day: dayName,
-          status: "Specific time",
-          openAllDay: false,
-          closedAllDay: false,
-          startTime: to12Hour(dayData.startTime),
-          endTime: to12Hour(dayData.endTime),
-          startTime24: dayData.startTime,
-          endTime24: dayData.endTime,
-        };
-      }
-
-      return { day: dayName, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
-    };
-
-    // Full-time: merchant is open every day all day
-    if (availability.type === "Full-time") {
-      const week = days.map((day) => ({
-        day,
-        status: "Open all day",
-        openAllDay: true,
-        closedAllDay: false,
-        startTime: null,
-        endTime: null,
-      }));
-
-      return res.status(200).json({
-        type: "Full-time",
-        today: todayName,
-        week,
-      });
-    }
-
-    // Specific-time: build a slot for every day of the week
-    // Return in order starting from today so the app can render Mon→Sun starting at current day
-    const week = days.map((day) =>
-      buildDaySlot(day, availability.specificDays?.[day])
-    );
-
-    // Rotate the array so today is first
-    const rotated = [
-      ...week.slice(todayIndex),
-      ...week.slice(0, todayIndex),
-    ];
+    // Reuse shared helper — already returns week rotated so today is index 0
+    const result = buildMerchantWeekAvailability(availability);
 
     return res.status(200).json({
-      type: "Specific-time",
+      type: result.type,
       today: todayName,
-      week: rotated,
+      week: result.week,
     });
   } catch (error) {
     console.error("Error fetching merchant availability:", error);

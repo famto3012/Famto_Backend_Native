@@ -39,6 +39,7 @@ const {
   markPaymentCollectedFromCustomer,
   markOrderAsCancelled,
   getOrderChatByAdminController,
+  reassignAgentController,
 } = require("../../../controllers/admin/order/adminOrderController");
 const isAdmin = require("../../../middlewares/isAdmin");
 const { upload } = require("../../../utils/imageOperation");
@@ -279,6 +280,14 @@ orderRoute.get(
   "/admin/order-chat/:orderId",
   isAuthenticated,
   getOrderChatByAdminController
+);
+
+// Reassign delivery agent for an order
+orderRoute.patch(
+  "/admin/reassign-agent/:orderId",
+  isAuthenticated,
+  isAdmin,
+  reassignAgentController
 );
 
 module.exports = orderRoute;

@@ -1177,6 +1177,7 @@ const fetchPromoCodesController = async (req, res, next) => {
     const filter = {
       geofenceId: customer.customerDetails.geofenceId,
       fromDate: { $lte: currentDate },
+      status: true,
       toDate: { $gte: currentDate },
       $expr: { $lt: ["$noOfUserUsed", "$maxAllowedUsers"] },
     };

@@ -299,6 +299,9 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
     const deliveryTime = new Date(scheduledOrder.time);
     deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
 
+    console.log("Delivery time",deliveryTime);
+    console.log("Delivery time Minutes",deliveryTimeMinutes);
+
     const stepperData = {
       by: "Admin",
       date: new Date(),
@@ -308,7 +311,7 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       customerId: scheduledOrder.customerId,
       merchantId: scheduledOrder.merchantId,
       scheduledOrderId: scheduledOrder._id,
-      items: scheduledOrder.items,
+      items: scheduledOrder.purchasedItems,
       orderDetail: {
         ...scheduledOrder.orderDetail,
         deliveryTime,
@@ -322,6 +325,9 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       paymentStatus: scheduledOrder.paymentStatus,
       status: "Pending",
       "orderDetailStepper.created": stepperData,
+      deliveryMode: scheduledOrder.deliveryMode,
+      deliveryOption: scheduledOrder.deliveryOption,
+      deliveryTime: deliveryTime,
       purchasedItems: scheduledOrder.purchasedItems,
     };
 
@@ -379,14 +385,14 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       deliveryMode: newOrder?.orderDetail?.deliveryMode,
       orderDate: formatDate(newOrder.createdAt),
       orderTime: formatTime(newOrder.createdAt),
-      deliveryDate: newOrder?.orderDetail?.deliveryTime
+      deliveryDate: newOrder?.deliveryTime
         ? formatDate(newOrder.orderDetail.deliveryTime)
         : "-",
-      deliveryTime: newOrder?.orderDetail?.deliveryTime
+      deliveryTime: newOrder?.deliveryTime
         ? formatTime(newOrder.orderDetail.deliveryTime)
         : "-",
       paymentMethod: newOrder.paymentMode,
-      deliveryOption: newOrder.orderDetail.deliveryOption,
+      deliveryOption: newOrder.deliveryOption,
       amount: newOrder.billDetail.grandTotal,
     };
 
@@ -447,6 +453,8 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       totalAmount: scheduledOrder.totalAmount,
       paymentMode: scheduledOrder.paymentMode,
       paymentStatus: scheduledOrder.paymentStatus,
+      deliveryMode: scheduledOrder.deliveryMode,
+      deliveryOption: scheduledOrder.deliveryOption,
       status: "Pending",
       "orderDetailStepper.created": stepperData,
     });
@@ -491,20 +499,20 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       orderStatus: newOrder.status,
       merchantName: "-",
       customerName:
-        newOrder?.orderDetail?.deliveryAddress?.fullName ||
+        newOrder?.deliveryAddress?.fullName ||
         newOrder?.customerId?.fullName ||
         "-",
-      deliveryMode: newOrder?.orderDetail?.deliveryMode,
+      deliveryMode: newOrder?.deliveryMode,
       orderDate: formatDate(newOrder.createdAt),
       orderTime: formatTime(newOrder.createdAt),
-      deliveryDate: newOrder?.orderDetail?.deliveryTime
-        ? formatDate(newOrder.orderDetail.deliveryTime)
+      deliveryDate: newOrder?.deliveryTime
+        ? formatDate(newOrder.deliveryTime)
         : "-",
-      deliveryTime: newOrder?.orderDetail?.deliveryTime
-        ? formatTime(newOrder.orderDetail.deliveryTime)
+      deliveryTime: newOrder?.deliveryTime
+        ? formatTime(newOrder.deliveryTime)
         : "-",
       paymentMethod: newOrder.paymentMode,
-      deliveryOption: newOrder.orderDetail.deliveryOption,
+      deliveryOption: newOrder.deliveryOption,
       amount: newOrder.billDetail.grandTotal,
     };
 
