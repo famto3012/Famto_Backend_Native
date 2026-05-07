@@ -151,13 +151,7 @@ const getAgentAppAppUpdateType = async (req, res, next) => {
   }
 };
 
-const getCustomerAppStatus = async (req, res, next) => {
-  try {
-    const status = await CustomerAppCustomization.findOne({})
-  } catch(err) {
-    next(appError(err.message));
-  }
-}
+
 
 module.exports = {
   createOrUpdateAgentCustomizationController,

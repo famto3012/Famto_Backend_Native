@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
 const morgan = require("morgan");
-
+const moment = require("moment-timezone");
 const TemporaryOrder = require("./models/TemporaryOrder");
 const Order = require("./models/Order");
 const CustomerCart = require("./models/CustomerCart");
@@ -378,59 +378,90 @@ cron.schedule("*/5 * * * *", () => {
 
 // ─── Daily 6 PM IST cart reminder via Interakt WhatsApp ──────────────────────
 // 6 PM IST = 12:30 UTC
-cron.schedule("30 18 * * *", async () => {
-  try {
-    console.log("[CartReminder] Running daily 6 PM cart reminder cron...");
+cron.schedule(
+  "30 18 * * *",
+  async () => {
+    try {
+      console.log("[CartReminder] Running daily cart reminder cron...");
 
-    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // START OF TODAY (IST)
+      const startOfDay = moment()
+        .tz("Asia/Kolkata")
+        .startOf("day")
+        .toDate();
 
-    const carts = await CustomerCart.find({
-      "items.0": { $exists: true },
-      updatedAt: { $gte: last24Hours },
-    })
-      .populate("customerId", "phoneNumber fullName")
-      .populate("merchantId", "merchantName")
-      .populate("items.productId", "productName")
-      .lean();
+      // END OF TODAY (IST)
+      const endOfDay = moment()
+        .tz("Asia/Kolkata")
+        .endOf("day")
+        .toDate();
 
-    if (!carts.length) {
-      console.log("[CartReminder] No active carts found.");
-      return;
-    }
+      const carts = await CustomerCart.find({
+        "items.0": { $exists: true },
 
-    for (const cart of carts) {
-      try {
-        const customer = cart.customerId;
-        if (!customer?.phoneNumber) continue;
+        // ONLY TODAY'S CARTS
+        updatedAt: {
+          $gte: startOfDay,
+          $lte: endOfDay,
+        },
+      })
+        .populate("customerId", "phoneNumber fullName")
+        .populate("merchantId", "merchantName")
+        .populate("items.productId", "productName")
+        .lean();
 
-        const merchantName =
-          cart.merchantId?.merchantName || "your favourite store";
-
-        const productNames = (cart.items || [])
-          .map((item) => item.productId?.productName || item.itemName || "item")
-          .filter(Boolean)
-          .join(", ");
-
-        if (!productNames) continue;
-
-        await sendCartReminderMessage(
-          customer.phoneNumber,
-          merchantName,
-          productNames
-        );
-      } catch (innerErr) {
-        console.error(
-          "[CartReminder] Error sending reminder for cart:",
-          innerErr.message
-        );
+      if (!carts.length) {
+        console.log("[CartReminder] No carts found.");
+        return;
       }
-    }
 
-    console.log(`[CartReminder] Sent reminders for ${carts.length} cart(s).`);
-  } catch (err) {
-    console.error("[CartReminder] Cron job failed:", err.message);
+      for (const cart of carts) {
+        try {
+          const customer = cart.customerId;
+
+          if (!customer?.phoneNumber) continue;
+
+          const merchantName =
+            cart.merchantId?.merchantName || "your favourite store";
+
+          const productNames = (cart.items || [])
+            .map(
+              (item) =>
+                item.productId?.productName ||
+                item.itemName ||
+                "item"
+            )
+            .filter(Boolean)
+            .join(", ");
+
+          if (!productNames) continue;
+
+          await sendCartReminderMessage(
+            customer.phoneNumber,
+            merchantName,
+            productNames
+          );
+        } catch (innerErr) {
+          console.error(
+            "[CartReminder] Error sending reminder:",
+            innerErr.message
+          );
+        }
+      }
+
+      console.log(
+        `[CartReminder] Sent reminders for ${carts.length} cart(s).`
+      );
+    } catch (err) {
+      console.error("[CartReminder] Cron job failed:", err.message);
+    }
+  },
+
+  // IMPORTANT
+  {
+    timezone: "Asia/Kolkata",
   }
-});
+);
 
 // Global errors
 app.use(globalErrorHandler);

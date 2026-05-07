@@ -103,10 +103,117 @@ const automaticStatusOfflineForAgent = async () => {
   }
 };
 
+// const automaticStatusToggleForMerchant = async () => {
+//   const currentDay = new Date()
+//     .toLocaleString("en-us", { timeZone: "Asia/Kolkata", weekday: "long" })
+//     .toLowerCase();
+//   const currentTime = new Date().toLocaleTimeString("en-US", {
+//     timeZone: "Asia/Kolkata",
+//     hour12: false,
+//     hour: "2-digit",
+//     minute: "2-digit",
+//   });
+
+//   const formattedTime = currentTime.startsWith("24")
+//     ? `00${currentTime.slice(2)}`
+//     : currentTime;
+
+//   // Fetch only relevant merchants
+//   const merchants = await Merchant.find({
+//     isApproved: "Approved",
+//     isBlocked: false,
+//     statusManualToggle: false,
+//   })
+//     .select("_id merchantDetail.availability.type merchantDetail.availability.specificDays")
+//     .lean();
+
+//   let merchantsToOpen = [];
+//   let merchantsToClose = [];
+//   //console.log("Merchant number", merchants.length)
+
+//   merchants.forEach((merchant) => {
+//     const availabilityType = merchant?.merchantDetail?.availability?.type;
+//     const todayAvailability =
+//       merchant?.merchantDetail?.availability?.specificDays[currentDay];
+
+//     if (availabilityType === "Full-time") {
+//       merchantsToOpen.push(merchant._id);
+//       return; // Skip further checks
+//     }
+
+//     if (todayAvailability?.openAllDay) {
+//       merchantsToOpen.push(merchant._id);
+//       return; // Skip further checks
+//     }
+
+//     if (todayAvailability?.closedAllDay) {
+//       merchantsToClose.push(merchant._id);
+//       return; // Skip further checks
+//     }
+
+//     const hasTimeDefined =
+//       todayAvailability?.startTime && todayAvailability?.endTime;
+
+//     if (todayAvailability?.specificTime || hasTimeDefined) {
+//       const startTime = todayAvailability.startTime.padStart(5, "0");
+//       const endTime = todayAvailability.endTime.padStart(5, "0");
+
+//       // Handle past-midnight case
+//       if (
+//         (startTime <= endTime &&
+//           formattedTime >= startTime &&
+//           formattedTime <= endTime) ||
+//         (startTime > endTime &&
+//           (formattedTime >= startTime || formattedTime <= endTime))
+//       ) {
+//         merchantsToOpen.push(merchant._id);
+//       } else {
+//         merchantsToClose.push(merchant._id);
+//       }
+//       return;
+//     }
+
+//     // No valid availability config for today — close the merchant
+//     merchantsToClose.push(merchant._id);
+//   });
+
+//   // Bulk update merchants who should be OPEN
+//   if (merchantsToOpen.length > 0) {
+//     await Merchant.updateMany(
+//       { _id: { $in: merchantsToOpen } },
+//       {
+//         $set: {
+//           status: true,
+//           openedToday: true,
+//           statusManualToggle: false,
+//         },
+//       }
+//     );
+//   }
+
+//   // Bulk update merchants who should be CLOSED
+//   if (merchantsToClose.length > 0) {
+//     await Merchant.updateMany(
+//       { _id: { $in: merchantsToClose } },
+//       {
+//         $set: {
+//           status: false,
+//           openedToday: false,
+//           statusManualToggle: false,
+//         },
+//       }
+//     );
+//   }
+// };
+
 const automaticStatusToggleForMerchant = async () => {
   const currentDay = new Date()
-    .toLocaleString("en-us", { timeZone: "Asia/Kolkata", weekday: "long" })
+    .toLocaleString("en-us", {
+      timeZone: "Asia/Kolkata",
+      weekday: "long",
+    })
     .toLowerCase();
+
   const currentTime = new Date().toLocaleTimeString("en-US", {
     timeZone: "Asia/Kolkata",
     hour12: false,
@@ -118,66 +225,105 @@ const automaticStatusToggleForMerchant = async () => {
     ? `00${currentTime.slice(2)}`
     : currentTime;
 
-  // Fetch only relevant merchants
   const merchants = await Merchant.find({
     isApproved: "Approved",
     isBlocked: false,
     statusManualToggle: false,
   })
-    .select("_id merchantDetail.availability.type merchantDetail.availability.specificDays")
+    .select(
+      "_id merchantName merchantDetail.availability.type merchantDetail.availability.specificDays"
+    )
     .lean();
 
   let merchantsToOpen = [];
   let merchantsToClose = [];
-  //console.log("Merchant number", merchants.length)
 
   merchants.forEach((merchant) => {
-    const availabilityType = merchant?.merchantDetail?.availability?.type;
-    const todayAvailability =
-      merchant?.merchantDetail?.availability?.specificDays[currentDay];
+    try {
+      const availabilityType =
+        merchant?.merchantDetail?.availability?.type;
 
-    if (availabilityType === "Full-time") {
-      merchantsToOpen.push(merchant._id);
-      return; // Skip further checks
-    }
+      const todayAvailability =
+        merchant?.merchantDetail?.availability?.specificDays?.[
+          currentDay
+        ];
 
-    if (todayAvailability?.openAllDay) {
-      merchantsToOpen.push(merchant._id);
-      return; // Skip further checks
-    }
-
-    if (todayAvailability?.closedAllDay) {
-      merchantsToClose.push(merchant._id);
-      return; // Skip further checks
-    }
-
-    const hasTimeDefined =
-      todayAvailability?.startTime && todayAvailability?.endTime;
-
-    if (todayAvailability?.specificTime || hasTimeDefined) {
-      const startTime = todayAvailability.startTime.padStart(5, "0");
-      const endTime = todayAvailability.endTime.padStart(5, "0");
-
-      // Handle past-midnight case
-      if (
-        (startTime <= endTime &&
-          formattedTime >= startTime &&
-          formattedTime <= endTime) ||
-        (startTime > endTime &&
-          (formattedTime >= startTime || formattedTime <= endTime))
-      ) {
+      // FULL TIME
+      if (availabilityType === "Full-time") {
         merchantsToOpen.push(merchant._id);
-      } else {
-        merchantsToClose.push(merchant._id);
+        return;
       }
-      return;
-    }
 
-    // No valid availability config for today — close the merchant
-    merchantsToClose.push(merchant._id);
+      // NO CONFIG
+      if (!todayAvailability) {
+        merchantsToClose.push(merchant._id);
+        return;
+      }
+
+      // OPEN ALL DAY
+      if (todayAvailability?.openAllDay) {
+        merchantsToOpen.push(merchant._id);
+        return;
+      }
+
+      // CLOSED ALL DAY
+      if (todayAvailability?.closedAllDay) {
+        merchantsToClose.push(merchant._id);
+        return;
+      }
+
+      // SPECIFIC TIME
+      const startTime = todayAvailability?.startTime;
+      const endTime = todayAvailability?.endTime;
+
+      const hasValidTime =
+        typeof startTime === "string" &&
+        typeof endTime === "string" &&
+        startTime.trim() &&
+        endTime.trim();
+
+      if (hasValidTime) {
+        const formattedStartTime = startTime.padStart(5, "0");
+        const formattedEndTime = endTime.padStart(5, "0");
+
+        // NORMAL TIME RANGE
+        const isNormalTime =
+          formattedStartTime <= formattedEndTime &&
+          formattedTime >= formattedStartTime &&
+          formattedTime <= formattedEndTime;
+
+        // CROSS MIDNIGHT
+        const isCrossMidnight =
+          formattedStartTime > formattedEndTime &&
+          (formattedTime >= formattedStartTime ||
+            formattedTime <= formattedEndTime);
+
+        if (isNormalTime || isCrossMidnight) {
+          merchantsToOpen.push(merchant._id);
+        } else {
+          merchantsToClose.push(merchant._id);
+        }
+
+        return;
+      }
+
+      // INVALID CONFIG
+      console.log(
+        `[Merchant Auto Toggle] Invalid timing config for merchant: ${merchant?.merchantName}`
+      );
+
+      merchantsToClose.push(merchant._id);
+    } catch (err) {
+      console.error(
+        `[Merchant Auto Toggle] Error processing merchant ${merchant?._id}:`,
+        err.message
+      );
+
+      merchantsToClose.push(merchant._id);
+    }
   });
 
-  // Bulk update merchants who should be OPEN
+  // OPEN MERCHANTS
   if (merchantsToOpen.length > 0) {
     await Merchant.updateMany(
       { _id: { $in: merchantsToOpen } },
@@ -191,7 +337,7 @@ const automaticStatusToggleForMerchant = async () => {
     );
   }
 
-  // Bulk update merchants who should be CLOSED
+  // CLOSE MERCHANTS
   if (merchantsToClose.length > 0) {
     await Merchant.updateMany(
       { _id: { $in: merchantsToClose } },
@@ -204,6 +350,10 @@ const automaticStatusToggleForMerchant = async () => {
       }
     );
   }
+
+  console.log(
+    `[Merchant Auto Toggle] Open: ${merchantsToOpen.length}, Close: ${merchantsToClose.length}`
+  );
 };
 
 const deleteOldLogs = () => {
