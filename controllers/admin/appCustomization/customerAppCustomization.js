@@ -35,6 +35,8 @@ const getCustomerCustomizationController = async (req, res, next) => {
         taxId: customization?.takeAwayOrderCustomization?.taxId || null,
       },
       appUpdateType: customization.appUpdateType,
+      statusImageUrl: customization?.statusImageUrl,
+      status: customization?.status,
     };
 
     res.status(200).json(formattedResponse);
@@ -85,81 +87,89 @@ const createOrUpdateCustomerCustomizationController = async (
       pickAndDropOrderCustomization,
       takeAwayOrderCustomization,
       appUpdateType,
+      status,
     } = req.body;
 
-    const customization = await CustomerAppCustomization.findOne({}).lean();
+    let customization = await CustomerAppCustomization.findOne({});
 
-    let splashScreenUrl = customization?.splashScreenUrl;
+    let splashScreenUrl = customization?.splashScreenUrl || "";
+    let statusImageUrl = customization?.statusImageUrl || "";
 
-    if (req.file) {
-      await deleteFromFirebase(customization.splashScreenUrl);
+    // ✅ Upload splash screen image
+    if (req.files?.splashScreenImage?.[0]) {
+      if (customization?.splashScreenUrl) {
+        await deleteFromFirebase(customization.splashScreenUrl);
+      }
+
       splashScreenUrl = await uploadToFirebase(
-        req.file,
+        req.files.splashScreenImage[0],
         "CustomerAppSplashScreenImages"
       );
     }
 
+    // ✅ Upload status image
+    if (req.files?.statusImage?.[0]) {
+      if (customization?.statusImageUrl) {
+        await deleteFromFirebase(customization.statusImageUrl);
+      }
+
+      statusImageUrl = await uploadToFirebase(
+        req.files.statusImage[0],
+        "CustomerAppStatusImages"
+      );
+    }
+
+    const payload = {
+      email,
+      phoneNumber,
+      emailVerification,
+      otpVerification,
+      loginViaOtp,
+      loginViaGoogle,
+      loginViaApple,
+      loginViaFacebook,
+      splashScreenUrl,
+
+      // ✅ New fields
+      status,
+      statusImageUrl,
+
+      customOrderCustomization: {
+        startTime: customOrderCustomization?.startTime,
+        endTime: customOrderCustomization?.endTime,
+        taxId: customOrderCustomization?.taxId || null,
+      },
+
+      pickAndDropOrderCustomization: {
+        startTime: pickAndDropOrderCustomization?.startTime,
+        endTime: pickAndDropOrderCustomization?.endTime,
+        taxId: pickAndDropOrderCustomization?.taxId || null,
+      },
+
+      takeAwayOrderCustomization: {
+        taxId: takeAwayOrderCustomization?.taxId || null,
+      },
+
+      appUpdateType,
+    };
+
+    // ✅ Update
     if (customization) {
-      await CustomerAppCustomization.findOneAndUpdate(
-        {},
+      customization = await CustomerAppCustomization.findByIdAndUpdate(
+        customization._id,
         {
-          $set: {
-            email,
-            phoneNumber,
-            emailVerification,
-            otpVerification,
-            loginViaOtp,
-            loginViaGoogle,
-            loginViaApple,
-            loginViaFacebook,
-            splashScreenUrl,
-            customOrderCustomization: {
-              startTime: customOrderCustomization.startTime,
-              endTime: customOrderCustomization.endTime,
-              taxId: customOrderCustomization.taxId || null,
-            },
-            pickAndDropOrderCustomization: {
-              startTime: pickAndDropOrderCustomization.startTime,
-              endTime: pickAndDropOrderCustomization.endTime,
-              taxId: pickAndDropOrderCustomization.taxId || null,
-            },
-            takeAwayOrderCustomization: {
-              taxId: takeAwayOrderCustomization?.taxId || null,
-            },
-            appUpdateType,
-          },
-        }
+          $set: payload,
+        },
+        { new: true }
       );
     } else {
-      await CustomerAppCustomization.create({
-        email,
-        phoneNumber,
-        emailVerification,
-        otpVerification,
-        loginViaOtp,
-        loginViaGoogle,
-        loginViaApple,
-        loginViaFacebook,
-        splashScreenUrl,
-        customOrderCustomization: {
-          startTime: customOrderCustomization.startTime,
-          endTime: customOrderCustomization.endTime,
-          taxId: customOrderCustomization.taxId,
-        },
-        pickAndDropOrderCustomization: {
-          startTime: pickAndDropOrderCustomization.startTime,
-          endTime: pickAndDropOrderCustomization.endTime,
-          taxId: pickAndDropOrderCustomization.taxId,
-        },
-        takeAwayOrderCustomization: {
-          taxId: takeAwayOrderCustomization?.taxId || null,
-        },
-        appUpdateType,
-      });
+      // ✅ Create
+      customization = await CustomerAppCustomization.create(payload);
     }
 
     return res.status(200).json({
       message: "Customer App Customization updated successfully",
+      data: customization,
     });
   } catch (err) {
     next(appError(err.message));
@@ -181,9 +191,24 @@ const getCustomerAppAppUpdateType = async (req, res, next) => {
   }
 };
 
+const getCustomerAppStatus = async (req, res, next) => {
+  try {
+    const customization = await CustomerAppCustomization.findOne({})
+    res.status(200).json({
+      success: true,
+      status: customization.status,
+      statusImageUrl: customization.statusImageUrl,
+    });
+
+  } catch (err) {
+    next(appError(err.message));
+  }
+}
+
 module.exports = {
   createOrUpdateCustomerCustomizationController,
   getCustomerCustomizationController,
   getTimingsForCustomerApp,
   getCustomerAppAppUpdateType,
+  getCustomerAppStatus,
 };

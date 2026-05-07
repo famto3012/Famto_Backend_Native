@@ -85,6 +85,7 @@ const {
   getFiltersFromBusinessCategory,
   getMerchantTodayAvailability,
   getImageDisplayType,
+  getOftenBoughtTogetherController,
   razorpayWebhookController,
 } = require("../../controllers/customer/universalOrderController");
 const {
@@ -234,6 +235,13 @@ customerRoute.get(
   "/search-products/:merchantId/:businessCategoryId",
   isLooselyAuthenticated,
   searchProductsInMerchantToOrderController
+);
+
+// Often bought together — pre-computed nightly, real-time fallback
+customerRoute.get(
+  "/products/often-bought-together/:productId",
+  isLooselyAuthenticated,
+  getOftenBoughtTogetherController
 );
 
 customerRoute.get(

@@ -17,6 +17,8 @@ const {
   createOrUpdateCustomerCustomizationController,
   getCustomerCustomizationController,
   getCustomerAppAppUpdateType,
+  getCustomerAppStatus,
+  createOrUpdateAppStatusImageCotroller,
 } = require("../../../controllers/admin/appCustomization/customerAppCustomization");
 
 const appCustomizationRoute = express.Router();
@@ -39,11 +41,15 @@ appCustomizationRoute.post(
 
 appCustomizationRoute.post(
   "/customer-app",
-  upload.single("splashScreenImage"),
+  upload.fields([
+    { name: "splashScreenImage", maxCount: 1 },
+    { name: "statusImage", maxCount: 1 },
+  ]),
   isAuthenticated,
   isAdmin,
   createOrUpdateCustomerCustomizationController
 );
+
 
 appCustomizationRoute.get(
   "/agent-app",
@@ -78,7 +84,10 @@ appCustomizationRoute.get(
   getCustomerAppAppUpdateType
 );
 
+appCustomizationRoute.get("/customer-app-status", getCustomerAppStatus);
+
 appCustomizationRoute.get("/agent-app-update-type", getAgentAppAppUpdateType);
+
 
 appCustomizationRoute.get(
   "/merchant-app-update-type",

@@ -1,5 +1,6 @@
 const Agent = require("../../../models/Agent");
 const AgentAppCustomization = require("../../../models/AgentAppCustomization");
+const CustomerAppCustomization = require("../../../models/CustomerAppCustomization");
 
 const appError = require("../../../utils/appError");
 const {
@@ -149,6 +150,14 @@ const getAgentAppAppUpdateType = async (req, res, next) => {
     next(appError(err.message));
   }
 };
+
+const getCustomerAppStatus = async (req, res, next) => {
+  try {
+    const status = await CustomerAppCustomization.findOne({})
+  } catch(err) {
+    next(appError(err.message));
+  }
+}
 
 module.exports = {
   createOrUpdateAgentCustomizationController,

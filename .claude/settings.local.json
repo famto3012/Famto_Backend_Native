@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(findstr /s /m /l \"require.*Geofence\\\\|Geofence\\\\.find\\\\|new Geofence\" \"C:\\\\Users\\\\sarat\\\\Projects\\\\Famto_Backend_Native\\\\*.js\" \"C:\\\\Users\\\\sarat\\\\Projects\\\\Famto_Backend_Native\\\\**\\\\*.js\")",
-      "Bash(dir \"C:\\\\Users\\\\sarat\\\\Projects\" /b)"
+      "Bash(dir \"C:\\\\Users\\\\sarat\\\\Projects\" /b)",
+      "Read(//c/Users/sarat/Projects/Famto_Dashboard/src/**)",
+      "Read(//c/Users/sarat/Projects/Famto_Panel_V2/src/**)",
+      "Bash(xargs grep *)"
     ]
   }
 }

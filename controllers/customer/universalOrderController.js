@@ -47,6 +47,9 @@ const {
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const { findRolesToNotify } = require("../../socket/socket");
+const {
+  getOftenBoughtTogetherForProduct,
+} = require("../../utils/oftenBoughtTogetherHelper");
 
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
@@ -763,6 +766,98 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     }));
 
     res.status(200).json(responseMerchants);
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+// GET /customers/products/often-bought-together/:productId
+const getOftenBoughtTogetherController = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+
+    // 1. Load the product to get its pre-computed list
+    const product = await Product.findById(productId)
+      .select("oftenBoughtTogetherId categoryId")
+      .lean();
+
+    if (!product) return next(appError("Product not found", 404));
+
+    let partnerIds = (product.oftenBoughtTogetherId || []).map((id) =>
+      id.toString()
+    );
+
+    // 2. If the pre-computed list is empty, compute in real-time from orders
+    if (!partnerIds.length) {
+      partnerIds = await getOftenBoughtTogetherForProduct(productId);
+    }
+
+    if (!partnerIds.length) {
+      return res.status(200).json([]);
+    }
+
+    // 3. Fetch full product details for the partner IDs
+    const currentDate = new Date();
+
+    const products = await Product.find({ _id: { $in: partnerIds } })
+      .select(
+        "_id productName price description productImageURL inventory variants discountId type"
+      )
+      .populate(
+        "discountId",
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
+      )
+      .lean();
+
+    // 4. Sort response to match the ranked order from partnerIds
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+    const ordered = partnerIds
+      .map((id) => productMap.get(id))
+      .filter(Boolean);
+
+    // 5. Format response — same shape as other product list endpoints
+    const formatted = ordered.map((p) => {
+      const discount = p.discountId;
+      let discountedPrice = null;
+
+      if (
+        discount &&
+        discount.status &&
+        new Date(discount.validFrom) <= currentDate &&
+        new Date(discount.validTo) >= currentDate
+      ) {
+        if (discount.discountType === "Percentage") {
+          const reduction = (p.price * discount.discountValue) / 100;
+          discountedPrice = Math.max(
+            0,
+            p.price - Math.min(reduction, discount.maxAmount || Infinity)
+          );
+        } else if (discount.discountType === "Fixed") {
+          discountedPrice = Math.max(0, p.price - discount.discountValue);
+        }
+      }
+
+      return {
+        productId: p._id,
+        productName: p.productName,
+        price: p.price,
+        discountPrice: discountedPrice
+          ? parseFloat(discountedPrice.toFixed(2))
+          : 0,
+        description: p.description || "",
+        longDescription: "",
+        productImageURL: p.productImageURL || "",
+        type: p.type || "",
+        inventory: p.inventory ?? true,
+        variantAvailable: (p.variants || []).length > 0,
+        isFavorite: false,
+        minQuantityToOrder: null,
+        maxQuantityPerOrder: null,
+        preparationTime: null,
+      };
+    });
+
+    res.status(200).json({ data: formatted });
   } catch (err) {
     next(appError(err.message));
   }
@@ -3190,4 +3285,5 @@ module.exports = {
   getMerchantTodayAvailability,
   distanceCache,
   getImageDisplayType,
+  getOftenBoughtTogetherController,
 };

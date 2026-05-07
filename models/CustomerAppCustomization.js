@@ -61,6 +61,14 @@ const customerAppCustomizationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    status:{
+      type: Boolean,
+      default: true,
+    },
+    statusImageUrl:{
+      type: String,
+      default: "",
+    },
     email: {
       type: Boolean,
       default: true,

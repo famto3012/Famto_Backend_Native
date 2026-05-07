@@ -1154,7 +1154,7 @@ const getSingleMerchantController = async (req, res, next) => {
 
 // Add merchant
 const addMerchantController = async (req, res, next) => {
-  const { fullName, email, phoneNumber, password, latitude, longitude } =
+  const { fullName, email, phoneNumber, password, latitude, longitude, geofenceId} =
     req.body;
 
   const errors = validationResult(req);
@@ -1177,14 +1177,14 @@ const addMerchantController = async (req, res, next) => {
       return res.status(409).json({ errors: formattedErrors });
     }
 
-    // Auto-detect geofence from location if provided
-    let assignedGeofence = null;
-    if (latitude != null && longitude != null) {
-      assignedGeofence = await getGeofenceByCoordinates(
-        parseFloat(latitude),
-        parseFloat(longitude)
-      );
-    }
+    // // Auto-detect geofence from location if provided
+    // let assignedGeofence = null;
+    // if (latitude != null && longitude != null) {
+    //   assignedGeofence = await getGeofenceByCoordinates(
+    //     parseFloat(latitude),
+    //     parseFloat(longitude)
+    //   );
+    // }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -1194,11 +1194,11 @@ const addMerchantController = async (req, res, next) => {
       email: normalizedEmail,
       phoneNumber,
       password: hashedPassword,
-      ...(assignedGeofence && {
+    
         merchantDetail: {
-          geofenceId: assignedGeofence._id,
+          geofenceId: geofenceId,
         },
-      }),
+    
     });
 
     if (!newMerchant) {
@@ -1218,7 +1218,7 @@ const addMerchantController = async (req, res, next) => {
       isApproved: "Pending",
       subscriptionStatus: "Inactive",
       status: false,
-      geofence: assignedGeofence?.name || "-",
+      geofence: geofenceId || "-",
       averageRating: "0",
       isServiceableToday: "Closed",
     };
