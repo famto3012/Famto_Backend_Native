@@ -11,7 +11,7 @@ const authRoute = express.Router();
 
 // authRoute.post(
 //   "/register",
-//   [
+//   [x
 //     body("fullName").trim().notEmpty().withMessage("Full Name is required"),
 //     body("email").trim().notEmpty().withMessage("Email is required"),
 //     body("phoneNumber")

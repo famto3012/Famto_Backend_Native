@@ -126,29 +126,52 @@ const globalSearchController = async (req, res, next) => {
     // ── Enrich products with merchant + category info ────────────────────────
     let enrichedProducts = [];
     if (products.length) {
-      const catIds = [...new Set(products.map((p) => p.categoryId?.toString()))].filter(Boolean);
+      console.log(`[GlobalSearch] products raw hits: ${products.length}`);
+
+      const catIds = [
+        ...new Set(products.map((p) => p.categoryId?.toString())),
+      ].filter(Boolean);
+
+      console.log(`[GlobalSearch] unique catIds: ${catIds.length}`, catIds);
 
       const catDocs = await Category.find({ _id: { $in: catIds } })
         .select("_id merchantId businessCategoryId categoryName")
         .lean();
 
-      const catMap = Object.fromEntries(catDocs.map((c) => [c._id.toString(), c]));
+      console.log(`[GlobalSearch] catDocs found: ${catDocs.length}`);
 
-      const merchantIds = [...new Set(catDocs.map((c) => c.merchantId))].filter(Boolean);
+      const catMap = Object.fromEntries(
+        catDocs.map((c) => [c._id.toString(), c])
+      );
 
-      const merchantDocs = await Merchant.find({
+      const merchantIds = [
+        ...new Set(catDocs.map((c) => c.merchantId?.toString())),
+      ].filter(Boolean);
+
+      console.log(
+        `[GlobalSearch] unique merchantIds: ${merchantIds.length}`,
+        merchantIds
+      );
+
+      const merchantFilter = {
         _id: { $in: merchantIds },
         isApproved: "Approved",
         isBlocked: false,
         ...(customerGeofenceId
           ? { "merchantDetail.geofenceId": customerGeofenceId }
           : {}),
-      })
+      };
+
+      console.log(`[GlobalSearch] merchantFilter:`, JSON.stringify(merchantFilter));
+
+      const merchantDocs = await Merchant.find(merchantFilter)
         .select(
           "_id merchantDetail.merchantName merchantDetail.merchantImageURL " +
             "status openedToday"
         )
         .lean();
+
+      console.log(`[GlobalSearch] merchantDocs found: ${merchantDocs.length}`);
 
       const merchantMap = Object.fromEntries(
         merchantDocs.map((m) => [m._id.toString(), m])
@@ -157,10 +180,17 @@ const globalSearchController = async (req, res, next) => {
       enrichedProducts = products
         .map((product) => {
           const cat = catMap[product.categoryId?.toString()];
-          if (!cat) return null;
+          if (!cat) {
+            console.log(`[GlobalSearch] no category for product ${product._id} (catId: ${product.categoryId})`);
+            return null;
+          }
 
-          const merchant = merchantMap[cat.merchantId?.toString()];
-          if (!merchant) return null; // skip products from unapproved/blocked merchants
+          const merchantKey = cat.merchantId?.toString();
+          const merchant = merchantMap[merchantKey];
+          if (!merchant) {
+            console.log(`[GlobalSearch] no merchant for product ${product._id} (merchantId: ${merchantKey})`);
+            return null;
+          }
 
           return {
             type: "product",
@@ -189,6 +219,8 @@ const globalSearchController = async (req, res, next) => {
         })
         .filter(Boolean)
         .slice(0, limit);
+
+      console.log(`[GlobalSearch] enrichedProducts final: ${enrichedProducts.length}`);
     }
 
     // ── Enrich merchant categories with their merchant info ──────────────────
