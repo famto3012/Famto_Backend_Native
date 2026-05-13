@@ -399,10 +399,15 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderFound.commissionDetail = { famtoEarnings, merchantEarnings };
     }
 
+    console.log(`[confirmOrderByAdmin] deliveryMode: ${orderFound?.deliveryMode}`);
     if (orderFound?.deliveryMode !== "Take Away") {
+      console.log(`[confirmOrderByAdmin] → calling orderCreateTaskHelper...`);
       const task = await orderCreateTaskHelper(orderId);
+      console.log(`[confirmOrderByAdmin] ← orderCreateTaskHelper returned: ${task}`);
 
       if (!task) return next(appError("Task not created"));
+    } else {
+      console.log(`[confirmOrderByAdmin] deliveryMode is Take Away — skipping task creation`);
     }
 
     console.log("Purchased Items:", orderFound);
@@ -769,6 +774,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
       },
       billDetail: orderFound.billDetail || null,
       agentLocation: orderFound?.agentId?.location || null,
+      distance: orderFound?.distance || "-",
       orderDetailStepper: Array.isArray(orderFound?.orderDetailStepper)
         ? orderFound.orderDetailStepper
         : [orderFound.orderDetailStepper],
@@ -2739,15 +2745,15 @@ const createOrderByAdminController = async (req, res, next) => {
       purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
         ? orderDetails.purchasedItems || []
         : (cartFound.drops || [])
-            .flatMap((drop) => drop.items || [])
-            .map((item) => ({
-              productId: null,
-              productName: item.itemName || null,
-              quantity: item.quantity || 1,
-              price: null,
-              costPrice: null,
-              variantId: null,
-            })),
+          .flatMap((drop) => drop.items || [])
+          .map((item) => ({
+            productId: null,
+            productName: item.itemName || null,
+            quantity: item.quantity || 1,
+            price: null,
+            costPrice: null,
+            variantId: null,
+          })),
       prescription,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
@@ -3002,14 +3008,10 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     const agentTasks = await Task.find({
       taskStatus: "Assigned",
       agentId: agentFound._id,
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      orderId: { $ne: orderId },
     })
-      .sort({ createdAt: 1 })
       .lean();
-
-    agentTasks.length > 1
-      ? (agentFound.status = "Busy")
-      : (agentFound.status = "Free");
+    agentFound.status = agentTasks.length > 0 ? "Busy" : "Free";
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalSurge += calculatedSurge;
     agentFound.appDetail.totalDistance += totalOrderDistance;
@@ -3045,10 +3047,9 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     await Promise.all([
       orderFound.save(),
       agentFound.save(),
-      AgentNotificationLogs.findOneAndUpdate(
+      AgentNotificationLogs.updateMany(
         { orderId },
         { status: "Completed" },
-        { new: true }
       ),
       task.save(),
       ActivityLog.create({

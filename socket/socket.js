@@ -292,44 +292,41 @@ const createNotificationLog = async (notificationSettings, message) => {
     }
 
     if (notificationSettings?.driver) {
-      console.log({ message });
       try {
-        const notificationFound = await AgentNotificationLogs.findOne({
+        // Normalise orderId to an array for consistent querying
+        const orderIdArray = Array.isArray(message?.orderId)
+          ? message.orderId
+          : message?.orderId
+          ? [message.orderId]
+          : [];
+
+        // ── Guard: never create a new "Pending" log when the order already
+        // has an Accepted / Completed log (prevents duplicates on events like
+        // agentOrderAccepted or orderCompleted that also have driver:true).
+        if (orderIdArray.length > 0) {
+          const settledLog = await AgentNotificationLogs.findOne({
+            orderId: { $in: orderIdArray },
+            status: { $in: ["Accepted", "Completed"] },
+          });
+
+          if (settledLog) {
+            console.log(
+              `[NotifLog] Order ${orderIdArray} already ${settledLog.status} — skipping duplicate AgentNotificationLog`
+            );
+            // Still fall through to admin/other log creation below
+            return;
+          }
+        }
+
+        // Delete any stale "Pending" log for the same agent + order
+        const pendingLog = await AgentNotificationLogs.findOne({
           agentId: message?.agentId,
           orderId: message?.orderId,
           status: "Pending",
         });
 
-        if (notificationFound)
-          await AgentNotificationLogs.findByIdAndDelete(notificationFound._id);
-
-        // await AgentNotificationLogs.create({
-        //   ...logData,
-        //   agentId: message?.agentId,
-        //   orderId: message?.orderId,
-        //   pickupDetail: {
-        //     name: message?.pickups[0]?.address?.fullName,
-        //     address: {
-        //       fullName: message?.pickAddress?.fullName,
-        //       phoneNumber: message?.pickAddress?.phoneNumber,
-        //       flat: message?.pickAddress?.flat,
-        //       area: message?.pickAddress?.area,
-        //       landmark: message?.pickAddress?.landmark,
-        //     },
-        //   },
-        //   deliveryDetail: {
-        //     name: message?.customerAddress?.fullName,
-        //     address: {
-        //       fullName: message?.customerAddress?.fullName,
-        //       phoneNumber: message?.customerAddress?.phoneNumber,
-        //       flat: message?.customerAddress?.flat,
-        //       area: message?.customerAddress?.area,
-        //       landmark: message?.customerAddress?.landmark,
-        //     },
-        //   },
-        //   orderType: message?.orderType,
-        //   expiresIn: message?.timer || 60,
-        // });
+        if (pendingLog)
+          await AgentNotificationLogs.findByIdAndDelete(pendingLog._id);
 
         const pickupDetail =
           message?.pickups?.length > 0
@@ -356,8 +353,7 @@ const createNotificationLog = async (notificationSettings, message) => {
               }
             : {};
 
-        const deliveryDetails = 
-        Array.isArray(message?.customerAddress)
+        const deliveryDetails = Array.isArray(message?.customerAddress)
           ? message.customerAddress.map((addr) => ({
               name: addr?.fullName,
               address: {
@@ -369,7 +365,7 @@ const createNotificationLog = async (notificationSettings, message) => {
               },
             }))
           : [];
-        console.log("deliveryDetails", deliveryDetails);
+
         await AgentNotificationLogs.create({
           ...logData,
           agentId: message?.agentId,
@@ -381,7 +377,7 @@ const createNotificationLog = async (notificationSettings, message) => {
           expiresIn: message?.timer || 60,
         });
 
-        console.log("Log created");
+        console.log("[NotifLog] AgentNotificationLog created");
       } catch (err) {
         console.log(`Error in creating agent notification log: ${err.message}`);
       }
@@ -424,8 +420,8 @@ const sendNotification = async (userId, eventName, data, role) => {
 
   // Log notification if at least one was sent successfully
   if (notificationSent) {
-    console.log("Creating notification log: ", notificationSettings);
-    console.log("Creating notification logss: ", data.fcm);
+    // console.log("Creating notification log: ", notificationSettings);
+    // console.log("Creating notification logss: ", data.fcm);
     await createNotificationLog(notificationSettings, data.fcm);
   } else {
     console.log(`Failed to send notification for userId: ${userId}`);

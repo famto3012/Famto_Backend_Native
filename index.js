@@ -298,32 +298,76 @@ cron.schedule("*/10 * * * * *", async () => {
 
     if (!validOrders.length) return;
 
-    // ✅ STEP 4: Avoid duplicate orders (bulk check)
+    // ✅ STEP 4: Avoid duplicate orders (bulk check against both Order and ScheduledOrder)
     const paymentIds = validOrders
       .map((o) => o.paymentId)
       .filter(Boolean);
 
-    const existingOrders = await Order.find({
-      paymentId: { $in: paymentIds },
-    }).select("paymentId");
+    const [existingOrders, existingScheduledOrders] = await Promise.all([
+      Order.find({ paymentId: { $in: paymentIds } }).select("paymentId"),
+      ScheduledOrder.find({ paymentId: { $in: paymentIds } }).select("paymentId"),
+    ]);
 
-    const existingPaymentIds = new Set(
-      existingOrders.map((o) => o.paymentId)
-    );
+    const existingPaymentIds = new Set([
+      ...existingOrders.map((o) => o.paymentId),
+      ...existingScheduledOrders.map((o) => o.paymentId),
+    ]);
 
     const ordersToCreate = validOrders.filter(
       (o) => !existingPaymentIds.has(o.paymentId)
     );
 
-    // ✅ STEP 5: PREPARE BULK INSERT
-    const bulkOrders = ordersToCreate.map((o) => ({
-      insertOne: {
-        document: {
+    // ✅ STEP 5: SPLIT into scheduled vs regular orders
+    const scheduledOrders = ordersToCreate.filter(
+      (o) => o.deliveryOption === "Scheduled"
+    );
+    const regularOrders = ordersToCreate.filter(
+      (o) => o.deliveryOption !== "Scheduled"
+    );
+
+    // ✅ STEP 6a: BULK INSERT regular orders into Order collection (FAST 🚀)
+    if (regularOrders.length) {
+      const bulkOrders = regularOrders.map((o) => ({
+        insertOne: {
+          document: {
+            customerId: o.customerId,
+            merchantId: o.merchantId,
+            pickups: o.pickups,
+            drops: o.drops,
+            billDetail: o.billDetail,
+            totalAmount: o.totalAmount,
+            deliveryMode: o.deliveryMode,
+            deliveryOption: o.deliveryOption,
+            paymentMode: o.paymentMode,
+            paymentStatus: o.paymentStatus,
+            paymentId: o.paymentId,
+            purchasedItems: o.purchasedItems,
+            prescription: o.prescription || null,
+            status: "Pending",
+            "orderDetailStepper.created": {
+              by: "Customer",
+              userId: o.customerId,
+              date: new Date(),
+            },
+          },
+        },
+      }));
+
+      await Order.bulkWrite(bulkOrders);
+      console.log(`✅ Created ${regularOrders.length} regular order(s)`);
+    }
+
+    // ✅ STEP 6b: INSERT scheduled orders into ScheduledOrder collection
+    // (must use .create() in a loop so the pre-save _id counter middleware fires)
+    if (scheduledOrders.length) {
+      for (const o of scheduledOrders) {
+        await ScheduledOrder.create({
           customerId: o.customerId,
           merchantId: o.merchantId,
           pickups: o.pickups,
           drops: o.drops,
           billDetail: o.billDetail,
+          distance: o.distance || 0,
           totalAmount: o.totalAmount,
           deliveryMode: o.deliveryMode,
           deliveryOption: o.deliveryOption,
@@ -331,21 +375,13 @@ cron.schedule("*/10 * * * * *", async () => {
           paymentStatus: o.paymentStatus,
           paymentId: o.paymentId,
           purchasedItems: o.purchasedItems,
-          prescription: o.prescription || null,
-          status: "Pending", // 🔥 better than Completed
-          "orderDetailStepper.created": {
-            by: "Customer",
-            userId: o.customerId,
-            date: new Date(),
-          },
-        },
-      },
-    }));
-
-    // ✅ STEP 6: BULK INSERT (FAST 🚀)
-    if (bulkOrders.length) {
-      await Order.bulkWrite(bulkOrders);
-      console.log(`✅ Created ${bulkOrders.length} orders`);
+          startDate: o.startDate,
+          endDate: o.endDate,
+          time: o.time,
+          status: "Pending",
+        });
+      }
+      console.log(`✅ Created ${scheduledOrders.length} scheduled order(s)`);
     }
 
     // ✅ STEP 7: MARK ALL AS PROCESSED

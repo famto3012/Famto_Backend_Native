@@ -117,6 +117,9 @@ const {
   getTimingsForCustomerApp,
 } = require("../../controllers/admin/appCustomization/customerAppCustomization");
 const isLooselyAuthenticated = require("../../middlewares/isLooselyAuthenticated");
+const {
+  globalSearchController,
+} = require("../../controllers/customer/globalSearchController");
 
 const customerRoute = express.Router();
 
@@ -180,6 +183,13 @@ customerRoute.post(
 
 // Search in home
 customerRoute.get("/search-home", homeSearchController);
+
+// Global search — merchants, products, categories, business categories
+customerRoute.get(
+  "/global-search",
+  isLooselyAuthenticated,
+  globalSearchController
+);
 
 // Business category filters
 customerRoute.get("/business-filters", getFiltersFromBusinessCategory);

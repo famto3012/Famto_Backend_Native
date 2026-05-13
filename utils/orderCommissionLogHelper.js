@@ -17,8 +17,12 @@ const orderCommissionLogHelper = async (order) => {
     const merchantName = merchant.merchantDetail.merchantName;
 
     const commissions = await Commission.find({ merchantId: order.merchantId });
+
+    // No commission configured for this merchant — return zeros so order
+    // acceptance still proceeds instead of crashing
     if (commissions.length === 0) {
-      throw new Error("No commission found for the merchant");
+      console.warn(`[CommissionLog] No commission found for merchant ${order.merchantId} — defaulting to 0`);
+      return { payableAmountToFamto: 0, payableAmountToMerchant: 0 };
     }
 
     const commission = commissions[0];
@@ -57,7 +61,8 @@ const orderCommissionLogHelper = async (order) => {
 
     return { payableAmountToFamto, payableAmountToMerchant };
   } catch (err) {
-    appError(err.message);
+    // Re-throw so the controller's next(appError(...)) can handle it properly
+    throw new Error(err.message);
   }
 };
 

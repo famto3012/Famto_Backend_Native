@@ -4,16 +4,23 @@ const Task = require("../models/Task");
 const Order = require("../models/Order");
 const Agent = require("../models/Agent");
 const Merchant = require("../models/Merchant");
-const FcmToken = require("../models/fcmToken");
 const AgentPricing = require("../models/AgentPricing");
 const AutoAllocation = require("../models/AutoAllocation");
 const BusinessCategory = require("../models/BusinessCategory");
 
 const {
   sendNotification,
+  sendSocketData,
   getUserLocationFromSocket,
 } = require("../socket/socket");
+
+const { formatDate, formatTime } = require("./formatters");
+
 const BatchOrder = require("../models/BatchOrder");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 const orderCreateTaskHelper = async (orderId) => {
   try {
@@ -55,24 +62,30 @@ const orderCreateTaskHelper = async (orderId) => {
       ],
     });
 
-    // const autoAllocation = await AutoAllocation.findOne();
+    // ── Auto allocation ──────────────────────────────────────────────────────
+    const autoAllocation = await AutoAllocation.findOne();
 
-    // if (autoAllocation.isActive) {
-    //   if (autoAllocation.autoAllocationType === "All") {
-    //     if (autoAllocation.priorityType === "Default") {
-    //       await notifyAgents(order, autoAllocation.priorityType, io);
-    //     } else {
-    //       await notifyAgents(order, autoAllocation.priorityType, io);
-    //     }
-    //   } else {
-    //     await notifyNearestAgents(
-    //       order,
-    //       autoAllocation.priorityType,
-    //       autoAllocation.maxRadius,
-    //       io
-    //     );
-    //   }
-    // }
+    if (!autoAllocation) {
+      console.log(`[AutoAlloc] ⚠️  No AutoAllocation config found in DB — skipping`);
+    } else if (!autoAllocation.isActive) {
+      console.log(`[AutoAlloc] 🔴 Auto allocation is DISABLED — manual assignment required`);
+    } else {
+      console.log(`[AutoAlloc] ✅ Auto allocation is ACTIVE`);
+      console.log(`[AutoAlloc]    Type      : ${autoAllocation.autoAllocationType}`);
+      console.log(`[AutoAlloc]    Priority  : ${autoAllocation.priorityType}`);
+      console.log(`[AutoAlloc]    MaxRadius : ${autoAllocation.maxRadius} km`);
+      console.log(`[AutoAlloc]    ExpireTime: ${autoAllocation.expireTime} sec`);
+      console.log(`[AutoAlloc]    OrderId   : ${orderId}`);
+
+      if (autoAllocation.autoAllocationType === "All") {
+        console.log(`[AutoAlloc] → Notifying ALL eligible agents`);
+        await notifyAgents(order, autoAllocation);
+      } else {
+        console.log(`[AutoAlloc] → Notifying NEAREST agents within ${autoAllocation.maxRadius} km`);
+        await notifyNearestAgents(order, autoAllocation);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return true;
   } catch (err) {
@@ -126,105 +139,228 @@ const batchOrderCreateTaskHelper = async (batchOrderId) => {
   }
 };
 
-const notifyAgents = async (order, priorityType) => {
-  try {
-    let agents;
+// ─────────────────────────────────────────────────────────────────────────────
+// Notify helpers — build FCM + socket payloads matching taskController pattern
+// ─────────────────────────────────────────────────────────────────────────────
 
-    if (priorityType === "Default") {
-      agents = await fetchAgents(order.merchantId);
-    } else {
-      agents = await fetchMonthlySalaryAgents(order.merchantId);
+const notifyAgents = async (order, autoAllocation) => {
+  try {
+    const { priorityType } = autoAllocation;
+    console.log(`[AutoAlloc] fetchAgents — priorityType: ${priorityType}, merchantId: ${order.merchantId}`);
+
+    const agents =
+      priorityType === "Monthly-salaried"
+        ? await fetchMonthlySalaryAgents(order.merchantId)
+        : await fetchAgents(order.merchantId);
+
+    console.log(`[AutoAlloc] Found ${agents.length} eligible agent(s)`);
+    if (agents.length === 0) {
+      console.log(`[AutoAlloc] ⚠️  No free/approved agents found — no one notified`);
     }
 
-    let deliveryAddress = order.orderDetail.deliveryAddress;
-
     for (const agent of agents) {
-      const data = {
-        socket: {
-          orderId: order.id,
-          merchantName: order.orderDetail.pickupAddress.fullName,
-          pickAddress: order.orderDetail.pickupAddress,
-          customerName: deliveryAddress.fullName,
-          customerAddress: deliveryAddress,
-        },
-        fcm: {
-          title: "New Order",
-          body: "You have a new order to pickup",
-          image: "",
-          orderId: order.id,
-          agentId: agent.id,
-          pickupDetail: {
-            name: order.orderDetail.pickupAddress.fullName,
-            address: order.orderDetail.pickupAddress,
-          },
-          deliveryDetail: {
-            name: deliveryAddress.fullName,
-            address: deliveryAddress,
-          },
-          orderType: order.orderDetail.deliveryOption,
-        },
-      };
-
-      const parameter = { user: "Agent", eventName: "newOrder" };
-
-      sendNotification(agent.id, parameter.eventName, data, parameter.user);
+      await _sendAgentNotification(agent, order, autoAllocation);
     }
   } catch (err) {
     throw new Error(`Error in notifying agents: ${err}`);
   }
 };
 
-const notifyNearestAgents = async (order, priorityType, maxRadius, io) => {
+const notifyNearestAgents = async (order, autoAllocation) => {
   try {
-    let agents;
+    const { priorityType, maxRadius } = autoAllocation;
+    console.log(`[AutoAlloc] fetchNearestAgents — priorityType: ${priorityType}, radius: ${maxRadius} km, merchantId: ${order.merchantId}`);
 
-    if (priorityType === "Default") {
-      agents = await fetchNearestAgents();
-    } else {
-      agents = await fetchNearestMonthlySalaryAgents(
-        maxRadius,
-        order.merchantId
-      );
+    const agents =
+      priorityType === "Monthly-salaried"
+        ? await fetchNearestMonthlySalaryAgents(maxRadius, order.merchantId)
+        : await fetchNearestAgents(maxRadius, order.merchantId);
+
+    console.log(`[AutoAlloc] Found ${agents.length} nearby eligible agent(s) within ${maxRadius} km`);
+    if (agents.length === 0) {
+      console.log(`[AutoAlloc] ⚠️  No agents within radius — no one notified`);
     }
-
-    let deliveryAddress = order.orderDetail.deliveryAddress;
 
     for (const agent of agents) {
-      const userToken = await FcmToken.find({ userId: agent.id });
-
-      const data = {
-        socket: {
-          orderId: order.id,
-          merchantName: order.orderDetail.pickupAddress.fullName,
-          pickAddress: order.orderDetail.pickupAddress,
-          customerName: deliveryAddress.fullName,
-          customerAddress: deliveryAddress,
-        },
-        fcm: {
-          title: "New Order",
-          body: "You have a new order to pickup",
-          image: "",
-          orderId: order.id,
-          agentId: agent.id,
-          pickupDetail: {
-            name: order.orderDetail.pickupAddress.fullName,
-            address: order.orderDetail.pickupAddress,
-          },
-          deliveryDetail: {
-            name: deliveryAddress.fullName,
-            address: deliveryAddress,
-          },
-          orderType: order.orderDetail.deliveryOption,
-        },
-      };
-
-      const parameter = { user: "Agent", eventName: "newOrder" };
-
-      sendNotification(agent.id, parameter.eventName, data, parameter.user);
+      await _sendAgentNotification(agent, order, autoAllocation);
     }
   } catch (err) {
-    throw new Error(err.message);
+    throw new Error(`Error in notifying nearest agents: ${err}`);
   }
+};
+
+/**
+ * Sends FCM push + socket "newOrder" event to a single agent and increments
+ * their pendingOrders counter — mirrors assignAgentToTaskController exactly.
+ */
+const _sendAgentNotification = async (agent, order, autoAllocation) => {
+  try {
+    const agentId = agent._id.toString();
+    console.log(`[AutoAlloc] ── Agent: ${agentId} (${agent.fullName || "unknown"})`);
+    console.log(`[AutoAlloc]    Status: ${agent.status} | Approved: ${agent.isApproved}`);
+
+    // Increment pending orders counter
+    if (!agent.appDetail) {
+      agent.appDetail = {
+        totalEarning: 0,
+        orders: 0,
+        pendingOrders: 0,
+        totalDistance: 0,
+        cancelledOrders: 0,
+        loginDuration: 0,
+      };
+    }
+    agent.appDetail.pendingOrders += 1;
+    await agent.save();
+    console.log(`[AutoAlloc]    pendingOrders incremented → ${agent.appDetail.pendingOrders}`);
+
+    const pickupAddress = order.pickups?.[0]?.address || null;
+    const dropAddress = order.drops?.[0]?.address || null;
+    const timer = autoAllocation?.expireTime || 60;
+
+    console.log(`[AutoAlloc]    Pickup : ${pickupAddress?.fullName || "N/A"}`);
+    console.log(`[AutoAlloc]    Drop   : ${dropAddress?.fullName || "N/A"}`);
+    console.log(`[AutoAlloc]    Timer  : ${timer}s`);
+
+    // ── FCM notification (also creates AgentNotificationLog via socket) ──────
+    console.log(`[AutoAlloc]    → Sending FCM push to agent ${agentId}...`);
+    const fcmData = {
+      title: "New Order",
+      body: "You have a new order to pickup",
+      image: "",
+      agentId,
+      orderId: [order._id],
+      merchantName: pickupAddress?.fullName || null,
+      pickAddress: pickupAddress,
+      customerName: dropAddress?.fullName || null,
+      customerAddress: dropAddress,
+      orderType: order.deliveryMode || null,
+      taskDate: formatDate(order.deliveryTime),
+      taskTime: formatTime(order.deliveryTime),
+      timer,
+      isBatchOrder: false,
+    };
+
+    await sendNotification(agentId, "newOrder", { fcm: fcmData }, "Driver");
+    console.log(`[AutoAlloc]    ✅ FCM sent to agent ${agentId}`);
+
+    // ── Socket push (real-time popup in agent app) ───────────────────────────
+    console.log(`[AutoAlloc]    → Sending socket "newOrder" to agent ${agentId}...`);
+    const socketData = {
+      orderId: order._id,
+      taskId: null,
+      merchantName: pickupAddress?.fullName || null,
+      pickAddress: pickupAddress,
+      customerName: dropAddress?.fullName || null,
+      customerAddress: dropAddress,
+      agentId,
+      orderType: order.deliveryMode || null,
+      taskDate: formatDate(order.deliveryTime),
+      taskTime: formatTime(order.deliveryTime),
+      timer,
+      batchOrder: false,
+    };
+
+    sendSocketData(agentId, "newOrder", socketData);
+    console.log(`[AutoAlloc]    ✅ Socket pushed to agent ${agentId}`);
+  } catch (err) {
+    // Log per-agent failure but don't abort the rest of the loop
+    console.error(`[AutoAlloc] ❌ Notify failed for agent ${agent._id} (${agent.fullName || "unknown"}): ${err.message}`);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent fetch helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fetchAgents = async (merchantId) => {
+  let merchant;
+  let merchantBusinessCategory;
+
+  if (merchantId) {
+    merchant = await Merchant.findById(merchantId);
+    if (merchant) {
+      merchantBusinessCategory = await BusinessCategory.findById(
+        merchant.merchantDetail.businessCategoryId
+      );
+    }
+  }
+
+  if (merchant) {
+    if (
+      merchantBusinessCategory?.title === "Fish" ||
+      merchantBusinessCategory?.title === "Meat"
+    ) {
+      return Agent.find({
+        status: "Free",
+        "workStructure.tag": "Fish & Meat",
+        isApproved: "Approved",
+      });
+    } else {
+      return Agent.find({ status: "Free", isApproved: "Approved" });
+    }
+  } else {
+    return Agent.find({
+      status: "Free",
+      "workStructure.tag": { $ne: "Fish & Meat" },
+      isApproved: "Approved",
+    });
+  }
+};
+
+/**
+ * @param {number} radius  - max radius in km from the merchant location
+ * @param {string} merchantId
+ */
+const fetchNearestAgents = async (radius, merchantId) => {
+  let merchant;
+  let merchantBusinessCategory;
+
+  if (merchantId) {
+    merchant = await Merchant.findById(merchantId);
+    if (merchant) {
+      merchantBusinessCategory = await BusinessCategory.findById(
+        merchant.merchantDetail.businessCategoryId
+      );
+    }
+  }
+
+  let agents;
+  if (merchant) {
+    if (
+      merchantBusinessCategory?.title === "Fish" ||
+      merchantBusinessCategory?.title === "Meat"
+    ) {
+      agents = await Agent.find({
+        status: "Free",
+        "workStructure.tag": "Fish & Meat",
+        isApproved: "Approved",
+      });
+    } else {
+      agents = await Agent.find({ status: "Free", isApproved: "Approved" });
+    }
+  } else {
+    agents = await Agent.find({
+      status: "Free",
+      "workStructure.tag": { $ne: "Fish & Meat" },
+      isApproved: "Approved",
+    });
+  }
+
+  if (!radius || radius <= 0 || !merchant) return agents;
+
+  const merchantLocation = merchant.merchantDetail.location;
+
+  return agents.filter((agent) => {
+    const agentLocation = getUserLocationFromSocket(agent._id);
+    if (!agentLocation) return false;
+    const distance = turf.distance(
+      turf.point(merchantLocation),
+      turf.point(agentLocation),
+      { units: "kilometers" }
+    );
+    return distance <= radius;
+  });
 };
 
 const fetchMonthlySalaryAgents = async (merchantId) => {
@@ -234,25 +370,22 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
 
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
-      merchantBusinessCategory = await BusinessCategory.findById(
-        merchant.merchantDetail.businessCategoryId
-      );
+      if (merchant) {
+        merchantBusinessCategory = await BusinessCategory.findById(
+          merchant.merchantDetail.businessCategoryId
+        );
+      }
     }
 
-    // Find the AgentPricing document where ruleName is "Monthly"
     const monthlySalaryPricing = await AgentPricing.findOne({
       ruleName: "Monthly-salaried",
     });
 
-    if (!monthlySalaryPricing) {
-      throw new Error(`No pricing rule found for ruleName: "Monthly"`);
-    }
-
     let agents;
     if (merchant) {
       if (
-        merchantBusinessCategory.title === "Fish" ||
-        merchantBusinessCategory.title === "Meat"
+        merchantBusinessCategory?.title === "Fish" ||
+        merchantBusinessCategory?.title === "Meat"
       ) {
         agents = await Agent.find({
           status: "Free",
@@ -270,47 +403,49 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
       });
     }
 
-    // Fetch all agents and filter those with the monthly salary structure ID
-    const monthlySalaryAgents = agents.filter((agent) => {
-      const agentSalaryStructureId =
-        agent.workStructure.salaryStructureId.toString();
-      const pricingId = monthlySalaryPricing._id.toString();
+    // If no Monthly-salaried pricing rule exists, fall back to all free agents
+    if (!monthlySalaryPricing) {
+      console.warn('[AutoAlloc] No "Monthly-salaried" AgentPricing rule found — falling back to all free agents');
+      return agents;
+    }
 
-      return agentSalaryStructureId === pricingId;
-    });
-
-    return monthlySalaryAgents;
+    return agents.filter(
+      (agent) =>
+        agent.workStructure?.salaryStructureId?.toString() ===
+        monthlySalaryPricing._id.toString()
+    );
   } catch (error) {
-    throw new Error(`Error fetching monthly salary agents: ${err}`);
+    throw new Error(`Error fetching monthly salary agents: ${error}`);
   }
 };
 
+/**
+ * @param {number} radius  - max radius in km from the merchant location
+ * @param {string} merchantId
+ */
 const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
   try {
-    // Find the AgentPricing document where ruleName is "Monthly"
     const monthlySalaryPricing = await AgentPricing.findOne({
       ruleName: "Monthly-salaried",
     });
 
-    if (!monthlySalaryPricing) {
-      throw new Error(`No pricing rule found for ruleName: "Monthly"`);
-    }
-
-    // Fetch all agents and filter those with the monthly salary structure ID
     let merchant;
     let merchantBusinessCategory;
+
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
-      merchantBusinessCategory = await BusinessCategory.findById(
-        merchant.merchantDetail.businessCategoryId
-      );
+      if (merchant) {
+        merchantBusinessCategory = await BusinessCategory.findById(
+          merchant.merchantDetail.businessCategoryId
+        );
+      }
     }
 
     let agents;
     if (merchant) {
       if (
-        merchantBusinessCategory.title === "Fish" ||
-        merchantBusinessCategory.title === "Meat"
+        merchantBusinessCategory?.title === "Fish" ||
+        merchantBusinessCategory?.title === "Meat"
       ) {
         agents = await Agent.find({
           status: "Free",
@@ -328,122 +463,37 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
       });
     }
 
-    const filteredAgents = agents.filter((agent) => {
-      const maxRadius = radius;
-      if (maxRadius > 0) {
-        const merchantLocation = merchant.merchantDetail.location;
-        const agentLocation = getUserLocationFromSocket(agent._id);
-        const distance = turf.distance(
-          turf.point(merchantLocation),
-          turf.point(agentLocation),
-          { units: "kilometers" }
-        );
+    // Filter by distance if radius + merchant location are available
+    const distanceFiltered =
+      radius > 0 && merchant
+        ? agents.filter((agent) => {
+            const merchantLocation = merchant.merchantDetail.location;
+            const agentLocation = getUserLocationFromSocket(agent._id);
+            if (!agentLocation) return false;
+            const distance = turf.distance(
+              turf.point(merchantLocation),
+              turf.point(agentLocation),
+              { units: "kilometers" }
+            );
+            return distance <= radius;
+          })
+        : agents;
 
-        return distance <= maxRadius;
-      }
-      return true;
-    });
+    // If no Monthly-salaried pricing rule exists, fall back to distance-filtered agents
+    if (!monthlySalaryPricing) {
+      console.warn('[AutoAlloc] No "Monthly-salaried" AgentPricing rule found — falling back to all nearby free agents');
+      return distanceFiltered;
+    }
 
-    const monthlySalaryAgents = filteredAgents.filter((agent) => {
-      const agentSalaryStructureId =
-        agent.workStructure.salaryStructureId.toString();
-      const pricingId = monthlySalaryPricing._id.toString();
-
-      return agentSalaryStructureId === pricingId;
-    });
-
-    return monthlySalaryAgents;
+    // Then filter by monthly salary structure
+    return distanceFiltered.filter(
+      (agent) =>
+        agent.workStructure?.salaryStructureId?.toString() ===
+        monthlySalaryPricing._id.toString()
+    );
   } catch (error) {
-    throw new Error(`Error fetching monthly salary agents: ${err}`);
+    throw new Error(`Error fetching nearest monthly salary agents: ${error}`);
   }
-};
-
-const fetchAgents = async (merchantId) => {
-  let merchant;
-  let merchantBusinessCategory;
-
-  if (merchantId) {
-    merchant = await Merchant.findById(merchantId);
-    merchantBusinessCategory = await BusinessCategory.findById(
-      merchant.merchantDetail.businessCategoryId
-    );
-  }
-
-  let agents;
-  if (merchant) {
-    if (
-      merchantBusinessCategory.title === "Fish" ||
-      merchantBusinessCategory.title === "Meat"
-    ) {
-      agents = await Agent.find({
-        status: "Free",
-        "workStructure.tag": "Fish & Meat",
-        isApproved: "Approved",
-      });
-    } else {
-      agents = await Agent.find({ status: "Free", isApproved: "Approved" });
-    }
-  } else {
-    agents = await Agent.find({
-      status: "Free",
-      "workStructure.tag": { $ne: "Fish & Meat" },
-      isApproved: "Approved",
-    });
-  }
-  return agents;
-};
-
-const fetchNearestAgents = async (merchantId) => {
-  let merchant;
-  let merchantBusinessCategory;
-
-  if (merchantId) {
-    merchant = await Merchant.findById(merchantId);
-    merchantBusinessCategory = await BusinessCategory.findById(
-      merchant.merchantDetail.businessCategoryId
-    );
-  }
-
-  let agents;
-  if (merchant) {
-    if (
-      merchantBusinessCategory.title === "Fish" ||
-      merchantBusinessCategory.title === "Meat"
-    ) {
-      agents = await Agent.find({
-        status: "Free",
-        "workStructure.tag": "Fish & Meat",
-        isApproved: "Approved",
-      });
-    } else {
-      agents = await Agent.find({ status: "Free", isApproved: "Approved" });
-    }
-  } else {
-    agents = await Agent.find({
-      status: "Free",
-      "workStructure.tag": { $ne: "Fish & Meat" },
-      isApproved: "Approved",
-    });
-  }
-
-  const filteredAgents = agents.filter((agent) => {
-    const maxRadius = radius;
-
-    if (maxRadius > 0) {
-      const merchantLocation = merchant.merchantDetail.location;
-      const agentLocation = getUserLocationFromSocket(agent._id);
-      const distance = turf.distance(
-        turf.point(merchantLocation),
-        turf.point(agentLocation),
-        { units: "kilometers" }
-      );
-
-      return distance <= maxRadius;
-    }
-    return true;
-  });
-
-  return filteredAgents;
 };
 
 module.exports = { orderCreateTaskHelper, batchOrderCreateTaskHelper };

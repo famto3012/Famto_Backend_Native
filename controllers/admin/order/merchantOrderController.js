@@ -979,12 +979,14 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
 const confirmOrderController = async (req, res, next) => {
   try {
     const currentMerchant = req.userAuth;
+    console.log(`[confirmOrder] 🟡 Merchant accept triggered — merchantId: ${currentMerchant}`);
 
     if (!currentMerchant) {
       return next(appError("Merchant is not authenticated", 401));
     }
 
     const { orderId } = req.params;
+    console.log(`[confirmOrder] orderId: ${orderId}`);
 
     let orderFound = await Order.findById(orderId).populate(
       "merchantId",
@@ -1025,10 +1027,15 @@ const confirmOrderController = async (req, res, next) => {
         orderFound.commissionDetail = { famtoEarnings, merchantEarnings };
       }
 
-      if (orderFound?.orderDetail?.deliveryMode !== "Take Away") {
+      console.log(`[confirmOrder] deliveryMode: ${orderFound?.deliveryMode}`);
+      if (orderFound?.deliveryMode !== "Take Away") {
+        console.log(`[confirmOrder] → calling orderCreateTaskHelper...`);
         const task = await orderCreateTaskHelper(orderId);
+        console.log(`[confirmOrder] ← orderCreateTaskHelper returned: ${task}`);
 
         if (!task) return next(appError("Task not created"));
+      } else {
+        console.log(`[confirmOrder] deliveryMode is Take Away — skipping task creation`);
       }
 
       await Promise.all([
