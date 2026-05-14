@@ -20,7 +20,6 @@ const addCustomerPricingController = async (req, res, next) => {
     vehicleType,
     businessCategoryId,
     merchants,
-    returnBaseFare,
     returnBaseDistance,
     fareAfterBaseReturnDistance,
   } = req.body;
@@ -82,7 +81,6 @@ const addCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId: businessCategoryId || null,
       merchants,
-      returnBaseFare: returnBaseFare || null,
       returnBaseDistance: returnBaseDistance || null,
       fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
     });
@@ -179,7 +177,6 @@ const editCustomerPricingController = async (req, res, next) => {
       vehicleType,
       businessCategoryId,
       merchants,
-      returnBaseFare,
       returnBaseDistance,
       fareAfterBaseReturnDistance,
     } = req.body;
@@ -237,7 +234,6 @@ const editCustomerPricingController = async (req, res, next) => {
         vehicleType,
         businessCategoryId: businessCategoryId || null,
         merchants,
-        returnBaseFare: returnBaseFare || null,
         returnBaseDistance: returnBaseDistance || null,
         fareAfterBaseReturnDistance: fareAfterBaseReturnDistance || null,
       },
