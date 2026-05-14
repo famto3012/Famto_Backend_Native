@@ -899,10 +899,9 @@ if (returnCharge) {
 
     console.log("🚚 Delivery Charge:", oneTimeDeliveryCharge);
 
-    if (customerPricing.returnBaseFare && customerPricing.returnBaseDistance) {
+    if (customerPricing.fareAfterBaseReturnDistance && customerPricing.returnBaseDistance) {
       returnCharge = calculateDeliveryCharges(
         distanceInKM,
-        customerPricing.returnBaseFare,
         customerPricing.returnBaseDistance,
         customerPricing.fareAfterBaseReturnDistance
       );
@@ -1389,10 +1388,9 @@ const pickAndDropCharges = async (
 
   // Calculate return charge if configured
   let returnCharge = null;
-  if (vehiclePrice.returnBaseFare && vehiclePrice.returnBaseDistance) {
+  if (vehiclePrice.fareAfterBaseReturnDistance && vehiclePrice.returnBaseDistance) {
     returnCharge = calculateDeliveryCharges(
       distanceInKM,
-      vehiclePrice.returnBaseFare,
       vehiclePrice.returnBaseDistance,
       vehiclePrice.fareAfterBaseReturnDistance
     );

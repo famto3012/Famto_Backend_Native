@@ -109,11 +109,6 @@ const customerPricingValidations = [
   body("waitingFare").optional().trim(),
   body("waitingTime").optional().trim(),
   body("geofenceId").trim().notEmpty().withMessage("Geofence is required"),
-  body("returnBaseFare")
-    .optional()
-    .trim()
-    .isNumeric()
-    .withMessage("Return base fare must be a number"),
   body("returnBaseDistance")
     .optional()
     .trim()
