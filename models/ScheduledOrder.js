@@ -73,16 +73,35 @@ const billSchema = mongoose.Schema(
   }
 );
 
-const purchasedItemsSchema = mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
+const purchasedItemsSchema = mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    price: {
+      type: Number,
+      default: null,
+    },
+    productName: {
+      type: String,
+      default: null,
+    },
+    costPrice: {
+      type: Number,
+      default: null,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+    },
   },
-  quantity: {
-    type: Number,
-    required: true,
-  },
-});
+  { _id: false }
+);
 
 const scheduledOrderSchema = mongoose.Schema(
   {
@@ -110,6 +129,7 @@ const scheduledOrderSchema = mongoose.Schema(
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     time: { type: Date, required: true },
+    numOfDays: { type: Number, default: null },
 
     totalAmount: { type: Number, required: true },
     status: {

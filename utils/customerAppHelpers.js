@@ -288,7 +288,7 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
     if (scheduledOrder?.billDetail?.addedTip > 0) {
       calculatedTip =
         scheduledOrder.billDetail.addedTip /
-        scheduledOrder.orderDetail.numOfDays;
+        scheduledOrder.numOfDays;
     }
 
     const deliveryTimeMinutes = parseInt(
@@ -299,27 +299,33 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
     const deliveryTime = new Date(scheduledOrder.time);
     deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
 
-    console.log("Delivery time",deliveryTime);
-    console.log("Delivery time Minutes",deliveryTimeMinutes);
-
     const stepperData = {
       by: "Admin",
       date: new Date(),
     };
 
+    // ── Enrich purchasedItems ─────────────────────────────────────────────────
+    // The ScheduledOrder schema previously only stored productId + quantity,
+    // leaving price / productName / variantId / costPrice as null in the Order.
+    // Re-fetch full product details here so the Order is fully populated.
+    // For new scheduled orders the extra fields are already stored; the
+    // filterProductIdAndQuantity call is a safe no-op (it will just re-confirm
+    // the same values) and acts as a fallback for legacy records.
+    const enrichedPurchasedItems = await filterProductIdAndQuantity(
+      scheduledOrder.purchasedItems
+    );
+
     let options = {
       customerId: scheduledOrder.customerId,
       merchantId: scheduledOrder.merchantId,
       scheduledOrderId: scheduledOrder._id,
-      items: scheduledOrder.purchasedItems,
-      orderDetail: {
-        ...scheduledOrder.orderDetail,
-        deliveryTime,
-      },
+      pickups: scheduledOrder.pickups,
+      drops: scheduledOrder.drops,
       billDetail: {
-        ...scheduledOrder.billDetail,
+        ...scheduledOrder.billDetail.toObject?.() ?? scheduledOrder.billDetail,
         addedTip: calculatedTip,
       },
+      distance: scheduledOrder.distance || 0,
       totalAmount: scheduledOrder.totalAmount,
       paymentMode: scheduledOrder.paymentMode,
       paymentStatus: scheduledOrder.paymentStatus,
@@ -328,7 +334,10 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       deliveryMode: scheduledOrder.deliveryMode,
       deliveryOption: scheduledOrder.deliveryOption,
       deliveryTime: deliveryTime,
-      purchasedItems: scheduledOrder.purchasedItems,
+      startDate: scheduledOrder.startDate,
+      endDate: scheduledOrder.endDate,
+      time: scheduledOrder.time,
+      purchasedItems: enrichedPurchasedItems,
     };
 
     let newOrderCreated = await Order.create(options);

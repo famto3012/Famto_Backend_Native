@@ -64,7 +64,11 @@ const {
   createOrdersFromScheduledPickAndDrop,
   deleteOldLoyaltyPoints,
 } = require("./utils/customerAppHelpers");
-const { app, server, populateUserSocketMap } = require("./socket/socket.js");
+const { app, server, populateUserSocketMap, findRolesToNotify } = require("./socket/socket.js");
+const ActivityLog = require("./models/ActivityLog");
+const CustomerWalletTransaction = require("./models/CustomerWalletTransaction");
+const { sendSocketDataAndNotification } = require("./utils/socketHelper");
+const { formatDate, formatTime } = require("./utils/formatters");
 const ScheduledOrder = require("./models/ScheduledOrder.js");
 const taskRoute = require("./routes/adminRoute/deliveryManagementRoute/taskRoute.js");
 const {
@@ -266,29 +270,31 @@ cron.schedule("* * * * *", async () => {
 
 cron.schedule("*/10 * * * * *", async () => {
   try {
-
     const now = new Date();
 
-    // ✅ STEP 1: Fetch limited batch (prevents overload)
+    // ── STEP 1: Fetch expired, unprocessed temp orders ────────────────────────
     const tempOrders = await TemporaryOrder.find({
       expiresAt: { $lte: now },
       isProcessed: false,
-      isProcessing: { $ne: true },
     })
-      .limit(20) // 🔥 batch size (tune based on traffic)
+      .limit(20)
       .lean();
 
     if (!tempOrders.length) return;
 
     const tempOrderIds = tempOrders.map((o) => o._id);
 
-    // ✅ STEP 2: LOCK orders (avoid duplicate processing)
-    await TemporaryOrder.updateMany(
-      { _id: { $in: tempOrderIds } },
-      { $set: { isProcessing: true } }
+    // ── STEP 2: Atomic lock — mark as processed before doing any work ─────────
+    // Only grab ones still unprocessed (race-condition safe)
+    const locked = await TemporaryOrder.updateMany(
+      { _id: { $in: tempOrderIds }, isProcessed: false },
+      { $set: { isProcessed: true } }
     );
 
-    // ✅ STEP 3: Filter valid orders
+    if (locked.modifiedCount === 0) return; // another instance grabbed them first
+
+    // ── STEP 3: Filter valid orders ───────────────────────────────────────────
+    // Online-payment orders must have a completed payment; COD and Famto-cash always proceed
     const validOrders = tempOrders.filter((o) => {
       if (o.paymentMode === "Online-payment") {
         return o.paymentStatus === "Completed";
@@ -296,51 +302,95 @@ cron.schedule("*/10 * * * * *", async () => {
       return true;
     });
 
-    if (!validOrders.length) return;
+    if (!validOrders.length) {
+      await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
+      return;
+    }
 
-    // ✅ STEP 4: Avoid duplicate orders (bulk check against both Order and ScheduledOrder)
-    const paymentIds = validOrders
-      .map((o) => o.paymentId)
-      .filter(Boolean);
+    // ── STEP 4: Dedup — skip already-created orders ───────────────────────────
+    // For Online-payment orders dedup by paymentId; COD/Famto-cash don't have paymentId
+    const onlinePaymentIds = validOrders
+      .filter((o) => o.paymentMode === "Online-payment" && o.paymentId)
+      .map((o) => o.paymentId);
 
-    const [existingOrders, existingScheduledOrders] = await Promise.all([
-      Order.find({ paymentId: { $in: paymentIds } }).select("paymentId"),
-      ScheduledOrder.find({ paymentId: { $in: paymentIds } }).select("paymentId"),
-    ]);
-
-    const existingPaymentIds = new Set([
-      ...existingOrders.map((o) => o.paymentId),
-      ...existingScheduledOrders.map((o) => o.paymentId),
-    ]);
+    let existingPaymentIds = new Set();
+    if (onlinePaymentIds.length) {
+      const [existingOrders, existingScheduled] = await Promise.all([
+        Order.find({ paymentId: { $in: onlinePaymentIds } }).select("paymentId").lean(),
+        ScheduledOrder.find({ paymentId: { $in: onlinePaymentIds } }).select("paymentId").lean(),
+      ]);
+      existingPaymentIds = new Set([
+        ...existingOrders.map((o) => o.paymentId),
+        ...existingScheduled.map((o) => o.paymentId),
+      ]);
+    }
 
     const ordersToCreate = validOrders.filter(
-      (o) => !existingPaymentIds.has(o.paymentId)
+      (o) => !o.paymentId || !existingPaymentIds.has(o.paymentId)
     );
 
-    // ✅ STEP 5: SPLIT into scheduled vs regular orders
-    const scheduledOrders = ordersToCreate.filter(
-      (o) => o.deliveryOption === "Scheduled"
-    );
-    const regularOrders = ordersToCreate.filter(
-      (o) => o.deliveryOption !== "Scheduled"
-    );
+    if (!ordersToCreate.length) {
+      await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
+      return;
+    }
 
-    // ✅ STEP 6a: BULK INSERT regular orders into Order collection (FAST 🚀)
-    if (regularOrders.length) {
-      const bulkOrders = regularOrders.map((o) => ({
-        insertOne: {
-          document: {
+    // ── STEP 5: Fetch notification roles once (shared across all orders) ──────
+    const eventName = "newOrderCreated";
+    const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+    // ── STEP 6: Process each order individually ───────────────────────────────
+    // Individual creates are required so that:
+    //   • pre-save middleware fires (ScheduledOrder auto-increment ID)
+    //   • we can populate + fire socket/notification per order
+    //   • we can update CustomerWalletTransaction with the real order _id
+
+    for (const o of ordersToCreate) {
+      try {
+        let createdOrder;
+        const isScheduled = o.deliveryOption === "Scheduled";
+
+        if (isScheduled) {
+          // ── Scheduled → ScheduledOrder collection ──────────────────────────
+          createdOrder = await ScheduledOrder.create({
             customerId: o.customerId,
             merchantId: o.merchantId,
             pickups: o.pickups,
             drops: o.drops,
             billDetail: o.billDetail,
+            distance: o.distance || 0,
             totalAmount: o.totalAmount,
             deliveryMode: o.deliveryMode,
             deliveryOption: o.deliveryOption,
             paymentMode: o.paymentMode,
             paymentStatus: o.paymentStatus,
-            paymentId: o.paymentId,
+            paymentId: o.paymentId || null,
+            purchasedItems: o.purchasedItems,
+            prescription: o.prescription || null,
+            startDate: o.startDate,
+            endDate: o.endDate,
+            time: o.time,
+            status: "Pending",
+          });
+        } else {
+          // ── Regular → Order collection ─────────────────────────────────────
+          createdOrder = await Order.create({
+            customerId: o.customerId,
+            merchantId: o.merchantId,
+            pickups: o.pickups,
+            drops: o.drops,
+            billDetail: o.billDetail,
+            distance: o.distance || 0,
+            deliveryTime: o.deliveryTime,
+            startDate: o.startDate,
+            endDate: o.endDate,
+            time: o.time,
+            numOfDays: o.numOfDays,
+            totalAmount: o.totalAmount,
+            deliveryMode: o.deliveryMode,
+            deliveryOption: o.deliveryOption,
+            paymentMode: o.paymentMode,
+            paymentStatus: o.paymentStatus,
+            paymentId: o.paymentId || null,
             purchasedItems: o.purchasedItems,
             prescription: o.prescription || null,
             status: "Pending",
@@ -349,59 +399,103 @@ cron.schedule("*/10 * * * * *", async () => {
               userId: o.customerId,
               date: new Date(),
             },
-          },
-        },
-      }));
+          });
+        }
 
-      await Order.bulkWrite(bulkOrders);
-      console.log(`✅ Created ${regularOrders.length} regular order(s)`);
-    }
+        if (!createdOrder) {
+          console.error(`❌ Failed to create order for tempId ${o._id}`);
+          continue;
+        }
 
-    // ✅ STEP 6b: INSERT scheduled orders into ScheduledOrder collection
-    // (must use .create() in a loop so the pre-save _id counter middleware fires)
-    if (scheduledOrders.length) {
-      for (const o of scheduledOrders) {
-        await ScheduledOrder.create({
-          customerId: o.customerId,
-          merchantId: o.merchantId,
-          pickups: o.pickups,
-          drops: o.drops,
-          billDetail: o.billDetail,
-          distance: o.distance || 0,
-          totalAmount: o.totalAmount,
-          deliveryMode: o.deliveryMode,
-          deliveryOption: o.deliveryOption,
-          paymentMode: o.paymentMode,
-          paymentStatus: o.paymentStatus,
-          paymentId: o.paymentId,
-          purchasedItems: o.purchasedItems,
-          startDate: o.startDate,
-          endDate: o.endDate,
-          time: o.time,
-          status: "Pending",
+        // ── Populate merchantId + customerId for socket data ──────────────────
+        const Model = isScheduled ? ScheduledOrder : Order;
+        const newOrder = await Model.findById(createdOrder._id).populate(
+          "merchantId customerId"
+        );
+
+        if (!newOrder) continue;
+
+        // ── Fix CustomerWalletTransaction.orderId for Famto-cash ─────────────
+        // When the temp order was created, walletTransaction.orderId was set
+        // to the temporary orderId field. Now update it to the real order _id.
+        if (o.paymentMode === "Famto-cash" && o.orderId) {
+          await CustomerWalletTransaction.findOneAndUpdate(
+            { orderId: o.orderId },
+            { $set: { orderId: createdOrder._id } }
+          );
+        }
+
+        // ── Activity log ──────────────────────────────────────────────────────
+        await ActivityLog.create({
+          userId: o.customerId,
+          userType: "Customer",
+          description: `Order (#${createdOrder._id}) created via payment cron for customer (${o.customerId})`,
         });
+
+        // ── Build socket + notification payloads ──────────────────────────────
+        const notificationData = {
+          fcm: {
+            orderId: newOrder._id,
+            customerId: newOrder.customerId,
+          },
+        };
+
+        const socketData = {
+          ...data,
+          orderId: newOrder._id,
+          billDetail: newOrder.billDetail,
+          orderDetailStepper: newOrder.orderDetailStepper?.created,
+          _id: newOrder._id,
+          orderStatus: newOrder.status,
+          merchantName:
+            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+          customerName:
+            newOrder?.drops?.[0]?.address?.fullName ||
+            newOrder?.customerId?.fullName ||
+            "-",
+          deliveryMode: newOrder?.deliveryMode,
+          orderDate: formatDate(newOrder.createdAt),
+          orderTime: formatTime(newOrder.createdAt),
+          deliveryDate: newOrder?.deliveryTime
+            ? formatDate(newOrder.deliveryTime)
+            : "-",
+          deliveryTime: newOrder?.deliveryTime
+            ? formatTime(newOrder.deliveryTime)
+            : "-",
+          paymentMethod: newOrder.paymentMode,
+          deliveryOption: newOrder.deliveryOption,
+          amount: newOrder.billDetail.grandTotal,
+        };
+
+        const userIds = {
+          admin: process.env.ADMIN_ID,
+          merchant: newOrder?.merchantId?._id,
+          agent: newOrder?.agentId,
+          customer: newOrder?.customerId,
+        };
+
+        // ── Fire socket + push notifications ──────────────────────────────────
+        await sendSocketDataAndNotification({
+          rolesToNotify,
+          userIds,
+          eventName,
+          notificationData,
+          socketData,
+        });
+
+        console.log(
+          `✅ Order ${createdOrder._id} created [${o.deliveryOption} | ${o.paymentMode}]`
+        );
+      } catch (orderErr) {
+        console.error(
+          `❌ Cron failed for tempId ${o._id}:`,
+          orderErr.message
+        );
       }
-      console.log(`✅ Created ${scheduledOrders.length} scheduled order(s)`);
     }
 
-    // ✅ STEP 7: MARK ALL AS PROCESSED
-    await TemporaryOrder.updateMany(
-      { _id: { $in: tempOrderIds } },
-      {
-        $set: {
-          isProcessed: true,
-          isProcessing: false,
-        },
-      }
-    );
-
-    // ✅ STEP 8: CLEANUP (BULK DELETE)
-    await Promise.all([
-      TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } }),
-      CustomerCart.deleteMany({
-        customerId: { $in: tempOrders.map((o) => o.customerId) },
-      }),
-    ]);
+    // ── STEP 7: Cleanup all temp orders in this batch ─────────────────────────
+    await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
 
   } catch (err) {
     console.error("🔥 ORDER CRON ERROR:", err);

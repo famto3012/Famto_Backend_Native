@@ -1921,9 +1921,10 @@ const orderPaymentController = async (req, res, next) => {
         const newOrderCreated = await ScheduledOrder.create({
           customerId,
           merchantId: cart.merchantId,
-          items: formattedItems,
-          orderDetail: cart.cartDetail,
+          pickups,
+          drops,
           billDetail: orderBill,
+          distance: cart.cartDetail.distance || 0,
           totalAmount: orderAmount,
           deliveryMode: cart.cartDetail.deliveryMode,
           deliveryOption: cart.cartDetail.deliveryOption,
@@ -1933,6 +1934,7 @@ const orderPaymentController = async (req, res, next) => {
           startDate,
           endDate,
           time: cart.cartDetail.time,
+          numOfDays: cart.cartDetail.numOfDays || null,
           purchasedItems,
         });
 
