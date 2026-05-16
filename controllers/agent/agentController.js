@@ -1075,6 +1075,24 @@ const getTaskPreviewController = async (req, res, next) => {
       // }).lean();
 
       console.log("batchOrder", batchOrder);
+
+      let storeLocation = batchOrder.pickupAddress?.location || null;
+      if (
+        batchOrder.deliveryMode === "Home Delivery" ||
+        batchOrder.deliveryMode === "Take Away"
+      ) {
+        const firstOrderId = batchOrder.dropDetails?.[0]?.orderId;
+        if (firstOrderId) {
+          const orderForMerchant = await Order.findById(firstOrderId).select("merchantId").lean();
+          if (orderForMerchant?.merchantId) {
+            const merchantForBatch = await Merchant.findById(orderForMerchant.merchantId).lean();
+            if (merchantForBatch?.merchantDetail?.location) {
+              storeLocation = merchantForBatch.merchantDetail.location;
+            }
+          }
+        }
+      }
+
       const pickupValue = {
         type: "Pickup",
         // taskId: task._id,
@@ -1086,7 +1104,7 @@ const getTaskPreviewController = async (req, res, next) => {
           // flat: batchOrder.pickupAddress?.flat || null,
           area: batchOrder.pickupAddress?.area || null,
           phoneNumber: batchOrder.pickupAddress?.phoneNumber || null,
-          location: batchOrder.pickupAddress?.location || null,
+          location: storeLocation,
         },
         agentLocation: getUserLocationFromSocket(agentId),
       };
@@ -1134,6 +1152,19 @@ const getTaskPreviewController = async (req, res, next) => {
         },
       });
     } else {
+      const merchantIds = [
+        ...new Set(
+          taskFound
+            .map((task) => task.orderId?.merchantId?.toString())
+            .filter(Boolean)
+        ),
+      ];
+      const merchants = await Merchant.find({ _id: { $in: merchantIds } }).lean();
+      const merchantMap = {};
+      merchants.forEach((m) => {
+        merchantMap[m._id.toString()] = m;
+      });
+
       taskFound.forEach((task) => {
         const orderId = task.orderId?._id;
         // const orderId = task.orderId;
@@ -1149,9 +1180,19 @@ const getTaskPreviewController = async (req, res, next) => {
           };
         }
 
+        const deliveryMode = task?.orderId?.deliveryMode;
+        const merchantId = task.orderId?.merchantId?.toString();
+        const merchant = merchantId ? merchantMap[merchantId] : null;
+        const storeLocation = merchant?.merchantDetail?.location || null;
+
         // Loop through each pickup
         task?.pickupDropDetails?.forEach((detailBlock) => {
           detailBlock?.pickups?.forEach((pickup) => {
+            const pickupLoc =
+              deliveryMode === "Home Delivery" || deliveryMode === "Take Away"
+                ? storeLocation
+                : pickup.location || null;
+
             groupedTasks[orderId].tasks.pickups.push({
               type: "Pickup",
               taskId: task._id,
@@ -1163,7 +1204,7 @@ const getTaskPreviewController = async (req, res, next) => {
                 flat: pickup.address?.flat || null,
                 area: pickup.address?.area || null,
                 phoneNumber: pickup.address?.phoneNumber || null,
-                location: pickup.location || null,
+                location: pickupLoc,
               },
               agentLocation: getUserLocationFromSocket(agentId),
             });
@@ -1431,7 +1472,11 @@ const getPickUpDetailController = async (req, res, next) => {
           taskFound[0]?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound[0]?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation: pickupDetail?.location || null,
+        pickupLocation:
+          taskFound[0]?.deliveryMode === "Home Delivery" ||
+          taskFound[0]?.deliveryMode === "Take Away"
+            ? merchantFound?.merchantDetail?.location || null
+            : pickupDetail?.location || null,
         deliveryMode: taskFound[0]?.deliveryMode || null,
         orderItems: taskFound.flatMap(
           (task) => task?.orderId?.purchasedItems || []
@@ -1491,7 +1536,11 @@ const getPickUpDetailController = async (req, res, next) => {
           taskFound?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation: pickupDetail?.location || null,
+        pickupLocation:
+          taskFound?.deliveryMode === "Home Delivery" ||
+          taskFound?.deliveryMode === "Take Away"
+            ? merchantFound?.merchantDetail?.location || null
+            : pickupDetail?.location || null,
         deliveryMode: taskFound?.deliveryMode || null,
         orderItems: taskFound?.orderId?.purchasedItems || [],
         billDetail: taskFound?.orderId?.billDetail || {},

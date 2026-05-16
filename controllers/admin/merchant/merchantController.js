@@ -738,12 +738,12 @@ const fetchAllMerchantsController = async (req, res, next) => {
         mongoose.Types.ObjectId.createFromHexString(businessCategory.trim());
     }
 
-    // If manager, restrict to their geofences (overrides query param)
-    if (req.geofenceId && req.geofenceId.length > 0) {
-      matchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
-    } else if (geofence && geofence.toLowerCase() !== "all") {
+    // Specific geofence selection takes priority; fallback to manager's allowed geofences
+    if (geofence && geofence.toLowerCase() !== "all") {
       matchCriteria["merchantDetail.geofenceId"] =
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      matchCriteria["merchantDetail.geofenceId"] = { $in: req.geofenceId };
     }
 
     if (subscriptionStatus && subscriptionStatus.toLowerCase() !== "all") {
