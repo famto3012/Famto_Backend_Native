@@ -3089,12 +3089,12 @@ io.on("connection", async (socket) => {
               turf.point([agentLocation[1], agentLocation[0]]),
               { units: "kilometers" }
             );
-            // if (distance >= 40.5) {
-            //   return socket.emit("error", {
-            //     message: "Agent is far from delivery point",
-            //     success: false,
-            //   });
-            // }
+            if (distance >= 40.5) {
+              return socket.emit("error", {
+                message: "Agent is far from delivery point",
+                success: false,
+              });
+            }
           }
 
           drop.drops.status = "Completed";
@@ -3192,12 +3192,12 @@ io.on("connection", async (socket) => {
               turf.point([agentLocation[1], agentLocation[0]]),
               { units: "kilometers" }
             );
-            // if (distance >= 0.5) {
-            //   return socket.emit("error", {
-            //     message: "Agent is far from delivery point",
-            //     success: false,
-            //   });
-            // }
+            if (distance >= 0.5) {
+              return socket.emit("error", {
+                message: "Agent is far from delivery point",
+                success: false,
+              });
+            }
           }
 
           const orderFound = await Order.findById(taskFound.orderId).populate(
