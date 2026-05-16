@@ -3321,6 +3321,7 @@ const reassignAgentController = async (req, res, next) => {
             merchantName: order?.pickups[0]?.address?.fullName || null,
             pickAddress: order?.pickups[0]?.address || null,
             customerName: order?.drops[0]?.address?.fullName || null,
+            customerAddress: order?.drops[0]?.address || null,
             orderType: order?.deliveryMode || null,
             taskDate: formatDate(order?.deliveryTime),
             taskTime: formatTime(order?.deliveryTime),

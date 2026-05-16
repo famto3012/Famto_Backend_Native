@@ -114,7 +114,7 @@ const assignAgentToTaskController = async (req, res, next) => {
         }
       }
 
-      const customerAddress = Array.isArray(order?.drops[0]?.address);
+      const customerAddress = order?.drops[0]?.address || null;
 
       if (roleId) {
         const notificationData = {

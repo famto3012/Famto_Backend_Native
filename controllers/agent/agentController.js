@@ -1109,7 +1109,7 @@ const getTaskPreviewController = async (req, res, next) => {
           taskId: dropDetails.taskId,
           taskStatus: dropDetails?.drops.status,
           date: formatDate(taskFound.createdAt),
-          time: formatTime(taskFound?.orderId?.orderDetail?.deliveryTime),
+          time: formatTime(taskFound?.orderId?.deliveryTime),
           address: {
             fullName: dropDetails?.drops?.address.fullName || null,
             flat: dropDetails?.drops?.address.flat || null,
@@ -1176,7 +1176,7 @@ const getTaskPreviewController = async (req, res, next) => {
               taskId: task._id,
               taskStatus: drop.status,
               date: formatDate(task.createdAt),
-              time: formatTime(task?.orderId?.orderDetail?.deliveryTime),
+              time: formatTime(task?.orderId?.deliveryTime),
               address: {
                 fullName: drop.address?.fullName || null,
                 flat: drop.address?.flat || null,
@@ -1414,10 +1414,9 @@ const getPickUpDetailController = async (req, res, next) => {
         merchantName: merchantFound?.merchantDetail?.merchantName || null,
         customerId: taskFound[0]?.orderId?.customerId || null,
         customerName:
-          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+          taskFound[0]?.orderId?.drops?.[0]?.address?.fullName || null,
         customerPhoneNumber:
-          taskFound[0]?.orderId?.orderDetail?.deliveryAddress?.phoneNumber ||
-          null,
+          taskFound[0]?.orderId?.drops?.[0]?.address?.phoneNumber || null,
         type: "Pickup",
         date: formatDate(taskFound[0]?.orderId?.createdAt) || null,
         time: formatTime(taskFound[0]?.orderId?.createdAt) || null,
@@ -1427,20 +1426,17 @@ const getPickUpDetailController = async (req, res, next) => {
         pickupAddress: pickupDetail?.address?.area || null,
         pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
         instructions:
-          taskFound[0]?.orderId?.orderDetail?.instructionToMerchant ||
-          taskFound[0]?.orderId?.orderDetail?.instructionInPickup ||
-          null,
+          taskFound[0]?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
-          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
-          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
-          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          taskFound[0]?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
+          taskFound[0]?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
         pickupLocation: pickupDetail?.location || null,
         deliveryMode: taskFound[0]?.deliveryMode || null,
         orderItems: taskFound.flatMap(
           (task) => task?.orderId?.purchasedItems || []
         ),
-        billDetail: taskFound?.orderId?.billDetail || {},
+        billDetail: taskFound[0]?.orderId?.billDetail || {},
         paymentMode: taskFound[0]?.orderId?.paymentMode || null,
         paymentStatus: taskFound[0]?.orderId?.paymentStatus || null,
       };
@@ -1478,9 +1474,9 @@ const getPickUpDetailController = async (req, res, next) => {
         merchantName: merchantFound?.merchantDetail?.merchantName || null,
         customerId: taskFound?.orderId?.customerId || null,
         customerName:
-          taskFound?.orderId?.orderDetail?.deliveryAddress?.fullName || null,
+          taskFound?.orderId?.drops?.[0]?.address?.fullName || null,
         customerPhoneNumber:
-          taskFound?.orderId?.orderDetail?.deliveryAddress?.phoneNumber || null,
+          taskFound?.orderId?.drops?.[0]?.address?.phoneNumber || null,
         type: "Pickup",
         date: formatDate(taskFound?.orderId?.createdAt) || null,
         time: formatTime(taskFound?.orderId?.createdAt) || null,
@@ -1490,13 +1486,10 @@ const getPickUpDetailController = async (req, res, next) => {
         pickupAddress: pickupDetail?.address?.area || null,
         pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
         instructions:
-          taskFound?.orderId?.orderDetail?.instructionToMerchant ||
-          taskFound?.orderId?.orderDetail?.instructionInPickup ||
-          null,
+          taskFound?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
-          taskFound?.orderId?.orderDetail?.voiceInstructionToMerchant ||
-          taskFound?.orderId?.orderDetail?.voiceInstructionInPickup ||
-          taskFound?.orderId?.orderDetail?.voiceInstructionToDeliveryAgent ||
+          taskFound?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
+          taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
         pickupLocation: pickupDetail?.location || null,
         deliveryMode: taskFound?.deliveryMode || null,
@@ -1551,13 +1544,9 @@ const getDeliveryDetailController = async (req, res, next) => {
       deliveryAddress: deliveryDetail?.address || null,
       customerPhoneNumber: deliveryDetail?.address?.phoneNumber || null,
       instructions:
-        taskFound?.orderId?.instructionInDelivery ||
-        taskFound?.orderId?.instructionToDeliveryAgent ||
-        null,
+        taskFound?.orderId?.drops?.[0]?.instructionInDrop || null,
       voiceInstructions:
-        taskFound?.orderId?.voiceInstructionInDelivery ||
-        taskFound?.orderId?.voiceInstructionToDeliveryAgent ||
-        null,
+        taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop || null,
       deliveryLocation: deliveryDetail?.location || null,
       deliveryMode: taskFound?.deliveryMode || null,
       orderItems: taskFound?.orderId?.purchasedItems || [],
@@ -1605,11 +1594,12 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
       return next(appError("Agent access denied", 403));
     }
 
-    if (!orderFound.items || orderFound.items.length === 0) {
+    const orderItems = orderFound.pickups?.[0]?.items || [];
+    if (!orderItems.length) {
       return next(appError("No items found in order", 404));
     }
 
-    const itemFound = orderFound.items.find(
+    const itemFound = orderItems.find(
       (item) => item.itemId.toString() === itemId.toString()
     );
     if (!itemFound) return next(appError("Item not found in order", 404));
@@ -1767,12 +1757,8 @@ const getCheckoutDetailController = async (req, res, next) => {
       orderId: taskFound.orderId,
       distance:
         taskFound?.orderId?.detailAddedByAgent?.distanceCoveredByAgent || 0,
-      timeTaken: taskFound?.orderId?.orderDetail?.timeTaken
-        ? formatToHours(taskFound.orderId.orderDetail.timeTaken)
-        : "0 h 0 min",
-      delayedBy: taskFound?.orderId?.orderDetail?.delayedBy
-        ? formatToHours(taskFound.orderId.orderDetail.delayedBy)
-        : "0 h 0 min",
+      timeTaken: "0 h 0 min",
+      delayedBy: "0 h 0 min",
       paymentType: taskFound.orderId.paymentMode,
       paymentStatus: taskFound.orderId.paymentStatus,
       grandTotal: taskFound?.orderId?.billDetail?.grandTotal || 0,
@@ -2490,7 +2476,7 @@ const updateCustomOrderStatusController = async (req, res, next) => {
 
     const orderFound = await Order.findOne({
       _id: orderId,
-      "orderDetail.deliveryMode": "Custom Order",
+      deliveryMode: "Custom Order",
     });
 
     if (!orderFound) return next(appError("Order not found", 404));
@@ -2525,16 +2511,9 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     const oldDistanceCoveredByAgent =
       orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0;
 
-    orderFound.orderDetail.distance =
-      (orderFound.orderDetail?.distance || 0) + newDistance;
+    orderFound.distance = (orderFound.distance || 0) + newDistance;
     orderFound.detailAddedByAgent.distanceCoveredByAgent =
       oldDistanceCoveredByAgent + newDistance;
-    // }
-
-    // Initialize pickup location if not set
-    if (!orderFound.orderDetail.pickupLocation && shopUpdates.length === 0) {
-      orderFound.orderDetail.pickupLocation = location;
-    }
 
     // Add shop update
     const updatedData = { location, status, description };
@@ -2739,17 +2718,13 @@ const getAllNotificationsController = async (req, res, next) => {
     // Format response
     const formattedResponse = notifications.map((notification) => ({
       notificationId: notification?._id || null,
-      // orderId: notification?.orderId || null,
-      orderId: notification?.orderId, //?.map((o) => o._id || o),
+      orderId: notification?.orderId,
       pickupDetail: notification?.pickupDetail?.address || null,
-      deliveryDetail: notification?.deliveryDetail?.address || null,
-      // deliveryDetail: Array.isArray(notification?.deliveryDetail)
-      //   ? notification.deliveryDetail.map((d) => d.address || null)
-      //   : [],
+      deliveryDetail: notification?.deliveryDetail?.[0]?.address || null,
       orderType: notification?.orderType || null,
       status: notification?.status || null,
-      taskDate: formatDate(notification?.orderId?.orderDetail?.deliveryTime),
-      taskTime: formatTime(notification?.orderId?.orderDetail?.deliveryTime),
+      taskDate: formatDate(notification?.createdAt),
+      taskTime: formatTime(notification?.createdAt),
       isBatchOrder: notification.isBatchOrder || false,
     }));
 

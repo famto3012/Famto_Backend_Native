@@ -646,7 +646,7 @@ const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
     const now = new Date();
 
     let calculatedWaitingFare = 0;
-    let totalDistance = order?.orderDetail?.distance;
+    let totalDistance = order?.distance;
 
     const customerPricing = await CustomerPricing.findOne({
       deliveryMode: "Custom Order",

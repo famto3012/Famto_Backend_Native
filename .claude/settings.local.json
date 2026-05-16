@@ -6,7 +6,8 @@
       "Read(//c/Users/sarat/Projects/Famto_Dashboard/src/**)",
       "Read(//c/Users/sarat/Projects/Famto_Panel_V2/src/**)",
       "Bash(xargs grep *)",
-      "Bash(ls \"C:\\\\Users\\\\sarat\\\\Projects\")"
+      "Bash(ls \"C:\\\\Users\\\\sarat\\\\Projects\")",
+      "Bash(grep -v \"//\")"
     ]
   }
 }

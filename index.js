@@ -437,6 +437,11 @@ cron.schedule("*/10 * * * * *", async () => {
           fcm: {
             orderId: newOrder._id,
             customerId: newOrder.customerId,
+            merchantId: newOrder?.merchantId?._id,
+            agentId: newOrder?.agentId,
+            pickAddress: newOrder?.pickups?.[0]?.address || null,
+            customerAddress: newOrder?.drops?.[0]?.address || null,
+            orderType: newOrder?.deliveryMode || null,
           },
         };
 
