@@ -299,8 +299,8 @@ const createNotificationLog = async (notificationSettings, message) => {
         const orderIdArray = Array.isArray(message?.orderId)
           ? message.orderId
           : message?.orderId
-          ? [message.orderId]
-          : [];
+            ? [message.orderId]
+            : [];
 
         // ── Guard: never create a new "Pending" log when the order already
         // has an Accepted / Completed log (prevents duplicates on events like
@@ -330,22 +330,22 @@ const createNotificationLog = async (notificationSettings, message) => {
         if (pendingLog)
           await AgentNotificationLogs.findByIdAndDelete(pendingLog._id);
 
-        console.log("Message Data",message);
+        console.log("Message Data", message);
 
         const pickupDetail =
           message?.pickups?.length > 0
             ? {
-                name: message.pickups[0]?.address?.fullName,
-                address: {
-                  fullName: message.pickups[0]?.address?.fullName,
-                  phoneNumber: message.pickups[0]?.address?.phoneNumber,
-                  flat: message.pickups[0]?.address?.flat,
-                  area: message.pickups[0]?.address?.area,
-                  landmark: message.pickups[0]?.address?.landmark,
-                },
-              }
+              name: message.pickups[0]?.address?.fullName,
+              address: {
+                fullName: message.pickups[0]?.address?.fullName,
+                phoneNumber: message.pickups[0]?.address?.phoneNumber,
+                flat: message.pickups[0]?.address?.flat,
+                area: message.pickups[0]?.address?.area,
+                landmark: message.pickups[0]?.address?.landmark,
+              },
+            }
             : message?.pickAddress
-            ? {
+              ? {
                 name: message.pickAddress?.fullName,
                 address: {
                   fullName: message.pickAddress?.fullName,
@@ -355,22 +355,22 @@ const createNotificationLog = async (notificationSettings, message) => {
                   landmark: message.pickAddress?.landmark,
                 },
               }
-            : {};
+              : {};
 
         const deliveryDetails =
           Array.isArray(message?.drops) && message.drops.length > 0
             ? message.drops.map((drop) => ({
-                name: drop?.address?.fullName,
-                address: {
-                  fullName: drop?.address?.fullName,
-                  phoneNumber: drop?.address?.phoneNumber,
-                  flat: drop?.address?.flat,
-                  area: drop?.address?.area,
-                  landmark: drop?.address?.landmark,
-                },
-              }))
+              name: drop?.address?.fullName,
+              address: {
+                fullName: drop?.address?.fullName,
+                phoneNumber: drop?.address?.phoneNumber,
+                flat: drop?.address?.flat,
+                area: drop?.address?.area,
+                landmark: drop?.address?.landmark,
+              },
+            }))
             : message?.customerAddress
-            ? [
+              ? [
                 {
                   name: message.customerAddress?.fullName,
                   address: {
@@ -382,7 +382,7 @@ const createNotificationLog = async (notificationSettings, message) => {
                   },
                 },
               ]
-            : [];
+              : [];
 
         await AgentNotificationLogs.create({
           ...logData,
@@ -910,29 +910,29 @@ const getPendingNotificationsWithTimers = async (agentId) => {
       .lean();
 
     console.log("Pending Notifications:", pendingNotifications);
-const notificationsWithTimers = pendingNotifications.map((notification) => {
-  const order = notification.orderId?.[0] || {};
+    const notificationsWithTimers = pendingNotifications.map((notification) => {
+      const order = notification.orderId?.[0] || {};
 
-  return {
-    notificationId: notification._id || null,
+      return {
+        notificationId: notification._id || null,
 
-    orderId: order?._id || null,
+        orderId: order?._id || null,
 
-    pickAddress:
-      order?.pickups?.[0]?.address?.area || null,
+        pickAddress:
+          order?.pickups?.[0]?.address?.area || null,
 
-    customerAddress:
-      order?.drops?.[0]?.address?.area || null,
+        customerAddress:
+          order?.drops?.[0]?.address?.area || null,
 
-    orderType: notification.orderType || null,
+        orderType: notification.orderType || null,
 
-    status: notification.status || null,
+        status: notification.status || null,
 
-    taskDate: formatDate(order?.deliveryTime),
+        taskDate: formatDate(order?.deliveryTime),
 
-    taskTime: formatTime(order?.deliveryTime),
-  };
-});
+        taskTime: formatTime(order?.deliveryTime),
+      };
+    });
 
     console.log("Notifications with Timers:", notificationsWithTimers);
 
@@ -1852,21 +1852,45 @@ io.on("connection", async (socket) => {
             });
           }
 
-          const pickupLocation = pickupDetail.location;
-          // Both locations are [lat, lng] — turf needs [lng, lat]
-          const distance = turf.distance(
-            turf.point([pickupLocation[1], pickupLocation[0]]),
-            turf.point([agentLocation[1], agentLocation[0]]),
-            { units: "kilometers" }
-          );
+          const normalizeLocation = (location) => {
+            if (
+              !Array.isArray(location) ||
+              location.length !== 2
+            ) {
+              return null;
+            }
 
-          if (distance >= 0.5) {
-            return socket.emit("error", {
-              message: "Agent is far from pickup point",
-              success: false,
-            });
+            const lat = Number(location[0]);
+            const lng = Number(location[1]);
+
+            if (
+              Number.isNaN(lat) ||
+              Number.isNaN(lng)
+            ) {
+              return null;
+            }
+
+            return [lat, lng];
+          };
+
+          const pickupLocation = normalizeLocation(pickupDetail.location);
+          const parsedAgentLocation = normalizeLocation(agentLocation);
+
+          // Only validate distance if pickup location exists
+          if (pickupLocation && parsedAgentLocation) {
+            const distance = turf.distance(
+              turf.point([pickupLocation[1], pickupLocation[0]]),
+              turf.point([parsedAgentLocation[1], parsedAgentLocation[0]]),
+              { units: "kilometers" }
+            );
+
+            if (distance >= 0.5) {
+              return socket.emit("error", {
+                message: "Agent is far from pickup point",
+                success: false,
+              });
+            }
           }
-
           pickupDetail.status = "Completed";
           pickupDetail.completedTime = new Date();
           taskFound.markModified("pickupDropDetails");
@@ -2481,9 +2505,9 @@ io.on("connection", async (socket) => {
               !!batchOrderDoc,
               batchOrderDoc
                 ? {
-                    id: batchOrderDoc._id,
-                    dropCount: (batchOrderDoc.dropDetails || []).length,
-                  }
+                  id: batchOrderDoc._id,
+                  dropCount: (batchOrderDoc.dropDetails || []).length,
+                }
                 : null
             );
           } catch (err) {
