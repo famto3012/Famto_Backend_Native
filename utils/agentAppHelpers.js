@@ -644,82 +644,358 @@ const updateCustomerSubscriptionCount = async (customerId) => {
   }
 };
 
-const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
+const updateBillOfCustomOrderInDelivery = async (
+  order,
+  task,
+  socket
+) => {
   try {
-    const reachedPickupAt = task?.pickupDetail?.completedTime;
-    const deliveryStartAt = task?.deliveryDetail?.startTime;
-    const pickupStartAt = task?.pickupDetail?.startTime;
-    const now = new Date();
+    // =========================
+    // VALIDATIONS
+    // =========================
 
-    let calculatedWaitingFare = 0;
-    let totalDistance = order?.distance;
-
-    const customerPricing = await CustomerPricing.findOne({
-      deliveryMode: "Custom Order",
-      geofenceId: order?.customerId?.customerDetails?.geofenceId,
-      status: true,
-    });
-
-    if (!customerPricing) {
+    if (!order) {
       return socket.emit("error", {
-        message: `Customer pricing for custom order not found`,
+        message: "Order not found",
         success: false,
       });
     }
 
-    const {
-      baseFare,
-      baseDistance,
-      fareAfterBaseDistance,
-      waitingFare,
-      waitingTime,
-    } = customerPricing;
-
-    const deliveryCharge = calculateDeliveryCharges(
-      totalDistance,
-      baseFare,
-      baseDistance,
-      fareAfterBaseDistance
-    );
-
-    const minutesWaitedAtPickup = Math.floor(
-      (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
-    );
-
-    if (minutesWaitedAtPickup > waitingTime) {
-      const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
-      calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
+    if (!task) {
+      return socket.emit("error", {
+        message: "Task not found",
+        success: false,
+      });
     }
 
-    const totalTaskTime = new Date(now) - new Date(pickupStartAt);
+    // =========================
+    // TASK TIMES
+    // =========================
 
-    // Convert the difference to minutes
-    const diffInHours = Math.ceil(totalTaskTime / 3600000);
+    const reachedPickupAt =
+      task?.pickupDetail?.completedTime;
 
-    let calculatedPurchaseFare = 0;
+    const deliveryStartAt =
+      task?.deliveryDetail?.startTime;
 
-    if (diffInHours > 0) {
-      calculatedPurchaseFare = parseFloat(
-        (diffInHours * customerPricing.purchaseFarePerHour).toFixed(2)
+    const pickupStartAt =
+      task?.pickupDetail?.startTime;
+
+    if (
+      !reachedPickupAt ||
+      !deliveryStartAt ||
+      !pickupStartAt
+    ) {
+      return socket.emit("error", {
+        message: "Required task timestamps are missing",
+        success: false,
+      });
+    }
+
+    // =========================
+    // CUSTOMER PRICING
+    // =========================
+
+    const geofenceId =
+      order?.customerId?.customerDetails?.geofenceId;
+
+    const customerPricing =
+      await CustomerPricing.findOne({
+        deliveryMode: "Custom Order",
+        geofenceId,
+        status: true,
+      });
+
+    if (!customerPricing) {
+      return socket.emit("error", {
+        message:
+          "Customer pricing for custom order not found",
+        success: false,
+      });
+    }
+
+    // =========================
+    // NORMALIZE PRICING VALUES
+    // =========================
+
+    const baseFare = Number(
+      customerPricing?.baseFare || 0
+    );
+
+    const baseDistance = Number(
+      customerPricing?.baseDistance || 0
+    );
+
+    const fareAfterBaseDistance = Number(
+      customerPricing?.fareAfterBaseDistance || 0
+    );
+
+    const waitingFare = Number(
+      customerPricing?.waitingFare || 0
+    );
+
+    const waitingTime = Number(
+      customerPricing?.waitingTime || 0
+    );
+
+    const purchaseFarePerHour = Number(
+      customerPricing?.purchaseFarePerHour || 0
+    );
+
+    // =========================
+    // DISTANCE
+    // =========================
+
+    const totalDistance = Number(order?.distance || 0);
+
+    // =========================
+    // DELIVERY CHARGE
+    // =========================
+
+    const calculatedDeliveryCharge =
+      calculateDeliveryCharges(
+        totalDistance,
+        baseFare,
+        baseDistance,
+        fareAfterBaseDistance
+      );
+
+    // =========================
+    // WAITING CHARGE
+    // =========================
+
+    let calculatedWaitingFare = 0;
+
+    const waitingMinutes = Math.max(
+      0,
+      Math.floor(
+        (new Date(deliveryStartAt) -
+          new Date(reachedPickupAt)) /
+          60000
+      )
+    );
+
+    if (waitingMinutes > waitingTime) {
+      const extraMinutes =
+        waitingMinutes - waitingTime;
+
+      calculatedWaitingFare = parseFloat(
+        (extraMinutes * waitingFare).toFixed(2)
       );
     }
 
-    const calculatedDeliveryFare =
-      deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
+    // =========================
+    // PURCHASE CHARGE
+    // =========================
 
-    order.billDetail.waitingCharges = calculatedDeliveryFare;
-    order.billDetail.deliveryCharge = calculatedDeliveryFare;
-    order.billDetail.grandTotal += calculatedDeliveryFare;
-    order.billDetail.subTotal += calculatedDeliveryFare;
+    let calculatedPurchaseFare = 0;
+
+    const totalTaskDurationMs =
+      new Date() - new Date(pickupStartAt);
+
+    // Charge hourly
+    const totalHours =
+      totalTaskDurationMs / 3600000;
+
+    if (totalHours > 0) {
+      calculatedPurchaseFare = parseFloat(
+        (
+          totalHours * purchaseFarePerHour
+        ).toFixed(2)
+      );
+    }
+
+    // =========================
+    // TOTAL ADDITIONAL CHARGES
+    // =========================
+
+    const additionalCharges =
+      calculatedDeliveryCharge +
+      calculatedWaitingFare +
+      calculatedPurchaseFare;
+
+    // =========================
+    // INITIAL BILL VALUES
+    // =========================
+
+    const itemTotal = Number(
+      order?.billDetail?.itemTotal || 0
+    );
+
+    const tax = Number(
+      order?.billDetail?.tax || 0
+    );
+
+    const discount = Number(
+      order?.billDetail?.discount || 0
+    );
+
+    // =========================
+    // UPDATE BILL DETAILS
+    // =========================
+
+    order.billDetail = order.billDetail || {};
+
+    order.billDetail.deliveryCharge =
+      parseFloat(
+        calculatedDeliveryCharge.toFixed(2)
+      );
+
+    order.billDetail.waitingCharges =
+      parseFloat(
+        calculatedWaitingFare.toFixed(2)
+      );
+
+    order.billDetail.purchaseCharges =
+      parseFloat(
+        calculatedPurchaseFare.toFixed(2)
+      );
+
+    order.billDetail.additionalCharges =
+      parseFloat(
+        additionalCharges.toFixed(2)
+      );
+
+    // =========================
+    // RECALCULATE TOTALS
+    // =========================
+
+    order.billDetail.subTotal = parseFloat(
+      (
+        itemTotal + additionalCharges
+      ).toFixed(2)
+    );
+
+    order.billDetail.grandTotal =
+      parseFloat(
+        (
+          order.billDetail.subTotal +
+          tax -
+          discount
+        ).toFixed(2)
+      );
+
+    // =========================
+    // OPTIONAL DEBUG INFO
+    // =========================
+
+    order.billDetail.calculationBreakdown = {
+      distance: totalDistance,
+      waitingMinutes,
+      purchaseHours: parseFloat(
+        totalHours.toFixed(2)
+      ),
+      updatedAt: new Date(),
+    };
+
+    // =========================
+    // SAVE ORDER
+    // =========================
 
     await order.save();
+
+    return {
+      success: true,
+      deliveryCharge:
+        order.billDetail.deliveryCharge,
+      waitingCharges:
+        order.billDetail.waitingCharges,
+      purchaseCharges:
+        order.billDetail.purchaseCharges,
+      grandTotal:
+        order.billDetail.grandTotal,
+    };
   } catch (err) {
+    console.error(
+      "[updateBillOfCustomOrderInDelivery]",
+      err
+    );
+
     return socket.emit("error", {
-      message: `Error in updating bill ${err}`,
+      message: `Error updating custom order bill: ${
+        err?.message || err
+      }`,
       success: false,
     });
   }
 };
+
+// const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
+//   try {
+//     const reachedPickupAt = task?.pickupDetail?.completedTime;
+//     const deliveryStartAt = task?.deliveryDetail?.startTime;
+//     const pickupStartAt = task?.pickupDetail?.startTime;
+//     const now = new Date();
+
+//     let calculatedWaitingFare = 0;
+//     let totalDistance = order?.distance;
+
+//     const customerPricing = await CustomerPricing.findOne({
+//       deliveryMode: "Custom Order",
+//       geofenceId: order?.customerId?.customerDetails?.geofenceId,
+//       status: true,
+//     });
+
+//     if (!customerPricing) {
+//       return socket.emit("error", {
+//         message: `Customer pricing for custom order not found`,
+//         success: false,
+//       });
+//     }
+
+//     const {
+//       baseFare,
+//       baseDistance,
+//       fareAfterBaseDistance,
+//       waitingFare,
+//       waitingTime,
+//     } = customerPricing;
+
+//     const deliveryCharge = calculateDeliveryCharges(
+//       totalDistance,
+//       baseFare,
+//       baseDistance,
+//       fareAfterBaseDistance
+//     );
+
+//     const minutesWaitedAtPickup = Math.floor(
+//       (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
+//     );
+
+//     if (minutesWaitedAtPickup > waitingTime) {
+//       const additionalMinutes = Math.round(minutesWaitedAtPickup - waitingTime);
+//       calculatedWaitingFare = parseFloat(waitingFare * additionalMinutes);
+//     }
+
+//     const totalTaskTime = new Date(now) - new Date(pickupStartAt);
+
+//     // Convert the difference to minutes
+//     const diffInHours = Math.ceil(totalTaskTime / 3600000);
+
+//     let calculatedPurchaseFare = 0;
+
+//     if (diffInHours > 0) {
+//       calculatedPurchaseFare = parseFloat(
+//         (diffInHours * customerPricing.purchaseFarePerHour).toFixed(2)
+//       );
+//     }
+
+//     const calculatedDeliveryFare =
+//       deliveryCharge + calculatedPurchaseFare + calculatedWaitingFare;
+
+//     order.billDetail.waitingCharges = calculatedDeliveryFare;
+//     order.billDetail.deliveryCharge = calculatedDeliveryFare;
+//     order.billDetail.grandTotal += calculatedDeliveryFare;
+//     order.billDetail.subTotal += calculatedDeliveryFare;
+
+//     await order.save();
+//   } catch (err) {
+//     return socket.emit("error", {
+//       message: `Error in updating bill ${err}`,
+//       success: false,
+//     });
+//   }
+// };
 
 module.exports = {
   formatToHours,
