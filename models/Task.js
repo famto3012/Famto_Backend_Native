@@ -18,6 +18,10 @@ const detailSchema = new mongoose.Schema(
     },
     items: [
       {
+        itemId: {
+          type: mongoose.Schema.Types.ObjectId,
+          default: () => new mongoose.Types.ObjectId(),
+        },
         itemName: String,
         length: Number,
         width: Number,

@@ -35,6 +35,8 @@ const orderCreateTaskHelper = async (orderId) => {
 
     if (task) return true;
 
+
+
     let pickups = order.pickups.map((pick, index) => ({
       status: "Pending",
       stepIndex: index,
@@ -73,7 +75,7 @@ const orderCreateTaskHelper = async (orderId) => {
       console.log(`[AutoAlloc] ✅ Auto allocation is ACTIVE`);
       console.log(`[AutoAlloc]    Type      : ${autoAllocation.autoAllocationType}`);
       console.log(`[AutoAlloc]    Priority  : ${autoAllocation.priorityType}`);
-      console.log(`[AutoAlloc]    MaxRadius : ${autoAllocation.maxRadius} km`);
+      console.log(`[AutoAlloc]    MaxRadius : ${autoAlloation.maxRadius} km`);
       console.log(`[AutoAlloc]    ExpireTime: ${autoAllocation.expireTime} sec`);
       console.log(`[AutoAlloc]    OrderId   : ${orderId}`);
 
@@ -108,12 +110,12 @@ const batchOrderCreateTaskHelper = async (batchOrderId) => {
 
     let pickups = batchOrder.pickupAddress
       ? [
-          {
-            status: "Pending",
-            location: batchOrder.pickupAddress.location,
-            address: batchOrder.pickupAddress,
-          },
-        ]
+        {
+          status: "Pending",
+          location: batchOrder.pickupAddress.location,
+          address: batchOrder.pickupAddress,
+        },
+      ]
       : [];
 
     let drops = batchOrder.dropDetails.map((drop) => ({
@@ -467,16 +469,16 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
     const distanceFiltered =
       radius > 0 && merchant
         ? agents.filter((agent) => {
-            const merchantLocation = merchant.merchantDetail.location;
-            const agentLocation = getUserLocationFromSocket(agent._id);
-            if (!agentLocation) return false;
-            const distance = turf.distance(
-              turf.point(merchantLocation),
-              turf.point(agentLocation),
-              { units: "kilometers" }
-            );
-            return distance <= radius;
-          })
+          const merchantLocation = merchant.merchantDetail.location;
+          const agentLocation = getUserLocationFromSocket(agent._id);
+          if (!agentLocation) return false;
+          const distance = turf.distance(
+            turf.point(merchantLocation),
+            turf.point(agentLocation),
+            { units: "kilometers" }
+          );
+          return distance <= radius;
+        })
         : agents;
 
     // If no Monthly-salaried pricing rule exists, fall back to distance-filtered agents

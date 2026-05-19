@@ -1117,16 +1117,16 @@ const getTaskPreviewController = async (req, res, next) => {
         },
       };
       console.log("response value 1", response);
-      batchOrder?.dropDetails?.forEach((dropDetails) => {
+      for (const dropDetails of (batchOrder?.dropDetails || [])) {
         console.log("dropDetails value", dropDetails);
-        const taskFound = Task.findById(dropDetails.taskId)
+        const taskFound = await Task.findById(dropDetails.taskId)
           .populate("orderId")
           .lean();
         response?.tasks?.deliveries.push({
           type: "Delivery",
           taskId: dropDetails.taskId,
           taskStatus: dropDetails?.drops.status,
-          date: formatDate(taskFound.createdAt),
+          date: formatDate(taskFound?.createdAt),
           time: formatTime(taskFound?.orderId?.deliveryTime),
           address: {
             fullName: dropDetails?.drops?.address.fullName || null,
@@ -1137,7 +1137,7 @@ const getTaskPreviewController = async (req, res, next) => {
           },
           agentLocation: getUserLocationFromSocket(agentId),
         });
-      });
+      }
       console.log("response value", response);
 
       //   Object.values(response).forEach((order) => {
@@ -1439,7 +1439,7 @@ const getPickUpDetailController = async (req, res, next) => {
 
       // ✅ Find the pickup matching the stepIndex
       const pickupDetail = taskFound[0].pickupDropDetails[0]?.pickups?.find(
-        (p) => p.stepIndex === parseInt(0)
+        (p) => p.stepIndex === parseInt(stepIndex)
       );
 
       if (!pickupDetail) {
@@ -1685,6 +1685,26 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
 
     await orderFound.save();
 
+    const taskFound = await Task.findOne({ orderId });
+    if (taskFound) {
+      for (const detail of taskFound.pickupDropDetails || []) {
+        for (const pickup of detail.pickups || []) {
+          const taskItem = pickup.items?.find(
+            (i) => i.itemId?.toString() === itemId.toString()
+          );
+          if (taskItem) taskItem.price = newPrice;
+        }
+        for (const drop of detail.drops || []) {
+          const taskItem = drop.items?.find(
+            (i) => i.itemId?.toString() === itemId.toString()
+          );
+          if (taskItem) taskItem.price = newPrice;
+        }
+      }
+      taskFound.markModified("pickupDropDetails");
+      await taskFound.save();
+    }
+
     if (orderFound?.customerId) {
       const notificationData = {
         fcm: {
@@ -1694,7 +1714,7 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
         },
       };
 
-      const eventName = "";
+      const eventName = "customOrderItemPriceUpdated";
 
       await sendNotification(
         orderFound?.customerId,
@@ -1827,8 +1847,8 @@ const confirmCashReceivedController = async (req, res, next) => {
   try {
     const { amount, orderId } = req.body;
     const agentId = req.userAuth;
-    if (!amount && isNaN(amount))
-      return next(appError("Amount must be a number"));
+    if (!amount || isNaN(amount))
+      return next(appError("Amount must be a valid number"));
 
     const [agent, order] = await Promise.all([
       Agent.findById(agentId),
@@ -1840,7 +1860,7 @@ const confirmCashReceivedController = async (req, res, next) => {
     if (amount < order.billDetail.grandTotal)
       return next(appError("Enter the correct bill amount"));
 
-    agent.workStructure.cashInHand += parseInt(amount);
+    agent.workStructure.cashInHand += parseFloat(amount);
 
     await agent.save();
 
@@ -2579,7 +2599,7 @@ const updateCustomOrderStatusController = async (req, res, next) => {
         },
       };
 
-      const eventName = "";
+      const eventName = "customOrderShopUpdated";
 
       await sendNotification(
         orderFound?.customerId,

@@ -1590,13 +1590,10 @@ io.on("connection", async (socket) => {
           }
 
           if (pickupDetail.status === "Started") {
-            const agentSocketId = userSocketMap[agentId]?.socketId;
-            if (agentSocketId) {
-              io.to(agentSocketId).emit(eventName, {
-                data: "Pickup already started",
-                success: true,
-              });
-            }
+            sendSocketData(agentId, eventName, {
+              data: "Pickup already started",
+              success: true,
+            });
             return;
           }
 
@@ -2459,10 +2456,6 @@ io.on("connection", async (socket) => {
       };
 
       try {
-        // helper to send debug to agent socket (optional)
-        const agentSocketId = userSocketMap[agentId]?.socketId;
-        console.log(TAG, "agentSocketId:", agentSocketId || "none");
-
         // ---------- BatchOrder flow ----------
         const handleBatchDropStart = async (
           batchOrderId,
@@ -2530,11 +2523,10 @@ io.on("connection", async (socket) => {
           console.log(TAG, `[BATCH] current drop.status = ${curStatus}`);
           if (curStatus === "Started") {
             console.log(TAG, "[BATCH] Drop already started - notifying agent");
-            if (agentSocketId)
-              io.to(agentSocketId).emit("agentDeliveryStarted", {
-                data: "Delivery already started (batch)",
-                success: true,
-              });
+            sendSocketData(agentId, "agentDeliveryStarted", {
+              data: "Delivery already started (batch)",
+              success: true,
+            });
             return;
           }
           if (curStatus === "Completed") {
@@ -2698,12 +2690,10 @@ io.on("connection", async (socket) => {
                 emitPayload
               );
 
-            if (agentSocketId) {
-              io.to(agentSocketId).emit("agentDeliveryStarted", {
-                data: "Delivery successfully started (BatchOrder)",
-                success: true,
-              });
-            }
+            sendSocketData(agentId, "agentDeliveryStarted", {
+              data: "Delivery successfully started (BatchOrder)",
+              success: true,
+            });
             console.log(TAG, "[BATCH] Socket emits done");
           } catch (emitErr) {
             console.error(TAG, "[BATCH] Error during socket emits:", emitErr);
@@ -2797,11 +2787,10 @@ io.on("connection", async (socket) => {
           );
           if (delivery.status === "Started") {
             console.log(TAG, "[TASK] Delivery already started for this drop");
-            if (agentSocketId)
-              io.to(agentSocketId).emit("agentDeliveryStarted", {
-                data: "Delivery already started",
-                success: true,
-              });
+            sendSocketData(agentId, "agentDeliveryStarted", {
+              data: "Delivery already started",
+              success: true,
+            });
             return;
           }
           if (delivery.status === "Completed") {
@@ -2992,12 +2981,10 @@ io.on("connection", async (socket) => {
                 "agentDeliveryStarted",
                 socketData
               );
-            if (agentSocketId) {
-              io.to(agentSocketId).emit("agentDeliveryStarted", {
-                data: "Delivery successfully started",
-                success: true,
-              });
-            }
+            sendSocketData(agentId, "agentDeliveryStarted", {
+              data: "Delivery successfully started",
+              success: true,
+            });
             console.log(TAG, "[TASK] emits done");
           } catch (emitErr) {
             console.error(TAG, "[TASK] Error during emits:", emitErr);
@@ -3051,8 +3038,6 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const agentSocketId = userSocketMap[agentId]?.socketId;
-
         if (batchOrder) {
           // ---------- BatchOrder flow ----------
           const batchOrderDoc = await BatchOrder.findById(taskId);
@@ -3072,16 +3057,15 @@ io.on("connection", async (socket) => {
           }
 
           if (drop.drops.status === "Completed") {
-            if (agentSocketId) {
-              io.to(agentSocketId).emit("reachedDeliveryLocation", {
-                data: "Delivery completed (BatchOrder)",
-                success: true,
-              });
-            }
+            // Use sendSocketData so it always does a fresh socketId lookup
+            sendSocketData(agentId, "reachedDeliveryLocation", {
+              data: "Delivery completed (BatchOrder)",
+              success: true,
+            });
             return;
           }
 
-          // Distance check for delivery location
+          // Distance check for delivery location (fixed tolerance: 0.5 km)
           const dropLocation = drop.drops.location;
           if (dropLocation && dropLocation.length === 2) {
             const distance = turf.distance(
@@ -3089,7 +3073,7 @@ io.on("connection", async (socket) => {
               turf.point([agentLocation[1], agentLocation[0]]),
               { units: "kilometers" }
             );
-            if (distance >= 40.5) {
+            if (distance >= 0.5) {
               return socket.emit("error", {
                 message: "Agent is far from delivery point",
                 success: false,
@@ -3149,12 +3133,10 @@ io.on("connection", async (socket) => {
           const emitPayload = { orderId: drop.orderId, orderDetailStepper: stepperDetail };
           sendSocketData(process.env.ADMIN_ID, eventName, emitPayload);
           if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, emitPayload);
-          if (agentSocketId) {
-            io.to(agentSocketId).emit("reachedDeliveryLocation", {
-              data: "Delivery completed (BatchOrder)",
-              success: true,
-            });
-          }
+          sendSocketData(agentId, "reachedDeliveryLocation", {
+            data: "Delivery completed (BatchOrder)",
+            success: true,
+          });
         } else {
           // ---------- Task flow ----------
           const [agentFound, taskFound] = await Promise.all([
@@ -3175,12 +3157,10 @@ io.on("connection", async (socket) => {
           }
 
           if (deliveryDetail.status === "Completed") {
-            if (agentSocketId) {
-              io.to(agentSocketId).emit("reachedDeliveryLocation", {
-                data: "Delivery completed",
-                success: true,
-              });
-            }
+            sendSocketData(agentId, "reachedDeliveryLocation", {
+              data: "Delivery completed",
+              success: true,
+            });
             return;
           }
 
@@ -3256,12 +3236,10 @@ io.on("connection", async (socket) => {
           const socketPayload = { orderId: taskFound.orderId, orderDetailStepper: stepperDetail };
           sendSocketData(process.env.ADMIN_ID, eventName, socketPayload);
           if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, socketPayload);
-          if (agentSocketId) {
-            io.to(agentSocketId).emit("reachedDeliveryLocation", {
-              data: "Delivery completed",
-              success: true,
-            });
-          }
+          sendSocketData(agentId, "reachedDeliveryLocation", {
+            data: "Delivery completed",
+            success: true,
+          });
         }
       } catch (err) {
         console.error("[reachedDeliveryLocation] Error:", err.message);

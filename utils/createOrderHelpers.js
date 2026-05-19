@@ -1682,11 +1682,9 @@ const prepareOrderDetails = async (cart, paymentMode) => {
 
   let formattedItems, purchasedItems;
 
-  if (
-    ["Take Away", "Home Delivery"].includes(
-      cart.cartDetail?.deliveryMode || cart.deliveryMode
-    )
-  ) {
+  const deliveryMode = cart.cartDetail?.deliveryMode || cart.deliveryMode;
+
+  if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
     const populatedCartWithVariantNames = await formattedCartItems(cart);
 
     formattedItems = populatedCartWithVariantNames.items.map((item) => ({
@@ -1699,11 +1697,30 @@ const prepareOrderDetails = async (cart, paymentMode) => {
       variantTypeName: item.variantTypeId?.variantTypeName || null,
     }));
 
-    console.log("Formatted Items:", formattedItems);
-
     purchasedItems = await filterProductIdAndQuantity(
       populatedCartWithVariantNames.items
     );
+  } else if (["Pick and Drop", "Custom Order"].includes(deliveryMode)) {
+    const cartItems = cart.purchasedItems || cart.pickups?.[0]?.items || [];
+
+    purchasedItems = cartItems.map((item) => ({
+      productId: null,
+      variantId: null,
+      productName: item.itemName || null,
+      price: null,
+      costPrice: null,
+      quantity: item.quantity || 1,
+    }));
+
+    formattedItems = cartItems.map((item) => ({
+      productId: null,
+      variantId: null,
+      itemName: item.itemName || "Unnamed",
+      itemImageURL: item.itemImageURL || null,
+      quantity: item.quantity || 1,
+      price: null,
+      variantTypeName: null,
+    }));
   }
 
   console.log("Purchased Items:", purchasedItems);
