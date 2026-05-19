@@ -37,7 +37,7 @@ const orderCreateTaskHelper = async (orderId) => {
 
 
 
-    let pickups = order.pickups.map((pick, index) => ({
+    let pickups = (order.pickups || []).map((pick, index) => ({
       status: "Pending",
       stepIndex: index,
       location: pick.location,
@@ -45,7 +45,7 @@ const orderCreateTaskHelper = async (orderId) => {
       items: pick.items || [],
     }));
 
-    let drops = order.drops.map((drop, index) => ({
+    let drops = (order.drops || []).map((drop, index) => ({
       status: "Pending",
       stepIndex: index,
       location: drop.location,
@@ -65,7 +65,7 @@ const orderCreateTaskHelper = async (orderId) => {
     });
 
     // ── Auto allocation ──────────────────────────────────────────────────────
-    const autoAllocation = await AutoAllocation.findOne();
+    const autoAllocation = await AutoAllocation.findOne().lean();
 
     if (!autoAllocation) {
       console.log(`[AutoAlloc] ⚠️  No AutoAllocation config found in DB — skipping`);
@@ -75,7 +75,7 @@ const orderCreateTaskHelper = async (orderId) => {
       console.log(`[AutoAlloc] ✅ Auto allocation is ACTIVE`);
       console.log(`[AutoAlloc]    Type      : ${autoAllocation.autoAllocationType}`);
       console.log(`[AutoAlloc]    Priority  : ${autoAllocation.priorityType}`);
-      console.log(`[AutoAlloc]    MaxRadius : ${autoAlloation.maxRadius} km`);
+      console.log(`[AutoAlloc]    MaxRadius : ${autoAllocation.maxRadius} km`);
       console.log(`[AutoAlloc]    ExpireTime: ${autoAllocation.expireTime} sec`);
       console.log(`[AutoAlloc]    OrderId   : ${orderId}`);
 
@@ -91,7 +91,7 @@ const orderCreateTaskHelper = async (orderId) => {
 
     return true;
   } catch (err) {
-    throw new Error(`Error in creating order task: ${err}`);
+    throw new Error(`Error in creating order task: ${err.message}`);
   }
 };
 

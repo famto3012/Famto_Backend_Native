@@ -1474,7 +1474,7 @@ const getPickUpDetailController = async (req, res, next) => {
           null,
         pickupLocation:
           taskFound[0]?.deliveryMode === "Home Delivery" ||
-          taskFound[0]?.deliveryMode === "Take Away"
+            taskFound[0]?.deliveryMode === "Take Away"
             ? merchantFound?.merchantDetail?.location || null
             : pickupDetail?.location || null,
         deliveryMode: taskFound[0]?.deliveryMode || null,
@@ -1538,7 +1538,7 @@ const getPickUpDetailController = async (req, res, next) => {
           null,
         pickupLocation:
           taskFound?.deliveryMode === "Home Delivery" ||
-          taskFound?.deliveryMode === "Take Away"
+            taskFound?.deliveryMode === "Take Away"
             ? merchantFound?.merchantDetail?.location || null
             : pickupDetail?.location || null,
         deliveryMode: taskFound?.deliveryMode || null,
@@ -2052,10 +2052,13 @@ const completeOrderController = async (req, res, next) => {
       // BatchOrder.findById(batchOrderId),
     ]);
 
+    let batchOrderFound = null;
+
     if (isBatchOrder) {
-      const [batchOrderFound] = await Promise.all([
-        BatchOrder.findById(batchOrderId),
-      ]);
+      batchOrderFound = await BatchOrder.findById(batchOrderId);
+    }
+    if (isBatchOrder && !batchOrderFound) {
+      return next(appError("Batch order not found", 404));
     }
 
     console.log("✅ Agent found:", agentFound?._id);
@@ -2081,7 +2084,7 @@ const completeOrderController = async (req, res, next) => {
       itemTotal >= loyaltyPointCriteria.minOrderAmountForEarning
     ) {
       console.log("📌 Updating loyalty points...");
-      updateLoyaltyPoints(
+      await updateLoyaltyPoints(
         customerFound,
         loyaltyPointCriteria,
         orderFound.billDetail.grandTotal
@@ -2132,7 +2135,11 @@ const completeOrderController = async (req, res, next) => {
 
     // Stepper detail
     const stepperDetail = { by: agentFound.fullName, date: new Date() };
-    orderFound.orderDetailStepper.completed = stepperDetail;
+    orderFound.orderDetailStepper =
+  orderFound.orderDetailStepper || {};
+
+orderFound.orderDetailStepper.completed =
+  stepperDetail;
 
     console.log("📌 Saving documents...");
     agentFound.taskCompleted += 1;
@@ -2174,7 +2181,9 @@ const completeOrderController = async (req, res, next) => {
           eventName,
           {
             fcm: {
-              orderId: orderFound._id || batchOrderFound?._id,
+              orderId: isBatchOrder
+                ? batchOrderFound?._id
+                : orderFound._id,
               customerId: customerFound._id,
               merchantId: orderFound?.merchantId || batchOrderFound?.merchantId,
               agentName: agentFound.fullName,

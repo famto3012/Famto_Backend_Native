@@ -2923,7 +2923,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       const startToPickDistance =
         orderFound?.detailAddedByAgent?.startToPickDistance;
 
-      const totalOrderDistance = startToPickDistance
+      totalOrderDistance = startToPickDistance
         ? startToPickDistance + orderFound?.distance
         : orderFound?.distance;
 
@@ -3006,12 +3006,19 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     const startOfDay = currentDay.startOf("day").toDate();
     const endOfDay = currentDay.endOf("day").toDate();
 
+    task.taskStatus = "Completed";
+
+    await task.save();
+
     const agentTasks = await Task.find({
       taskStatus: "Assigned",
       agentId: agentFound._id,
       orderId: { $ne: orderId },
     })
       .lean();
+
+
+    console.log("Agent tasks", agentTasks);
     agentFound.status = agentTasks.length > 0 ? "Busy" : "Free";
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalSurge += calculatedSurge;
@@ -3028,7 +3035,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     orderFound.detailAddedByAgent.agentEarning = calculatedSalary;
     orderFound.detailAddedByAgent.distanceCoveredByAgent = totalOrderDistance;
 
-    task.taskStatus = "Completed";
+    // task.taskStatus = "Completed";
     task.pickupDropDetails.forEach((detail) => {
       // Update all pickups
       detail.pickups.forEach((pickup) => {

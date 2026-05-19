@@ -147,13 +147,15 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
 
   try {
 
-    console.log("Sending push using Firebase Project 1...");
+    // console.log("Sending push using Firebase Project 1...");
+
+    throw new Error("Project1 disabled");
 
     // const response = await admin1.messaging(app1).send(payload);
 
     // console.log("Push Success (Project1):", response);
 
-    return false;
+    // return false;
 
   } catch (error1) {
 
@@ -1607,7 +1609,7 @@ io.on("connection", async (socket) => {
           // ✅ Update pickup status
           pickupDetail.status = "Started";
           pickupDetail.startTime = new Date();
-          pickupDetail.location = location;
+          // pickupDetail.location = location;
 
           // Mark modified since nested
           taskFound.markModified("pickupDropDetails");
@@ -1674,7 +1676,7 @@ io.on("connection", async (socket) => {
           if (batchOrderById.pickupAddress) {
             batchOrderById.pickupAddress.status = "Started";
             batchOrderById.pickupAddress.startTime = new Date();
-            batchOrderById.pickupAddress.location = location;
+            // batchOrderById.pickupAddress.location = location;
           }
 
           // Update each drop’s pickup status
