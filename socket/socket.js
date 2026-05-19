@@ -149,11 +149,11 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
 
     console.log("Sending push using Firebase Project 1...");
 
-    const response = await admin1.messaging(app1).send(payload);
+    // const response = await admin1.messaging(app1).send(payload);
 
-    console.log("Push Success (Project1):", response);
+    // console.log("Push Success (Project1):", response);
 
-    return true;
+    return false;
 
   } catch (error1) {
 

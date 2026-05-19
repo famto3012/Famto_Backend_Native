@@ -372,15 +372,21 @@ const calculateAgentEarnings = async (agent, order) => {
   if (order.deliveryMode === "Custom Order") {
     const taskFound = await Task.findOne({ orderId: order._id });
     if (taskFound) {
-      const durationInHours =
-        (new Date(taskFound?.deliveryDetail?.startTime) -
-          new Date(taskFound.pickupDetail.startTime)) /
-        (1000 * 60 * 60);
+      const pickupStartTime =
+        taskFound.pickupDropDetails?.[0]?.pickups?.[0]?.startTime;
+      const dropStartTime =
+        taskFound.pickupDropDetails?.[0]?.drops?.[0]?.startTime;
 
-      const normalizedHours =
-        durationInHours < 1 ? 1 : Math.floor(durationInHours);
+      if (pickupStartTime && dropStartTime) {
+        const durationInHours =
+          (new Date(dropStartTime) - new Date(pickupStartTime)) /
+          (1000 * 60 * 60);
 
-      totalPurchaseFare = normalizedHours * agentPricing.purchaseFarePerHour;
+        const normalizedHours =
+          durationInHours < 1 ? 1 : Math.floor(durationInHours);
+
+        totalPurchaseFare = normalizedHours * agentPricing.purchaseFarePerHour;
+      }
     }
   }
 
