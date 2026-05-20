@@ -298,6 +298,9 @@ const { fetchRazorpayOrderPayments } = require("./utils/razorpayPayment.js");
               {
                 paymentMode: "Online-payment",
                 paymentStatus: "PAYMENT_COMPLETED",
+                createdAt: {
+      $lte: new Date(Date.now() - 60 * 1000),
+    },
               },
             ],
           },
