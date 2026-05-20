@@ -128,13 +128,13 @@ const temporaryOrderSchema = new mongoose.Schema(
     },
 
     customerId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Customer",
       required: true,
     },
 
     merchantId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Merchant",
       required: true,
     },
