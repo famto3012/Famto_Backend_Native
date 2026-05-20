@@ -1931,7 +1931,7 @@ const orderPaymentController = async (req, res, next) => {
           deliveryOption: cart.cartDetail.deliveryOption,
           status: "Pending",
           paymentMode: "Famto-cash",
-          paymentStatus: "PAYMENT_COMPLETED",
+          paymentStatus: "Pending",
           startDate,
           endDate,
           time: cart.cartDetail.time,
