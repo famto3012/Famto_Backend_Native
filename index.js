@@ -321,9 +321,9 @@ const { fetchRazorpayOrderPayments } = require("./utils/razorpayPayment.js");
         try {
           await processOrderService(tempOrder);
 
-          await TemporaryOrder.deleteOne({
-            _id: tempOrder._id,
-          });
+          // await TemporaryOrder.deleteOne({
+          //   _id: tempOrder._id,
+          // });
 
           console.log(
             `✅ Order created successfully for ${tempOrder._id}`
