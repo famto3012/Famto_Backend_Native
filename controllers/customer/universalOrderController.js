@@ -2895,7 +2895,17 @@ const verifyOnlinePaymentController = async (req, res, next) => {
   try {
     const { paymentDetails } = req.body;
 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    } = paymentDetails;
+
     const isValid = await verifyPayment(paymentDetails);
+
+    if (!isValid) {
+      return next(appError("Payment verification failed", 400));
+    }
 
     await TemporaryOrder.findOneAndUpdate(
       {
@@ -2907,16 +2917,13 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       }
     );
 
-    if (!isValid) {
-      return next(appError("Payment verification failed", 400));
-    }
-
-    // ✅ Only response
     return res.status(200).json({
       success: true,
       message: "Payment verified successfully",
     });
   } catch (err) {
+    console.log("VERIFY PAYMENT ERROR:", err);
+
     next(appError(err.message));
   }
 };
