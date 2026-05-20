@@ -213,29 +213,15 @@ const calculateDeliveryCharges = (
   }
 };
 const calculateReturnCharges = (
-  distance,
-  baseDistance,
-  fareAfterBaseDistance
+  distance = 0,
+  baseDistance = 0,
+  fareAfterBaseDistance = 0
 ) => {
-  if (fareAfterBaseDistance) {
-    if (distance <= baseDistance) {
-      return Number(parseFloat(fareAfterBaseDistance).toFixed(2) || 0);
-    } else {
-      return Number(
-        parseFloat(
-          (distance - baseDistance) * fareAfterBaseDistance
-        ).toFixed(2) || 0
-      );
-    }
-  } else {
-    if (distance <= baseDistance) {
-      return Number(parseFloat(fareAfterBaseDistance).toFixed(2) || 0);
-    } else {
-      return Number(
-        parseFloat((distance - baseDistance)).toFixed(2) || 0
-      );
-    }
-  }
+  const extraDistance = Math.max(0, distance - baseDistance);
+
+  const charge = extraDistance * Number(fareAfterBaseDistance || 0);
+
+  return Number(charge.toFixed(2));
 };
 const getTaxAmount = async (
   businessCategoryId,
