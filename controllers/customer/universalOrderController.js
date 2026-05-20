@@ -2189,6 +2189,7 @@ const orderPaymentController = async (req, res, next) => {
 
     return next(appError("Invalid payment mode", 400));
   } catch (err) {
+    console.log("Order Creation Error",err.message);
     next(appError(err.message));
   }
 };
