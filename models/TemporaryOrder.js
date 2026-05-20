@@ -104,59 +104,117 @@ const billSchema = mongoose.Schema(
   { _id: false }
 );
 
-const tempOrderSchema = new mongoose.Schema(
+
+const temporaryOrderSchema = new mongoose.Schema(
   {
-    orderId: { type: mongoose.Schema.Types.ObjectId, required: true },
-    customerId: { type: String, ref: "Customer", required: true },
-    merchantId: { type: String, ref: "Merchant", default: null },
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
 
-    deliveryMode: {
+    razorpayOrderId: {
       type: String,
-      enum: ["Take Away", "Home Delivery", "Pick and Drop", "Custom Order"],
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
+    paymentId: {
+      type: String,
+      sparse: true,
+      index: true,
+      unique: true,
+    },
+
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
       required: true,
     },
-    deliveryOption: {
-      type: String,
-      enum: ["On-demand", "Scheduled"],
+
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
       required: true,
     },
 
-    pickups: [pickupDetailSchema],
-    drops: [dropDetailSchema],
-
-    billDetail: billSchema,
-    distance: { type: Number, default: 0 },
-
-    deliveryTime: { type: Date, required: true },
-    startDate: { type: Date, default: null },
-    endDate: { type: Date, default: null },
-    time: { type: Date, default: null },
-    numOfDays: { type: Number, default: null },
-
-    totalAmount: { type: Number, default: 0 },
-    status: { type: String, default: "Pending" },
-    paymentMode: {
+    idempotencyKey: {
       type: String,
-      enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
-      default: null,
+      unique: true,
     },
+    pickups: Array,
+    drops: Array,
+    purchasedItems: Array,
+
+    billDetail: Object,
+
+    distance: Number,
+    deliveryTime: Date,
+    startDate: Date,
+    endDate: Date,
+    time: Date,
+    numOfDays: Number,
+
+    totalAmount: Number,
+
+    deliveryMode: String,
+    deliveryOption: String,
+
+    paymentMode: String,
+
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Completed", "Failed"],
-      default: "Pending",
+      enum: [
+        "PENDING_PAYMENT",
+        "PAYMENT_COMPLETED",
+        "PAYMENT_FAILED",
+      ],
+      default: "PENDING_PAYMENT",
+      index: true,
     },
-    paymentId: { type: String, default: null },
-    purchasedItems: [purchasedItemsSchema],
-    razorpayOrderId: { type: String, default: null },
-    prescription: { type: String, default: null }, // URL – required only for medicine orders
-    expiresAt: { type: Date, required: false }, // ✅ IMPORTANT
-    isProcessed: { type: Boolean, default: false },
+
+    processingStatus: {
+      type: String,
+      enum: [
+        "PENDING",
+        "PROCESSING",
+        "ORDER_CREATED",
+        "FAILED",
+      ],
+      default: "PENDING",
+      index: true,
+    },
+
+    retryCount: {
+      type: Number,
+      default: 0,
+    },
+
+    maxRetries: {
+      type: Number,
+      default: 5,
+    },
+
+    lastError: {
+      type: String,
+      default: null,
+    },
+
+    expiresAt: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+
+    prescription: String,
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Auto-delete after 60 seconds
-tempOrderSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 });
-
-const TemporaryOrder = mongoose.model("TemporaryOrder", tempOrderSchema);
-module.exports = TemporaryOrder;
+module.exports = mongoose.model(
+  "TemporaryOrder",
+  temporaryOrderSchema
+);

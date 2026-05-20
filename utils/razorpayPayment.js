@@ -1,5 +1,7 @@
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
+const TemporaryOrder = require("../models/TemporaryOrder");
+const WebhookEvent = require("../models/WebhookEvent");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -97,6 +99,42 @@ const createRazorpayQrCode = async (amount) => {
   }
 };
 
+const fetchRazorpayOrderPayments = async (
+  razorpayOrderId
+) => {
+  try {
+    const payments =
+      await razorpay.orders.fetchPayments(
+        razorpayOrderId
+      );
+
+    const captured = payments.items?.find(
+      (p) => p.status === "captured"
+    );
+
+    if (captured) {
+      return {
+        captured: true,
+        paymentId: captured.id,
+      };
+    }
+
+    return {
+      captured: false,
+    };
+  } catch (err) {
+    console.error(
+      "Error fetching Razorpay payments:",
+      err.message
+    );
+
+    return {
+      captured: false,
+    };
+  }
+};
+
+
 const createSettlement = async () => {
   try {
     const settlement = await razorpay.settlements.createOndemandSettlement({
@@ -113,10 +151,99 @@ const createSettlement = async () => {
   }
 };
 
+const razorpayWebhookController = async (req, res) => {
+  try {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    const signature = req.headers["x-razorpay-signature"];
+
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(req.body.toString())
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      return res.status(400).send("Invalid signature");
+    }
+
+    const payload = JSON.parse(req.body);
+
+    const eventId = payload?.payload?.payment?.entity?.id;
+
+    const existingEvent = await WebhookEvent.findOne({
+      eventId,
+    });
+
+    if (existingEvent) {
+      return res.status(200).json({
+        success: true,
+        message: "Duplicate webhook ignored",
+      });
+    }
+
+    await WebhookEvent.create({
+      eventId,
+      eventType: payload.event,
+      payload,
+      processed: true,
+    });
+
+    if (payload.event === "payment.captured") {
+      const payment = payload.payload.payment.entity;
+
+      await TemporaryOrder.findOneAndUpdate(
+        {
+          razorpayOrderId: payment.order_id,
+          paymentStatus: "PENDING_PAYMENT",
+        },
+        {
+          paymentStatus: "PAYMENT_COMPLETED",
+          paymentId: payment.id,
+        }
+      );
+
+      console.log(
+        `✅ Payment completed for ${payment.order_id}`
+      );
+    }
+
+    if (payload.event === "payment.failed") {
+      const payment = payload.payload.payment.entity;
+
+      await TemporaryOrder.findOneAndUpdate(
+        {
+          razorpayOrderId: payment.order_id,
+        },
+        {
+          paymentStatus: "PAYMENT_FAILED",
+        }
+      );
+
+      console.log(
+        `❌ Payment failed for ${payment.order_id}`
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+    });
+  } catch (err) {
+    console.error("Webhook Error:", err.message);
+
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
+
 module.exports = {
   createRazorpayOrderId,
   verifyPayment,
   razorpayRefund,
   createRazorpayQrCode,
   createSettlement,
+  fetchRazorpayOrderPayments,
+  razorpayWebhookController
 };

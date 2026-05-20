@@ -659,7 +659,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       baseCriteria["merchantDetail.averageRating"] = { $gte: 4.0 };
     }
 
- let merchants = await Merchant.find(baseCriteria).lean();
+    let merchants = await Merchant.find(baseCriteria).lean();
 
     let sortedCount = 0;
     let merchantsWithProducts = [];
@@ -1579,7 +1579,7 @@ const confirmOrderDetailController = async (req, res, next) => {
     } = req.body;
 
 
-    console.log("PRESCRIPTION",req.body);
+    console.log("PRESCRIPTION", req.body);
 
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
@@ -1695,7 +1695,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       {
         customerId: customer._id,
         merchantId: merchant._id,
-        businessCategoryId : businessCategoryId,
+        businessCategoryId: businessCategoryId,
         items: cart.items,
         cartDetail: {
           ...req.body,
@@ -1755,6 +1755,7 @@ const getCartBillController = async (req, res, next) => {
 };
 
 // Order Product
+
 const orderPaymentController = async (req, res, next) => {
   try {
     const { paymentMode } = req.body;
@@ -1930,7 +1931,7 @@ const orderPaymentController = async (req, res, next) => {
           deliveryOption: cart.cartDetail.deliveryOption,
           status: "Pending",
           paymentMode: "Famto-cash",
-          paymentStatus: "Completed",
+          paymentStatus: "PAYMENT_COMPLETED",
           startDate,
           endDate,
           time: cart.cartDetail.time,
@@ -2036,6 +2037,7 @@ const orderPaymentController = async (req, res, next) => {
         const orderId = new mongoose.Types.ObjectId();
 
         // Store order details temporarily in the database
+        // Cron worker will create the actual order after expiresAt (cancellation window)
         const tempOrder = await TemporaryOrder.create({
           orderId,
           customerId,
@@ -2053,12 +2055,11 @@ const orderPaymentController = async (req, res, next) => {
           numOfDays: cart.cartDetail.numOfDays,
           totalAmount: orderAmount,
           paymentMode: "Famto-cash",
-          paymentStatus: "Completed",
+          paymentStatus: "PAYMENT_COMPLETED",
           purchasedItems,
           prescription,
+          expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec cancellation window
         });
-
-        // Clear the cart
 
         if (!tempOrder) {
           return next(appError("Error in creating temporary order"));
@@ -2066,151 +2067,23 @@ const orderPaymentController = async (req, res, next) => {
 
         walletTransaction.orderId = orderId;
 
+        // Deduct wallet + clear cart immediately (non-reversible side-effects)
         await Promise.all([
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
-          CustomerTransaction.create(customerTransaction),
           CustomerWalletTransaction.create(walletTransaction),
-          PromoCode.findOneAndUpdate(
-            { promoCode: tempOrder.billDetail.promoCodeUsed },
-            { $inc: { noOfUserUsed: 1 } }
-          ),
         ]);
 
         // Return countdown timer to client
-        res.status(200).json({
+        return res.status(200).json({
           success: true,
           orderId,
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
           deliveryMode: tempOrder.deliveryMode,
         });
-
-        // After 60 seconds, create the order if not canceled
-        setTimeout(async () => {
-          const storedOrderData = await TemporaryOrder.findOne({ orderId });
-
-          if (storedOrderData) {
-            let newOrderCreated = await Order.create({
-              customerId: storedOrderData.customerId,
-              merchantId: storedOrderData.merchantId,
-              pickups: storedOrderData.pickups,
-              drops: storedOrderData.drops,
-              billDetail: storedOrderData.billDetail,
-              distance: storedOrderData.distance,
-              deliveryTime: storedOrderData.deliveryTime,
-              startDate: storedOrderData.startDate,
-              endDate: storedOrderData.endDate,
-              time: storedOrderData.time,
-              numOfDays: storedOrderData.numOfDays,
-              deliveryMode: storedOrderData.deliveryMode,
-              deliveryOption: storedOrderData.deliveryOption,
-              totalAmount: storedOrderData.totalAmount,
-              status: storedOrderData.status,
-              paymentMode: storedOrderData.paymentMode,
-              paymentStatus: storedOrderData.paymentStatus,
-              prescription: storedOrderData.prescription,
-              "orderDetailStepper.created": {
-                by: "Customer",
-                userId: storedOrderData.customerId,
-                date: new Date(),
-              },
-              purchasedItems: storedOrderData.purchasedItems,
-            });
-
-            if (!newOrderCreated)
-              return next(appError("Error in creating order"));
-
-            const newOrder = await Order.findById(newOrderCreated._id).populate(
-              "merchantId"
-            );
-
-            // Check if population was successful
-            if (!newOrder.merchantId) {
-              return next(
-                appError("Error in populating order's merchant information")
-              );
-            }
-
-            const oldOrderId = orderId;
-
-            await Promise.all([
-              TemporaryOrder.deleteOne({ orderId }),
-              customer.save(),
-              CustomerWalletTransaction.findOneAndUpdate(
-                { orderId: oldOrderId },
-                { $set: { orderId: newOrderCreated._id } },
-                { new: true }
-              ),
-              ActivityLog.create({
-                userId: req.userAuth,
-                userType: req.userRole,
-                description: `Order (#${newOrderCreated._id
-                  }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-                  } )`,
-              }),
-            ]);
-
-            const eventName = "newOrderCreated";
-
-            // Fetch notification settings to determine roles
-            const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-            const notificationData = {
-              fcm: {
-                orderId: newOrder._id,
-                customerId: newOrder.customerId,
-              },
-            };
-
-            const socketData = {
-              ...data,
-
-              orderId: newOrder._id,
-              billDetail: newOrder.billDetail,
-              orderDetailStepper: newOrder.orderDetailStepper.created,
-
-              //? Data for displaying detail in all orders table
-              _id: newOrder._id,
-              orderStatus: newOrder.status,
-              merchantName:
-                newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-              customerName:
-                newOrder?.drops[0]?.deliveryAddress
-                  ?.fullName ||
-                newOrder?.customerId?.fullName ||
-                "-",
-              deliveryMode: newOrder?.deliveryMode,
-              orderDate: formatDate(newOrder.createdAt),
-              orderTime: formatTime(newOrder.createdAt),
-              deliveryDate: newOrder?.deliveryTime
-                ? formatDate(newOrder.deliveryTime)
-                : "-",
-              deliveryTime: newOrder?.deliveryTime
-                ? formatTime(newOrder.deliveryTime)
-                : "-",
-              paymentMethod: newOrder.paymentMode,
-              deliveryOption: newOrder.deliveryOption,
-              amount: newOrder.billDetail.grandTotal,
-            };
-
-            const userIds = {
-              admin: process.env.ADMIN_ID,
-              merchant: newOrder?.merchantId._id,
-              agent: newOrder?.agentId,
-              customer: newOrder?.customerId,
-            };
-
-            // Send notifications to each role dynamically
-            await sendSocketDataAndNotification({
-              rolesToNotify,
-              userIds,
-              eventName,
-              notificationData,
-              socketData,
-            });
-          }
-        }, 60000);
+        // NOTE: Cron worker (index.js) creates the final Order after expiresAt
+        // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
       }
     } else if (paymentMode === "Cash-on-delivery") {
       if (cart.cartDetail.deliveryOption === "Scheduled") {
@@ -2224,6 +2097,7 @@ const orderPaymentController = async (req, res, next) => {
       const orderId = new mongoose.Types.ObjectId();
 
       // Store order details temporarily in the database
+      // Cron worker will create the actual order after expiresAt (cancellation window)
       const tempOrder = await TemporaryOrder.create({
         orderId,
         customerId,
@@ -2241,213 +2115,780 @@ const orderPaymentController = async (req, res, next) => {
         numOfDays: cart.cartDetail.numOfDays,
         totalAmount: orderAmount,
         paymentMode: "Cash-on-delivery",
-        paymentStatus: "Pending",
+        paymentStatus: "PENDING_PAYMENT",
         purchasedItems,
         prescription,
+        expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec cancellation window
       });
 
       if (!tempOrder) {
         return next(appError("Error in creating temporary order"));
       }
 
+      // Clear cart immediately
       await Promise.all([
         CustomerCart.deleteOne({ customerId }),
         customer.save(),
-        CustomerTransaction.create(customerTransaction),
-        PromoCode.findOneAndUpdate(
-          { promoCode: tempOrder.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: 1 } }
-        ),
       ]);
 
       // Return countdown timer to client
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         orderId,
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
         deliveryMode: tempOrder.deliveryMode,
       });
-
-      // After 60 seconds, create the order if not canceled
-      setTimeout(async () => {
-        console.log('⏱️ setTimeout triggered for orderId:', orderId);
-
-        const storedOrderData = await TemporaryOrder.findOne({ orderId });
-
-        console.log('Stored temp order:', storedOrderData?._id);
-
-        if (!storedOrderData) {
-          console.log('⚠️ Temporary order not found, probably cancelled');
-          return;
-        }
-
-        if (storedOrderData) {
-          let newOrderCreated = await Order.create({
-            customerId: storedOrderData.customerId,
-            merchantId: storedOrderData.merchantId,
-            pickups: storedOrderData.pickups,
-            drops: storedOrderData.drops,
-            billDetail: storedOrderData.billDetail,
-            distance: storedOrderData.distance,
-            deliveryTime: storedOrderData.deliveryTime,
-            startDate: storedOrderData.startDate,
-            endDate: storedOrderData.endDate,
-            time: storedOrderData.time,
-            numOfDays: storedOrderData.numOfDays,
-            deliveryMode: storedOrderData.deliveryMode,
-            totalAmount: storedOrderData.totalAmount,
-            deliveryOption: storedOrderData.deliveryOption,
-            status: storedOrderData.status,
-            paymentMode: storedOrderData.paymentMode,
-            prescription: storedOrderData.prescription,
-            paymentStatus: storedOrderData.paymentStatus,
-            "orderDetailStepper.created": {
-              by: "Customer",
-              userId: storedOrderData.customerId,
-              date: new Date(),
-            },
-            purchasedItems: storedOrderData.purchasedItems,
-          });
-
-          if (!newOrderCreated) {
-            return next(appError("Error in creating order"));
-          }
-
-          const newOrder = await Order.findById(newOrderCreated._id).populate(
-            "merchantId"
-          );
-
-          // Check if population was successful
-          if (!newOrder.merchantId) {
-            return next(
-              appError("Error in populating order's merchant information")
-            );
-          }
-
-          // Remove the temporary order data from the database
-          await Promise.all([
-            TemporaryOrder.deleteOne({ orderId }),
-            ActivityLog.create({
-              userId: req.userAuth,
-              userType: req.userRole,
-              description: `Order (#${newOrderCreated._id
-                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-                } )`,
-            }),
-          ]);
-
-          const eventName = "newOrderCreated";
-
-          const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-          const notificationData = {
-            fcm: {
-              orderId: newOrder._id,
-              customerId: newOrder.customerId,
-            },
-          };
-
-          const socketData = {
-            ...data,
-
-            orderId: newOrder._id,
-            billDetail: newOrder.billDetail,
-            orderDetailStepper: newOrder.orderDetailStepper.created,
-
-            //? Data for displaying detail in all orders table
-            _id: newOrder._id,
-            orderStatus: newOrder.status,
-            merchantName:
-              newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-            customerName:
-              newOrder?.drops[0]?.address
-                ?.fullName ||
-              newOrder?.customerId?.fullName ||
-              "-",
-            deliveryMode: newOrder?.deliveryMode,
-            orderDate: formatDate(newOrder.createdAt),
-            orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.deliveryTime
-              ? formatDate(newOrder.deliveryTime)
-              : "-",
-            deliveryTime: newOrder?.deliveryTime
-              ? formatTime(newOrder.deliveryTime)
-              : "-",
-            paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.deliveryOption,
-            amount: newOrder.billDetail.grandTotal,
-          };
-
-          const userIds = {
-            admin: process.env.ADMIN_ID,
-            merchant: newOrder?.merchantId?._id,
-            driver: newOrder?.agentId,
-            customer: newOrder?.customerId,
-          };
-
-          // Send notifications to each role dynamically
-          await sendSocketDataAndNotification({
-            rolesToNotify,
-            userIds,
-            eventName,
-            notificationData,
-            socketData,
-          });
-        }
-      }, 60000);
+      // NOTE: Cron worker (index.js) creates the final Order after expiresAt
+      // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
     } else if (paymentMode === "Online-payment") {
-  const { success, orderId: razorpayOrderId, error } =
-    await createRazorpayOrderId(orderAmount);
+      const { success, orderId: razorpayOrderId, error } =
+        await createRazorpayOrderId(orderAmount);
 
-  if (!success) {
-    return next(appError(error, 500));
-  }
+      if (!success) {
+        return next(appError(error, 500));
+      }
 
-  const orderId = new mongoose.Types.ObjectId();
+      const orderId = new mongoose.Types.ObjectId();
 
-  const tempOrder = await TemporaryOrder.create({
-    orderId,
-    razorpayOrderId,
-    customerId,
-    merchantId: cart.merchantId,
-    deliveryMode: cart.cartDetail.deliveryMode,
-    deliveryOption: cart.cartDetail.deliveryOption,
-    pickups,
-    drops,
-    billDetail: orderBill,
-    distance: cart.cartDetail.distance,
-    deliveryTime,
-    startDate: cart.cartDetail.startDate ? new Date(cart.cartDetail.startDate) : null,
-    endDate: cart.cartDetail.endDate ? new Date(cart.cartDetail.endDate) : null,
-    time: cart.cartDetail.time ? new Date(cart.cartDetail.time) : null,
-    numOfDays: cart.cartDetail.numOfDays || null,
-    totalAmount: orderAmount,
-    paymentMode: "Online-payment",
-    paymentStatus: "Pending",
-    purchasedItems,
-    prescription,
+      const tempOrder = await TemporaryOrder.create({
+        orderId,
+        razorpayOrderId,
+        customerId,
+        merchantId: cart.merchantId,
+        deliveryMode: cart.cartDetail.deliveryMode,
+        deliveryOption: cart.cartDetail.deliveryOption,
+        pickups,
+        drops,
+        billDetail: orderBill,
+        distance: cart.cartDetail.distance,
+        deliveryTime,
+        startDate: cart.cartDetail.startDate ? new Date(cart.cartDetail.startDate) : null,
+        endDate: cart.cartDetail.endDate ? new Date(cart.cartDetail.endDate) : null,
+        time: cart.cartDetail.time ? new Date(cart.cartDetail.time) : null,
+        numOfDays: cart.cartDetail.numOfDays || null,
+        totalAmount: orderAmount,
+        paymentMode: "Online-payment",
+        paymentStatus: "PENDING_PAYMENT",
+        purchasedItems,
+        prescription,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours for webhook + cron fallback
+      });
 
-    // ✅ CRITICAL
-    expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec
-  });
+      if (!tempOrder) {
+        return next(appError("Error creating temp order"));
+      }
 
-  if (!tempOrder) {
-    return next(appError("Error creating temp order"));
-  }
-
-  return res.status(200).json({
-    success: true,
-    razorpayOrderId,
-    amount: orderAmount,
-  });
-}
+      return res.status(200).json({
+        success: true,
+        orderId,
+        razorpayOrderId,
+        amount: orderAmount,
+      });
+    }
 
     return next(appError("Invalid payment mode", 400));
   } catch (err) {
     next(appError(err.message));
   }
 };
+
+// const orderPaymentController = async (req, res, next) => {
+//   try {
+//     const { paymentMode } = req.body;
+//     const customerId = req.userAuth;
+
+//     const [customer, cart] = await Promise.all([
+//       Customer.findById(customerId),
+//       CustomerCart.findOne({ customerId })
+//         .populate({
+//           path: "items.productId",
+//           select: "productName productImageURL description variants",
+//         })
+//         .exec(),
+//     ]);
+
+//     if (!customer) return next(appError("Customer not found", 404));
+//     if (!cart) return next(appError("Cart not found", 404));
+
+//     const orderAmount =
+//       cart.billDetail.discountedGrandTotal ||
+//       cart.billDetail.originalGrandTotal;
+
+//     const merchant = await Merchant.findById(cart.merchantId);
+
+//     if (!merchant) return next(appError("Merchant not found", 404));
+
+//     const deliveryTimeMinutes = parseInt(
+//       merchant.merchantDetail.deliveryTime,
+//       10
+//     );
+
+//     const deliveryTime = new Date();
+//     deliveryTime.setMinutes(deliveryTime.getMinutes() + deliveryTimeMinutes);
+
+//     let startDate, endDate;
+//     if (cart.cartDetail.deliveryOption === "Scheduled") {
+//       startDate = new Date(cart.cartDetail.startDate);
+//       startDate.setHours(18, 30, 0, 0);
+
+//       endDate = new Date(cart.cartDetail.endDate);
+//       endDate.setHours(18, 29, 59, 999);
+//     }
+
+//     const populatedCartWithVariantNames = cart.toObject();
+//     populatedCartWithVariantNames.items =
+//       populatedCartWithVariantNames.items.map((item) => {
+//         const product = item.productId;
+//         let variantTypeName = null;
+//         let variantTypeData = null;
+//         if (item.variantTypeId && product.variants) {
+//           const variantType = product.variants
+//             .flatMap((variant) => variant.variantTypes)
+//             .find((type) => type._id.equals(item.variantTypeId));
+//           if (variantType) {
+//             variantTypeName = variantType.typeName;
+//             variantTypeData = {
+//               _id: variantType._id,
+//               variantTypeName: variantTypeName,
+//             };
+//           }
+//         }
+//         return {
+//           ...item,
+//           productId: {
+//             _id: product._id,
+//             productName: product.productName,
+//             description: product.description,
+//             productImageURL: product.productImageURL,
+//           },
+//           variantTypeId: variantTypeData,
+//         };
+//       });
+
+//     const purchasedItems = await filterProductIdAndQuantity(
+//       populatedCartWithVariantNames.items
+//     );
+
+//     let formattedItems = populatedCartWithVariantNames.items.map((items) => {
+//       return {
+//         itemName: items.productId.productName,
+//         description: items.productId.description,
+//         itemImageURL: items.productId.productImageURL,
+//         quantity: items.quantity,
+//         price: items.price,
+//         variantTypeName: items?.variantTypeId?.variantTypeName,
+//       };
+//     });
+
+//     let orderBill = {
+//       deliveryChargePerDay: cart.billDetail.deliveryChargePerDay,
+//       deliveryCharge:
+//         cart.billDetail.discountedDeliveryCharge ||
+//         cart.billDetail.originalDeliveryCharge,
+//       taxAmount: cart.billDetail.taxAmount,
+//       discountedAmount: cart.billDetail.discountedAmount,
+//       promoCodeUsed: cart.billDetail.promoCodeUsed,
+//       grandTotal:
+//         cart.billDetail.discountedGrandTotal ||
+//         cart.billDetail.originalGrandTotal,
+//       itemTotal: cart.billDetail.itemTotal,
+//       addedTip: cart.billDetail.addedTip,
+//       subTotal: cart.billDetail.subTotal,
+//       surgePrice: cart.billDetail.surgePrice,
+//     };
+
+//     let walletTransaction = {
+//       customerId,
+//       closingBalance: customer?.customerDetails?.walletBalance,
+//       transactionAmount: orderAmount,
+//       date: new Date(),
+//       type: "Debit",
+//     };
+
+//     let customerTransaction = {
+//       customerId,
+//       madeOn: new Date(),
+//       transactionType: "Order Created",
+//       transactionAmount: orderAmount,
+//       type: "Debit",
+//     };
+
+//     const pickups = [
+//       {
+//         location: cart.cartDetail.pickupLocation,
+//         address: cart.cartDetail.pickupAddress,
+//         instructionInPickup: cart.cartDetail.instructionToMerchant,
+//         voiceInstructionInPickup: cart.cartDetail.voiceInstructionToMerchant,
+//         items: [],
+//       },
+//     ];
+//     const drops = [
+//       {
+//         location: cart.cartDetail.deliveryLocation,
+//         address: cart.cartDetail.deliveryAddress,
+//         instructionInDrop: cart.cartDetail.instructionToDeliveryAgent,
+//         voiceInstructionInDrop:
+//           cart.cartDetail.voiceInstructionToDeliveryAgent,
+//         items: cart.items?.map((item) => ({
+//           itemName: item.productId.productName,
+//           quantity: item.quantity,
+//           price: item.price,
+//           variantTypeId: item.variantTypeId,
+//         })),
+//       },
+//     ];
+
+//     // Prescription URL saved to cart in the previous add-details step
+//     const prescription = cart.prescription || null;
+
+//     let newOrder;
+//     if (paymentMode === "Famto-cash") {
+//       if (customer.customerDetails.walletBalance < orderAmount) {
+//         return next(appError("Insufficient funds in wallet", 400));
+//       }
+
+//       // Deduct the amount from wallet
+//       customer.customerDetails.walletBalance = Number(
+//         (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
+//       );
+
+//       if (cart.cartDetail.deliveryOption === "Scheduled") {
+//         // Create a scheduled order
+
+//         const newOrderCreated = await ScheduledOrder.create({
+//           customerId,
+//           merchantId: cart.merchantId,
+//           pickups,
+//           drops,
+//           billDetail: orderBill,
+//           distance: cart.cartDetail.distance || 0,
+//           totalAmount: orderAmount,
+//           deliveryMode: cart.cartDetail.deliveryMode,
+//           deliveryOption: cart.cartDetail.deliveryOption,
+//           status: "Pending",
+//           paymentMode: "Famto-cash",
+//           paymentStatus: "Completed",
+//           startDate,
+//           endDate,
+//           time: cart.cartDetail.time,
+//           numOfDays: cart.cartDetail.numOfDays || null,
+//           purchasedItems,
+//         });
+
+//         console.log("Scheduled Order Created", newOrderCreated);
+
+//         walletTransaction.orderId = newOrderCreated._id;
+
+//         await Promise.all([
+//           PromoCode.findOneAndUpdate(
+//             { promoCode: newOrderCreated.billDetail.promoCodeUsed },
+//             { $inc: { noOfUserUsed: 1 } }
+//           ),
+//           customer.save(),
+//           CustomerCart.deleteOne({ customerId }),
+//           CustomerTransaction.create(customerTransaction),
+//           CustomerWalletTransaction.create(walletTransaction),
+//           ActivityLog.create({
+//             userId: req.userAuth,
+//             userType: req.userRole,
+//             description: `Scheduled order (#${newOrderCreated._id
+//               }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+//               } )`,
+//           }),
+//         ]);
+
+//         newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
+//           "merchantId"
+//         );
+
+//         const eventName = "newOrderCreated";
+
+//         // Fetch notification settings to determine roles
+//         const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+//         const notificationData = {
+//           fcm: {
+//             orderId: newOrder._id,
+//             customerId: newOrder.customerId,
+//           },
+//         };
+
+//         const socketData = {
+//           ...data,
+
+//           orderId: newOrder._id,
+//           orderDetail: newOrder.orderDetail,
+//           billDetail: newOrder.billDetail,
+
+//           //? Data for displaying detail in all orders table
+//           _id: newOrder._id,
+//           orderStatus: newOrder.status,
+//           merchantName:
+//             newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+//           customerName:
+//             newOrder?.orderDetail?.deliveryAddress?.fullName ||
+//             newOrder?.customerId?.fullName ||
+//             "-",
+//           deliveryMode: newOrder?.deliveryMode,
+//           orderDate: formatDate(newOrder.createdAt),
+//           orderTime: formatTime(newOrder.createdAt),
+//           deliveryDate: newOrder?.orderDetail?.deliveryTime
+//             ? formatDate(newOrder.orderDetail.deliveryTime)
+//             : "-",
+//           deliveryTime: newOrder?.orderDetail?.deliveryTime
+//             ? formatTime(newOrder.orderDetail.deliveryTime)
+//             : "-",
+//           paymentMethod: newOrder.paymentMode,
+//           deliveryOption: newOrder?.deliveryOption,
+//           amount: newOrder.billDetail.grandTotal,
+//         };
+
+//         const userIds = {
+//           admin: process.env.ADMIN_ID,
+//           merchant: newOrder?.merchantId._id,
+//           agent: newOrder?.agentId,
+//           customer: newOrder?.customerId,
+//         };
+
+//         res.status(200).json({
+//           success: true,
+//           orderId: newOrder._id,
+//           createdAt: newOrder.createdAt,
+//           merchantName: merchant.merchantDetail.merchantName,
+//           deliveryMode: newOrder.deliveryMode,
+//         });
+
+//         // Send notifications to each role dynamically
+//         await sendSocketDataAndNotification({
+//           rolesToNotify,
+//           userIds,
+//           eventName,
+//           notificationData,
+//           socketData,
+//         });
+
+//         return;
+//       } else {
+//         // Generate a unique order ID
+//         const orderId = new mongoose.Types.ObjectId();
+
+//         // Store order details temporarily in the database
+//         const tempOrder = await TemporaryOrder.create({
+//           orderId,
+//           customerId,
+//           merchantId: cart.merchantId,
+//           deliveryMode: cart.cartDetail.deliveryMode,
+//           deliveryOption: cart.cartDetail.deliveryOption,
+//           pickups,
+//           drops,
+//           billDetail: orderBill,
+//           distance: cart.cartDetail.distance,
+//           deliveryTime,
+//           startDate: cart.cartDetail.startDate,
+//           endDate: cart.cartDetail.endDate,
+//           time: cart.cartDetail.time,
+//           numOfDays: cart.cartDetail.numOfDays,
+//           totalAmount: orderAmount,
+//           paymentMode: "Famto-cash",
+//           paymentStatus: "Completed",
+//           purchasedItems,
+//           prescription,
+//           expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
+//         });
+
+//         // Clear the cart
+
+//         if (!tempOrder) {
+//           return next(appError("Error in creating temporary order"));
+//         }
+
+//         walletTransaction.orderId = orderId;
+
+//         await Promise.all([
+//           customer.save(),
+//           CustomerCart.deleteOne({ customerId }),
+//           CustomerTransaction.create(customerTransaction),
+//           CustomerWalletTransaction.create(walletTransaction),
+//           PromoCode.findOneAndUpdate(
+//             { promoCode: tempOrder.billDetail.promoCodeUsed },
+//             { $inc: { noOfUserUsed: 1 } }
+//           ),
+//         ]);
+
+//         // Return countdown timer to client
+//         res.status(200).json({
+//           success: true,
+//           orderId,
+//           createdAt: tempOrder.createdAt,
+//           merchantName: merchant.merchantDetail.merchantName,
+//           deliveryMode: tempOrder.deliveryMode,
+//         });
+
+//         // After 60 seconds, create the order if not canceled
+//         setTimeout(async () => {
+//           const storedOrderData = await TemporaryOrder.findOne({ orderId });
+
+//           if (storedOrderData) {
+//             let newOrderCreated = await Order.create({
+//               customerId: storedOrderData.customerId,
+//               merchantId: storedOrderData.merchantId,
+//               pickups: storedOrderData.pickups,
+//               drops: storedOrderData.drops,
+//               billDetail: storedOrderData.billDetail,
+//               distance: storedOrderData.distance,
+//               deliveryTime: storedOrderData.deliveryTime,
+//               startDate: storedOrderData.startDate,
+//               endDate: storedOrderData.endDate,
+//               time: storedOrderData.time,
+//               numOfDays: storedOrderData.numOfDays,
+//               deliveryMode: storedOrderData.deliveryMode,
+//               deliveryOption: storedOrderData.deliveryOption,
+//               totalAmount: storedOrderData.totalAmount,
+//               status: storedOrderData.status,
+//               paymentMode: storedOrderData.paymentMode,
+//               paymentStatus: storedOrderData.paymentStatus,
+//               prescription: storedOrderData.prescription,
+//               "orderDetailStepper.created": {
+//                 by: "Customer",
+//                 userId: storedOrderData.customerId,
+//                 date: new Date(),
+//               },
+//               purchasedItems: storedOrderData.purchasedItems,
+//             });
+
+//             if (!newOrderCreated)
+//               return next(appError("Error in creating order"));
+
+//             const newOrder = await Order.findById(newOrderCreated._id).populate(
+//               "merchantId"
+//             );
+
+//             // Check if population was successful
+//             if (!newOrder.merchantId) {
+//               return next(
+//                 appError("Error in populating order's merchant information")
+//               );
+//             }
+
+//             const oldOrderId = orderId;
+
+//             await Promise.all([
+//               TemporaryOrder.deleteOne({ orderId }),
+//               customer.save(),
+//               CustomerWalletTransaction.findOneAndUpdate(
+//                 { orderId: oldOrderId },
+//                 { $set: { orderId: newOrderCreated._id } },
+//                 { new: true }
+//               ),
+//               ActivityLog.create({
+//                 userId: req.userAuth,
+//                 userType: req.userRole,
+//                 description: `Order (#${newOrderCreated._id
+//                   }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+//                   } )`,
+//               }),
+//             ]);
+
+//             const eventName = "newOrderCreated";
+
+//             // Fetch notification settings to determine roles
+//             const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+//             const notificationData = {
+//               fcm: {
+//                 orderId: newOrder._id,
+//                 customerId: newOrder.customerId,
+//               },
+//             };
+
+//             const socketData = {
+//               ...data,
+
+//               orderId: newOrder._id,
+//               billDetail: newOrder.billDetail,
+//               orderDetailStepper: newOrder.orderDetailStepper.created,
+
+//               //? Data for displaying detail in all orders table
+//               _id: newOrder._id,
+//               orderStatus: newOrder.status,
+//               merchantName:
+//                 newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+//               customerName:
+//                 newOrder?.drops[0]?.deliveryAddress
+//                   ?.fullName ||
+//                 newOrder?.customerId?.fullName ||
+//                 "-",
+//               deliveryMode: newOrder?.deliveryMode,
+//               orderDate: formatDate(newOrder.createdAt),
+//               orderTime: formatTime(newOrder.createdAt),
+//               deliveryDate: newOrder?.deliveryTime
+//                 ? formatDate(newOrder.deliveryTime)
+//                 : "-",
+//               deliveryTime: newOrder?.deliveryTime
+//                 ? formatTime(newOrder.deliveryTime)
+//                 : "-",
+//               paymentMethod: newOrder.paymentMode,
+//               deliveryOption: newOrder.deliveryOption,
+//               amount: newOrder.billDetail.grandTotal,
+//             };
+
+//             const userIds = {
+//               admin: process.env.ADMIN_ID,
+//               merchant: newOrder?.merchantId._id,
+//               agent: newOrder?.agentId,
+//               customer: newOrder?.customerId,
+//             };
+
+//             // Send notifications to each role dynamically
+//             await sendSocketDataAndNotification({
+//               rolesToNotify,
+//               userIds,
+//               eventName,
+//               notificationData,
+//               socketData,
+//             });
+//           }
+//         }, 60000);
+//       }
+//     } else if (paymentMode === "Cash-on-delivery") {
+//       if (cart.cartDetail.deliveryOption === "Scheduled") {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Scheduled orders cannot be paid through Cash on delivery",
+//         });
+//       }
+
+//       // Generate a unique order ID
+//       const orderId = new mongoose.Types.ObjectId();
+
+//       // Store order details temporarily in the database
+//       const tempOrder = await TemporaryOrder.create({
+//         orderId,
+//         customerId,
+//         merchantId: cart.merchantId,
+//         deliveryMode: cart.cartDetail.deliveryMode,
+//         deliveryOption: cart.cartDetail.deliveryOption,
+//         pickups,
+//         drops,
+//         billDetail: orderBill,
+//         distance: cart.cartDetail.distance,
+//         deliveryTime,
+//         startDate: cart.cartDetail.startDate,
+//         endDate: cart.cartDetail.endDate,
+//         time: cart.cartDetail.time,
+//         numOfDays: cart.cartDetail.numOfDays,
+//         totalAmount: orderAmount,
+//         paymentMode: "Cash-on-delivery",
+//         paymentStatus: "Pending",
+//         purchasedItems,
+//         prescription,
+//         expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
+//       });
+
+//       if (!tempOrder) {
+//         return next(appError("Error in creating temporary order"));
+//       }
+
+//       await Promise.all([
+//         CustomerCart.deleteOne({ customerId }),
+//         customer.save(),
+//         CustomerTransaction.create(customerTransaction),
+//         PromoCode.findOneAndUpdate(
+//           { promoCode: tempOrder.billDetail.promoCodeUsed },
+//           { $inc: { noOfUserUsed: 1 } }
+//         ),
+//       ]);
+
+//       // Return countdown timer to client
+//       res.status(200).json({
+//         success: true,
+//         orderId,
+//         createdAt: tempOrder.createdAt,
+//         merchantName: merchant.merchantDetail.merchantName,
+//         deliveryMode: tempOrder.deliveryMode,
+//       });
+
+//       // After 60 seconds, create the order if not canceled
+//       setTimeout(async () => {
+//         console.log('⏱️ setTimeout triggered for orderId:', orderId);
+
+//         const storedOrderData = await TemporaryOrder.findOne({ orderId });
+
+//         console.log('Stored temp order:', storedOrderData?._id);
+
+//         if (!storedOrderData) {
+//           console.log('⚠️ Temporary order not found, probably cancelled');
+//           return;
+//         }
+
+//         if (storedOrderData) {
+//           let newOrderCreated = await Order.create({
+//             customerId: storedOrderData.customerId,
+//             merchantId: storedOrderData.merchantId,
+//             pickups: storedOrderData.pickups,
+//             drops: storedOrderData.drops,
+//             billDetail: storedOrderData.billDetail,
+//             distance: storedOrderData.distance,
+//             deliveryTime: storedOrderData.deliveryTime,
+//             startDate: storedOrderData.startDate,
+//             endDate: storedOrderData.endDate,
+//             time: storedOrderData.time,
+//             numOfDays: storedOrderData.numOfDays,
+//             deliveryMode: storedOrderData.deliveryMode,
+//             totalAmount: storedOrderData.totalAmount,
+//             deliveryOption: storedOrderData.deliveryOption,
+//             status: storedOrderData.status,
+//             paymentMode: storedOrderData.paymentMode,
+//             prescription: storedOrderData.prescription,
+//             paymentStatus: storedOrderData.paymentStatus,
+//             "orderDetailStepper.created": {
+//               by: "Customer",
+//               userId: storedOrderData.customerId,
+//               date: new Date(),
+//             },
+//             purchasedItems: storedOrderData.purchasedItems,
+//           });
+
+//           if (!newOrderCreated) {
+//             return next(appError("Error in creating order"));
+//           }
+
+//           const newOrder = await Order.findById(newOrderCreated._id).populate(
+//             "merchantId"
+//           );
+
+//           // Check if population was successful
+//           if (!newOrder.merchantId) {
+//             return next(
+//               appError("Error in populating order's merchant information")
+//             );
+//           }
+
+//           // Remove the temporary order data from the database
+//           await Promise.all([
+//             TemporaryOrder.deleteOne({ orderId }),
+//             ActivityLog.create({
+//               userId: req.userAuth,
+//               userType: req.userRole,
+//               description: `Order (#${newOrderCreated._id
+//                 }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+//                 } )`,
+//             }),
+//           ]);
+
+//           const eventName = "newOrderCreated";
+
+//           const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+//           const notificationData = {
+//             fcm: {
+//               orderId: newOrder._id,
+//               customerId: newOrder.customerId,
+//             },
+//           };
+
+//           const socketData = {
+//             ...data,
+
+//             orderId: newOrder._id,
+//             billDetail: newOrder.billDetail,
+//             orderDetailStepper: newOrder.orderDetailStepper.created,
+
+//             //? Data for displaying detail in all orders table
+//             _id: newOrder._id,
+//             orderStatus: newOrder.status,
+//             merchantName:
+//               newOrder?.merchantId?.merchantDetail?.merchantName || "-",
+//             customerName:
+//               newOrder?.drops[0]?.address
+//                 ?.fullName ||
+//               newOrder?.customerId?.fullName ||
+//               "-",
+//             deliveryMode: newOrder?.deliveryMode,
+//             orderDate: formatDate(newOrder.createdAt),
+//             orderTime: formatTime(newOrder.createdAt),
+//             deliveryDate: newOrder?.deliveryTime
+//               ? formatDate(newOrder.deliveryTime)
+//               : "-",
+//             deliveryTime: newOrder?.deliveryTime
+//               ? formatTime(newOrder.deliveryTime)
+//               : "-",
+//             paymentMethod: newOrder.paymentMode,
+//             deliveryOption: newOrder.deliveryOption,
+//             amount: newOrder.billDetail.grandTotal,
+//           };
+
+//           const userIds = {
+//             admin: process.env.ADMIN_ID,
+//             merchant: newOrder?.merchantId?._id,
+//             driver: newOrder?.agentId,
+//             customer: newOrder?.customerId,
+//           };
+
+//           // Send notifications to each role dynamically
+//           await sendSocketDataAndNotification({
+//             rolesToNotify,
+//             userIds,
+//             eventName,
+//             notificationData,
+//             socketData,
+//           });
+//         }
+//       }, 60000);
+//     } else if (paymentMode === "Online-payment") {
+//       const { success, orderId: razorpayOrderId, error } =
+//         await createRazorpayOrderId(orderAmount);
+
+//       if (!success) {
+//         return next(appError(error, 500));
+//       }
+
+//       const orderId = new mongoose.Types.ObjectId();
+
+//       const tempOrder = await TemporaryOrder.create({
+//         orderId,
+//         razorpayOrderId,
+//         customerId,
+//         merchantId: cart.merchantId,
+//         deliveryMode: cart.cartDetail.deliveryMode,
+//         deliveryOption: cart.cartDetail.deliveryOption,
+//         pickups,
+//         drops,
+//         billDetail: orderBill,
+//         distance: cart.cartDetail.distance,
+//         deliveryTime,
+//         startDate: cart.cartDetail.startDate ? new Date(cart.cartDetail.startDate) : null,
+//         endDate: cart.cartDetail.endDate ? new Date(cart.cartDetail.endDate) : null,
+//         time: cart.cartDetail.time ? new Date(cart.cartDetail.time) : null,
+//         numOfDays: cart.cartDetail.numOfDays || null,
+//         totalAmount: orderAmount,
+//         totalAmount: orderAmount,
+//         paymentMode: "Online-payment",
+//         paymentStatus: "Pending",
+//         purchasedItems,
+//         prescription,
+//         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours for webhook + cron fallback
+//       });
+
+//       if (!tempOrder) {
+//         return next(appError("Error creating temp order"));
+//       }
+
+//       return res.status(200).json({
+//         success: true,
+//         orderId,
+//         razorpayOrderId,
+//         amount: orderAmount,
+//       });
+//     }
+
+
+//     return next(appError("Invalid payment mode", 400));
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 // Verify online payment
 const verifyOnlinePaymentController = async (req, res, next) => {
@@ -2472,6 +2913,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
 // Razorpay Webhook 
 
+// Razorpay Webhook — ONLY updates payment status. Cron Worker creates the order.
 const razorpayWebhookController = async (req, res) => {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -2491,26 +2933,32 @@ const razorpayWebhookController = async (req, res) => {
 
     if (event === "payment.captured") {
       const payment = payload.payload.payment.entity;
-
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
-      const tempOrder = await TemporaryOrder.findOne({ razorpayOrderId });
-
-      if (!tempOrder) {
-        return res.status(200).json({ success: true });
-      }
-
-      // ✅ ONLY UPDATE STATUS
-      await TemporaryOrder.findOneAndUpdate(
-        { razorpayOrderId },
-        {
-          paymentStatus: "Completed",
-          paymentId,
-        }
+      const tempOrder = await TemporaryOrder.findOneAndUpdate(
+        { razorpayOrderId, paymentStatus: "Pending" },
+        { paymentStatus: "PAYMENT_COMPLETED", paymentId },
+        { new: true }
       );
 
-      console.log("✅ Payment marked completed");
+      if (tempOrder) {
+        console.log(`✅ Webhook: payment marked COMPLETED for ${razorpayOrderId}`);
+      } else {
+        console.log(`Webhook: temp order not found or already completed for ${razorpayOrderId}`);
+      }
+    }
+
+    if (event === "payment.failed") {
+      const payment = payload.payload.payment.entity;
+      const razorpayOrderId = payment.order_id;
+
+      await TemporaryOrder.findOneAndUpdate(
+        { razorpayOrderId, paymentStatus: "Pending" },
+        { paymentStatus: "PAYMENT_FAILED" }
+      );
+
+      console.log(`❌ Webhook: payment FAILED for ${razorpayOrderId}`);
     }
 
     res.status(200).json({ success: true });
@@ -2519,6 +2967,75 @@ const razorpayWebhookController = async (req, res) => {
     res.status(500).send("Webhook Error");
   }
 };
+
+// Mark payment as failed (called from client when Razorpay checkout fails)
+const markPaymentFailedController = async (req, res, next) => {
+  try {
+    const { razorpayOrderId } = req.body;
+    const customerId = req.userAuth;
+
+    if (!razorpayOrderId) {
+      return next(appError("razorpayOrderId is required", 400));
+    }
+
+    const tempOrder = await TemporaryOrder.findOneAndUpdate(
+      { razorpayOrderId, customerId, paymentStatus: "Pending" },
+      { paymentStatus: "PAYMENT_FAILED" },
+      { new: true }
+    );
+
+    if (!tempOrder) {
+      return next(appError("Order not found or already processed", 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Payment marked as failed",
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+// Retry failed payment — creates a new Razorpay order for the same temp order
+const retryPaymentController = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+    const customerId = req.userAuth;
+
+    const tempOrder = await TemporaryOrder.findOne({
+      orderId,
+      customerId,
+      paymentMode: "Online-payment",
+      paymentStatus: "PAYMENT_FAILED",
+      processingStatus: "pending",
+    });
+
+    if (!tempOrder) {
+      return next(appError("No failed payment found for retry", 404));
+    }
+
+    const { success, orderId: newRazorpayOrderId, error } =
+      await createRazorpayOrderId(tempOrder.totalAmount);
+
+    if (!success) {
+      return next(appError(error, 500));
+    }
+
+    await TemporaryOrder.findByIdAndUpdate(tempOrder._id, {
+      razorpayOrderId: newRazorpayOrderId,
+      paymentStatus: "PENDING_PAYMENT",
+      paymentId: null,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    res.status(200).json({
+      success: true,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+}
 
 // const verifyOnlinePaymentController = async (req, res, next) => {
 //   try {
@@ -3292,4 +3809,6 @@ module.exports = {
   distanceCache,
   getImageDisplayType,
   getOftenBoughtTogetherController,
+  markPaymentFailedController,
+  retryPaymentController
 };

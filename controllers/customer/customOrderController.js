@@ -607,7 +607,7 @@ const confirmCustomOrderController = async (req, res, next) => {
         cart?.billDetail?.originalGrandTotal ||
         0,
       paymentMode: "Cash-on-delivery",
-      paymentStatus: "Pending",
+      paymentStatus: "PENDING_PAYMENT",
       purchasedItems: cart.drops
         .flatMap((drop) => drop.items || [])
         .map((item) => ({

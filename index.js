@@ -100,6 +100,7 @@ const { deleteOldLogs, deleteOldTasks } = require("./libs/automatic.js");
 const {
   distanceCache,
 } = require("./controllers/customer/universalOrderController.js");
+const processOrderService = require("./utils/ProcessOrderService.js");
 
 
 app.use(
@@ -268,251 +269,206 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-cron.schedule("*/10 * * * * *", async () => {
+
+cron.schedule("*/5 * * * * *", async () => {
   try {
-    const now = new Date();
+    let hasMore = true;
 
-    // ── STEP 1: Fetch expired, unprocessed temp orders ────────────────────────
-    const tempOrders = await TemporaryOrder.find({
-      expiresAt: { $lte: now },
-      isProcessed: false,
-    })
-      .limit(20)
-      .lean();
+    while (hasMore) {
+      const tempOrder = await TemporaryOrder.findOneAndUpdate(
+        {
+          processingStatus: "PENDING",
 
-    if (!tempOrders.length) return;
-
-    const tempOrderIds = tempOrders.map((o) => o._id);
-
-    // ── STEP 2: Atomic lock — mark as processed before doing any work ─────────
-    // Only grab ones still unprocessed (race-condition safe)
-    const locked = await TemporaryOrder.updateMany(
-      { _id: { $in: tempOrderIds }, isProcessed: false },
-      { $set: { isProcessed: true } }
-    );
-
-    if (locked.modifiedCount === 0) return; // another instance grabbed them first
-
-    // ── STEP 3: Filter valid orders ───────────────────────────────────────────
-    // Online-payment orders must have a completed payment; COD and Famto-cash always proceed
-    const validOrders = tempOrders.filter((o) => {
-      if (o.paymentMode === "Online-payment") {
-        return o.paymentStatus === "Completed";
-      }
-      return true;
-    });
-
-    if (!validOrders.length) {
-      await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
-      return;
-    }
-
-    // ── STEP 4: Dedup — skip already-created orders ───────────────────────────
-    // For Online-payment orders dedup by paymentId; COD/Famto-cash don't have paymentId
-    const onlinePaymentIds = validOrders
-      .filter((o) => o.paymentMode === "Online-payment" && o.paymentId)
-      .map((o) => o.paymentId);
-
-    let existingPaymentIds = new Set();
-    if (onlinePaymentIds.length) {
-      const [existingOrders, existingScheduled] = await Promise.all([
-        Order.find({ paymentId: { $in: onlinePaymentIds } }).select("paymentId").lean(),
-        ScheduledOrder.find({ paymentId: { $in: onlinePaymentIds } }).select("paymentId").lean(),
-      ]);
-      existingPaymentIds = new Set([
-        ...existingOrders.map((o) => o.paymentId),
-        ...existingScheduled.map((o) => o.paymentId),
-      ]);
-    }
-
-    const ordersToCreate = validOrders.filter(
-      (o) => !o.paymentId || !existingPaymentIds.has(o.paymentId)
-    );
-
-    if (!ordersToCreate.length) {
-      await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
-      return;
-    }
-
-    // ── STEP 5: Fetch notification roles once (shared across all orders) ──────
-    const eventName = "newOrderCreated";
-    const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-    // ── STEP 6: Process each order individually ───────────────────────────────
-    // Individual creates are required so that:
-    //   • pre-save middleware fires (ScheduledOrder auto-increment ID)
-    //   • we can populate + fire socket/notification per order
-    //   • we can update CustomerWalletTransaction with the real order _id
-
-    for (const o of ordersToCreate) {
-      try {
-        let createdOrder;
-        const isScheduled = o.deliveryOption === "Scheduled";
-
-        if (isScheduled) {
-          // ── Scheduled → ScheduledOrder collection ──────────────────────────
-          createdOrder = await ScheduledOrder.create({
-            customerId: o.customerId,
-            merchantId: o.merchantId,
-            pickups: o.pickups,
-            drops: o.drops,
-            billDetail: o.billDetail,
-            distance: o.distance || 0,
-            totalAmount: o.totalAmount,
-            deliveryMode: o.deliveryMode,
-            deliveryOption: o.deliveryOption,
-            paymentMode: o.paymentMode,
-            paymentStatus: o.paymentStatus,
-            paymentId: o.paymentId || null,
-            purchasedItems: o.purchasedItems,
-            prescription: o.prescription || null,
-            startDate: o.startDate,
-            endDate: o.endDate,
-            time: o.time,
-            status: "Pending",
-          });
-        } else {
-          // ── Regular → Order collection ─────────────────────────────────────
-          createdOrder = await Order.create({
-            customerId: o.customerId,
-            merchantId: o.merchantId,
-            pickups: o.pickups,
-            drops: o.drops,
-            billDetail: o.billDetail,
-            distance: o.distance || 0,
-            deliveryTime: o.deliveryTime,
-            startDate: o.startDate,
-            endDate: o.endDate,
-            time: o.time,
-            numOfDays: o.numOfDays,
-            totalAmount: o.totalAmount,
-            deliveryMode: o.deliveryMode,
-            deliveryOption: o.deliveryOption,
-            paymentMode: o.paymentMode,
-            paymentStatus: o.paymentStatus,
-            paymentId: o.paymentId || null,
-            purchasedItems: o.purchasedItems,
-            prescription: o.prescription || null,
-            status: "Pending",
-            "orderDetailStepper.created": {
-              by: "Customer",
-              userId: o.customerId,
-              date: new Date(),
+          $or: [
+            {
+              paymentMode: "Famto-cash",
+              paymentStatus: "PAYMENT_COMPLETED",
+              expiresAt: {
+                $lte: new Date(),
+              },
             },
-          });
-        }
 
-        if (!createdOrder) {
-          console.error(`❌ Failed to create order for tempId ${o._id}`);
-          continue;
-        }
+            {
+              paymentMode: "Cash-on-delivery",
+              expiresAt: {
+                $lte: new Date(),
+              },
+            },
 
-        // ── Populate merchantId + customerId for socket data ──────────────────
-        const Model = isScheduled ? ScheduledOrder : Order;
-        const newOrder = await Model.findById(createdOrder._id).populate(
-          "merchantId customerId"
-        );
-
-        if (!newOrder) continue;
-
-        // ── Fix CustomerWalletTransaction.orderId for Famto-cash ─────────────
-        // When the temp order was created, walletTransaction.orderId was set
-        // to the temporary orderId field. Now update it to the real order _id.
-        if (o.paymentMode === "Famto-cash" && o.orderId) {
-          await CustomerWalletTransaction.findOneAndUpdate(
-            { orderId: o.orderId },
-            { $set: { orderId: createdOrder._id } }
-          );
-        }
-
-        // ── Activity log ──────────────────────────────────────────────────────
-        await ActivityLog.create({
-          userId: o.customerId,
-          userType: "Customer",
-          description: `Order (#${createdOrder._id}) created via payment cron for customer (${o.customerId})`,
-        });
-
-        // ── Build socket + notification payloads ──────────────────────────────
-        const notificationData = {
-          fcm: {
-            orderId: newOrder._id,
-            customerId: newOrder.customerId,
-            merchantId: newOrder?.merchantId?._id,
-            agentId: newOrder?.agentId,
-            pickAddress: newOrder?.pickups?.[0]?.address || null,
-            customerAddress: newOrder?.drops?.[0]?.address || null,
-            orderType: newOrder?.deliveryMode || null,
+            {
+              paymentMode: "Online-payment",
+              paymentStatus: "PAYMENT_COMPLETED",
+            },
+          ],
+        },
+        {
+          $set: {
+            processingStatus: "PROCESSING",
           },
-        };
+        },
+        {
+          new: true,
+          sort: {
+            createdAt: 1,
+          },
+        }
+      );
 
-        const socketData = {
-          ...data,
-          orderId: newOrder._id,
-          billDetail: newOrder.billDetail,
-          orderDetailStepper: newOrder.orderDetailStepper?.created,
-          _id: newOrder._id,
-          orderStatus: newOrder.status,
-          merchantName:
-            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-          customerName:
-            newOrder?.drops?.[0]?.address?.fullName ||
-            newOrder?.customerId?.fullName ||
-            "-",
-          deliveryMode: newOrder?.deliveryMode,
-          orderDate: formatDate(newOrder.createdAt),
-          orderTime: formatTime(newOrder.createdAt),
-          deliveryDate: newOrder?.deliveryTime
-            ? formatDate(newOrder.deliveryTime)
-            : "-",
-          deliveryTime: newOrder?.deliveryTime
-            ? formatTime(newOrder.deliveryTime)
-            : "-",
-          paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.deliveryOption,
-          amount: newOrder.billDetail.grandTotal,
-        };
+      if (!tempOrder) {
+        break;
+      }
 
-        const userIds = {
-          admin: process.env.ADMIN_ID,
-          merchant: newOrder?.merchantId?._id,
-          agent: newOrder?.agentId,
-          customer: newOrder?.customerId,
-        };
+      try {
+        await processOrderService(tempOrder);
 
-        // ── Fire socket + push notifications ──────────────────────────────────
-        await sendSocketDataAndNotification({
-          rolesToNotify,
-          userIds,
-          eventName,
-          notificationData,
-          socketData,
+        await TemporaryOrder.deleteOne({
+          _id: tempOrder._id,
         });
 
         console.log(
-          `✅ Order ${createdOrder._id} created [${o.deliveryOption} | ${o.paymentMode}]`
+          `✅ Order created successfully for ${tempOrder._id}`
         );
-      } catch (orderErr) {
-        console.error(
-          `❌ Cron failed for tempId ${o._id}:`,
-          orderErr.message
-        );
+      } catch (err) {
+        const retryCount =
+          (tempOrder.retryCount || 0) + 1;
+
+        if (retryCount >= 5) {
+          await TemporaryOrder.findByIdAndUpdate(
+            tempOrder._id,
+            {
+              processingStatus: "FAILED",
+              retryCount,
+              lastError: err.message,
+            }
+          );
+
+          console.error(
+            `💀 Order permanently failed ${tempOrder._id}`
+          );
+        } else {
+          await TemporaryOrder.findByIdAndUpdate(
+            tempOrder._id,
+            {
+              processingStatus: "PENDING",
+              retryCount,
+              lastError: err.message,
+            }
+          );
+
+          console.error(
+            `⚠️ Retry ${retryCount} for ${tempOrder._id}`
+          );
+        }
       }
     }
-
-    // ── STEP 7: Cleanup all temp orders in this batch ─────────────────────────
-    await TemporaryOrder.deleteMany({ _id: { $in: tempOrderIds } });
-
   } catch (err) {
-    console.error("🔥 ORDER CRON ERROR:", err);
+    console.error(
+      "🔥 ORDER PROCESSOR CRON ERROR:",
+      err.message
+    );
   }
 });
+
 
 cron.schedule("*/5 * * * *", () => {
   Object.keys(distanceCache).forEach((key) => delete distanceCache[key]);
 });
 
-// ─── Daily 6 PM IST cart reminder via Interakt WhatsApp ──────────────────────
-// 6 PM IST = 12:30 UTC
+// ─── Reconciliation Job (every 5-10 min) — Check Razorpay API for missed webhooks
+cron.schedule("*/5 * * * *", async () => {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    // Find Pending TemporaryOrders — webhook hasn't arrived yet
+    const stuckOrders = await TemporaryOrder.find({
+      paymentMode: "Online-payment",
+      paymentStatus: "PENDING_PAYMENT",
+      processingStatus: "PENDING",
+      createdAt: { $lte: fiveMinutesAgo },
+      razorpayOrderId: { $ne: null },
+    }).lean();
+
+    if (!stuckOrders.length) return;
+
+    console.log(`[Reconciliation] Found ${stuckOrders.length} pending online payment(s)`);
+
+    for (const tempOrder of stuckOrders) {
+      try {
+        // Check Razorpay API directly
+        const { captured, paymentId } = await fetchRazorpayOrderPayments(
+          tempOrder.razorpayOrderId
+        );
+
+        if (captured) {
+          // Fix Missed Webhook — Update Status so cron worker picks it up
+          await TemporaryOrder.findOneAndUpdate(
+            { _id: tempOrder._id, paymentStatus: "Pending" },
+            { paymentStatus: "PAYMENT_COMPLETED", paymentId }
+          );
+          console.log(
+            `[Reconciliation] ✅ Fixed missed webhook for ${tempOrder.razorpayOrderId}`
+          );
+        } else {
+          const ageHours =
+            (Date.now() - new Date(tempOrder.createdAt).getTime()) /
+            (1000 * 60 * 60);
+
+          if (ageHours > 2) {
+            // Abandoned payment — mark as failed
+            await TemporaryOrder.findByIdAndUpdate(tempOrder._id, {
+              paymentStatus: "PAYMENT_FAILED",
+            });
+            console.error(
+              `[Reconciliation] ❌ Abandoned payment after ${ageHours.toFixed(1)}h: ${tempOrder.razorpayOrderId}`
+            );
+          }
+        }
+      } catch (err) {
+        console.error(
+          `[Reconciliation] Error checking ${tempOrder.razorpayOrderId}:`,
+          err.message
+        );
+      }
+    }
+
+    // ── Fix stuck "processing" orders (server crashed mid-processing) ────────
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    const stuckProcessing = await TemporaryOrder.updateMany(
+      {
+        processingStatus: "PROCESSING",
+        updatedAt: { $lte: twoMinutesAgo },
+      },
+      { $set: { processingStatus: "PENDING" } }
+    );
+
+    if (stuckProcessing.modifiedCount > 0) {
+      console.log(
+        `[Reconciliation] 🔄 Reset ${stuckProcessing.modifiedCount} stuck "processing" order(s)`
+      );
+    }
+
+    // ── Dead-letter items (failed processingStatus with maxRetries reached) ──
+    const deadLetters = await TemporaryOrder.find({
+      processingStatus: "FAILED",
+    }).lean();
+
+    if (deadLetters.length) {
+      console.error(
+        `[Reconciliation] 💀 ${deadLetters.length} dead-letter order(s) need manual review:`,
+        deadLetters.map((d) => ({
+          id: d._id,
+          razorpayOrderId: d.razorpayOrderId,
+          retryCount: d.retryCount,
+          lastError: d.lastError,
+        }))
+      );
+    }
+  } catch (err) {
+    console.error("[Reconciliation] Cron error:", err.message);
+  }
+});
+
+
 cron.schedule(
   "30 18 * * *",
   async () => {

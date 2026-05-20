@@ -281,7 +281,7 @@ const orderSchema = mongoose.Schema(
       enum: ["Famto-cash", "Online-payment", "Cash-on-delivery"],
       required: true,
     },
-    paymentId: { type: String, default: null },
+    paymentId: { type: String, unique: true, sparse: true },
     refundId: { type: String, default: null },
     paymentStatus: {
       type: String,

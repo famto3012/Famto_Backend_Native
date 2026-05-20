@@ -2136,10 +2136,10 @@ const completeOrderController = async (req, res, next) => {
     // Stepper detail
     const stepperDetail = { by: agentFound.fullName, date: new Date() };
     orderFound.orderDetailStepper =
-  orderFound.orderDetailStepper || {};
+      orderFound.orderDetailStepper || {};
 
-orderFound.orderDetailStepper.completed =
-  stepperDetail;
+    orderFound.orderDetailStepper.completed =
+      stepperDetail;
 
     console.log("📌 Saving documents...");
     agentFound.taskCompleted += 1;

@@ -2621,7 +2621,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         },
       },
       paymentMode: "Online-payment",
-      paymentStatus: "Completed",
+      paymentStatus: "PAYMENT_COMPLETED",
     });
 
     res.status(200).json({

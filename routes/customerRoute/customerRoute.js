@@ -87,6 +87,8 @@ const {
   getImageDisplayType,
   getOftenBoughtTogetherController,
   razorpayWebhookController,
+  retryPaymentController,
+  markPaymentFailedController,
 } = require("../../controllers/customer/universalOrderController");
 const {
   addPickUpAddressController,
@@ -330,6 +332,19 @@ customerRoute.post(
   "/razorpay-webhook",
   razorpayWebhookController
 );
+
+customerRoute.post(
+  "/mark-payment-failed",
+  isAuthenticated,
+  markPaymentFailedController
+);
+
+customerRoute.post(
+  "/retry-payment",
+  isAuthenticated,
+  retryPaymentController
+);
+
 
 customerRoute.post(
   "/cancel-universal-order",

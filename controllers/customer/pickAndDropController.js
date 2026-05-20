@@ -1642,7 +1642,7 @@ const confirmPickAndDropController = async (req, res, next) => {
           totalAmount: orderAmount,
           status: "Pending",
           paymentMode: "Online-payment",
-          paymentStatus: "Completed",
+          paymentStatus: "PAYMENT_COMPLETED",
           startDate: cart.cartDetail.startDate,
           endDate: cart.cartDetail.endDate,
           time: cart.cartDetail.time,
@@ -1759,7 +1759,7 @@ const confirmPickAndDropController = async (req, res, next) => {
           cart?.billDetail?.originalGrandTotal ||
           0,
         paymentMode: "Famto-cash",
-        paymentStatus: "Completed",
+        paymentStatus: "PAYMENT_COMPLETED",
       });
 
       if (!tempOrder)
@@ -1983,7 +1983,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         totalAmount: orderAmount,
         status: "Pending",
         paymentMode: "Online-payment",
-        paymentStatus: "Completed",
+        paymentStatus: "PAYMENT_COMPLETED",
         startDate: cart.cartDetail.startDate,
         endDate: cart.cartDetail.endDate,
         time: cart.cartDetail.time,
@@ -2131,7 +2131,7 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         cart?.billDetail?.originalGrandTotal ||
         0,
       paymentMode: "Online-payment",
-      paymentStatus: "Completed",
+      paymentStatus: "PAYMENT_COMPLETED",
       paymentId: paymentDetails.razorpay_payment_id,
     });
 
