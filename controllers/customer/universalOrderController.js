@@ -2947,7 +2947,7 @@ const razorpayWebhookController = async (req, res) => {
       const paymentId = payment.id;
 
       const tempOrder = await TemporaryOrder.findOneAndUpdate(
-        { razorpayOrderId, paymentStatus: "Pending" },
+        { razorpayOrderId, paymentStatus: "PENDING_PAYMENT" },
         { paymentStatus: "PAYMENT_COMPLETED", paymentId },
         { new: true }
       );
