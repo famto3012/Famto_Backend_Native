@@ -2897,6 +2897,16 @@ const verifyOnlinePaymentController = async (req, res, next) => {
 
     const isValid = await verifyPayment(paymentDetails);
 
+    await TemporaryOrder.findOneAndUpdate(
+      {
+        razorpayOrderId: razorpay_order_id,
+      },
+      {
+        paymentStatus: "PAYMENT_COMPLETED",
+        paymentId: razorpay_payment_id,
+      }
+    );
+
     if (!isValid) {
       return next(appError("Payment verification failed", 400));
     }
