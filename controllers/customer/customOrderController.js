@@ -151,7 +151,7 @@ const addItemsToCartController = async (req, res, next) => {
       itemImageURL,
     };
 
-    cart?.drops[0]?.items.push(updatedItems);
+    cart?.pickups[0]?.items.push(updatedItems);
 
     await cart.save();
 
@@ -159,7 +159,7 @@ const addItemsToCartController = async (req, res, next) => {
       cartId: cart._id,
       customerId: cart.customerId,
       cartDetail: cart.cartDetail,
-      items: cart?.drops[0]?.items?.map((item) => ({
+      items: cart?.pickups[0]?.items?.map((item) => ({
         itemId: item.itemId,
         itemName: item.itemName,
         quantity: item.quantity,
