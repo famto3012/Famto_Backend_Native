@@ -731,6 +731,17 @@ merchantSchema.index(
   },
   { sparse: true }
 );
+merchantSchema.index({
+  isBlocked: 1,
+  isApproved: 1,
+  "merchantDetail.businessCategoryId": 1,
+  "merchantDetail.pricing.0": 1,
+});
+
+merchantSchema.index({
+  "merchantDetail.servingArea": 1,
+  "merchantDetail.servingRadius": 1,
+});
 
 const Merchant = mongoose.model("Merchant", merchantSchema);
 module.exports = Merchant;

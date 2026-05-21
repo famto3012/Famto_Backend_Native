@@ -997,6 +997,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     // =====================================
 
     const merchants = await Merchant.aggregate(pipeline);
+console.log(`API TIME: ${Date.now() - startTime}ms | Results: ${merchants.length}`);
 
     console.log("API TIME:", Date.now() - startTime, "ms");
 
