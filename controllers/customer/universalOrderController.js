@@ -828,237 +828,202 @@ const distanceCache = {};
 
 // OPTIONAL: const redis = require("../config/redis");
 
-const filterAndSearchMerchantController =
-  async (req, res, next) => {
-    const startTime = Date.now();
+const filterAndSearchMerchantController = async (req, res, next) => {
+  const startTime = Date.now();
 
-    try {
-      let {
-        businessCategoryId,
-        filterType,
-        query = "",
-        latitude,
-        longitude,
-        page = 1,
-        limit = 10,
-        merchantId,
-      } = req.query;
+  try {
+    let {
+      businessCategoryId,
+      filterType,
+      query = "",
+      latitude,
+      longitude,
+      page = 1,
+      limit = 10,
+      merchantId,
+    } = req.query;
 
-      // =====================================
-      // VALIDATION (FAST FAIL)
-      // =====================================
+    // =====================================
+    // VALIDATION
+    // =====================================
 
-      page = Number(page) || 1;
-      limit = Number(limit) || 10;
-      latitude = Number(latitude);
-      longitude = Number(longitude);
+    page = Number(page) || 1;
+    limit = Number(limit) || 10;
+    latitude = Number(latitude);
+    longitude = Number(longitude);
 
-      if (
-        !businessCategoryId ||
-        Number.isNaN(latitude) ||
-        Number.isNaN(longitude)
-      ) {
-        return next(
-          appError(
-            "Invalid input parameters",
-            400
-          )
-        );
-      }
+    if (!businessCategoryId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return next(appError("Invalid input parameters", 400));
+    }
 
-      const skip = (page - 1) * limit;
+    const skip = (page - 1) * limit;
+    const categoryObjId = new mongoose.Types.ObjectId(businessCategoryId);
 
-      const categoryObjId =
-        new mongoose.Types.ObjectId(
-          businessCategoryId
-        );
+    // =====================================
+    // BASE FILTER
+    // =====================================
 
-      // =====================================
-      // REDIS CACHE KEY (OPTIONAL)
-      // =====================================
+    const baseMatch = {
+      isBlocked: false,
+      isApproved: "Approved",
+      "merchantDetail.businessCategoryId": { $in: [categoryObjId] },
+      "merchantDetail.pricing": { $exists: true, $ne: [] },
+      "merchantDetail.pricing.0": { $exists: true },
+    };
 
-      const cacheKey = `merchants:${businessCategoryId}:${latitude}:${longitude}:${page}:${limit}:${filterType}:${query}`;
-
-      // const cached = await redis.get(cacheKey);
-      // if (cached) return res.json(JSON.parse(cached));
-
-      // =====================================
-      // BASE FILTER
-      // =====================================
-
-      const baseMatch = {
-        isBlocked: false,
-        isApproved: "Approved",
-        "merchantDetail.pricing.0": { $exists: true },
-        "merchantDetail.pricing.0.modelType": { $exists: true, $ne: null },
-        "merchantDetail.pricing.0.modelId": { $exists: true, $ne: null },
-        "merchantDetail.businessCategoryId":
-        {
-          $in: [categoryObjId],
-        },
+    if (query.trim()) {
+      baseMatch["merchantDetail.merchantName"] = {
+        $regex: query.trim(),
+        $options: "i",
       };
+    }
 
-      if (query.trim()) {
-        baseMatch[
-          "merchantDetail.merchantName"
-        ] = {
-          $regex: query.trim(),
-          $options: "i",
-        };
-      }
+    if (filterType?.toLowerCase() === "veg") {
+      baseMatch["merchantDetail.merchantFoodType"] = "Veg";
+    }
 
-      if (
-        filterType?.toLowerCase() ===
-        "veg"
-      ) {
-        baseMatch[
-          "merchantDetail.merchantFoodType"
-        ] = "Veg";
-      }
+    // =====================================
+    // PIPELINE
+    // =====================================
 
-      if (
-        filterType?.toLowerCase() ===
-        "rating 4.0+"
-      ) {
-        baseMatch[
-          "merchantDetail.averageRating"
-        ] = {
-          $gte: 4,
-        };
-      }
-
-      // =====================================
-      // PIPELINE (LIGHTWEIGHT)
-      // =====================================
-
-      const pipeline = [
-        {
-          $geoNear: {
-            near: { type: "Point", coordinates: [longitude, latitude] },
-            key: "merchantDetail.geoLocation",
-            distanceField: "distance",
-            spherical: true,
-            distanceMultiplier: 0.001,
-            maxDistance: 30000,
-            query: baseMatch,
+    const pipeline = [
+      // STEP 1: Geo nearest — uses 2dsphere index
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [longitude, latitude],
           },
+          key: "merchantDetail.geoLocation",
+          distanceField: "distance",
+          spherical: true,
+          distanceMultiplier: 0.001, // meters → km
+          maxDistance: 30000, // 30km radius
+          query: baseMatch,
         },
+      },
 
-        // ✅ Compute average rating early
-        {
-          $addFields: {
-            "merchantDetail.computedRating": {
-              $cond: {
-                if: { $gt: [{ $size: { $ifNull: ["$merchantDetail.ratingByCustomers", []] } }, 0] },
-                then: { $avg: "$merchantDetail.ratingByCustomers.rating" },
-                else: 0,
+      // STEP 2: Compute average rating
+      // Virtual fields don't work in aggregation — must compute manually
+      {
+        $addFields: {
+          "merchantDetail.computedRating": {
+            $cond: {
+              if: {
+                $gt: [
+                  {
+                    $size: {
+                      $ifNull: ["$merchantDetail.ratingByCustomers", []],
+                    },
+                  },
+                  0,
+                ],
               },
+              then: { $avg: "$merchantDetail.ratingByCustomers.rating" },
+              else: 0,
             },
           },
         },
+      },
 
-        // ✅ Rating filter as separate stage
-        ...(filterType?.toLowerCase() === "rating 4.0+"
-          ? [{ $match: { "merchantDetail.computedRating": { $gte: 4 } } }]
-          : []),
+      // STEP 3: Rating filter — only applied if requested
+      ...(filterType?.toLowerCase() === "rating 4.0+"
+        ? [{ $match: { "merchantDetail.computedRating": { $gte: 4 } } }]
+        : []),
 
-        {
-          $match: {
-            $or: [
-              { "merchantDetail.servingArea": "No-restrictions" },
-              {
-                "merchantDetail.servingArea": "Mention-radius",
-                $expr: { $lte: ["$distance", "$merchantDetail.servingRadius"] },
+      // STEP 4: Serving area filter
+      // " " is the schema default — treat same as No-restrictions
+      {
+        $match: {
+          $or: [
+            { "merchantDetail.servingArea": "No-restrictions" },
+            { "merchantDetail.servingArea": " " },
+            {
+              "merchantDetail.servingArea": "Mention-radius",
+              $expr: {
+                $lte: ["$distance", "$merchantDetail.servingRadius"],
               },
+            },
+          ],
+        },
+      },
+
+      // STEP 5: Priority merchant boost
+      {
+        $addFields: {
+          priorityMerchant: {
+            $cond: [
+              merchantId ? { $eq: ["$_id", merchantId] } : false,
+              1,
+              0,
             ],
           },
         },
+      },
 
-        {
-          $addFields: {
-            priorityMerchant: {
-              $cond: [merchantId ? { $eq: ["$_id", merchantId] } : false, 1, 0],
-            },
-          },
+      // STEP 6: Sort — priority first, then open, then nearest
+      {
+        $sort: {
+          priorityMerchant: -1,
+          status: -1,
+          distance: 1,
         },
+      },
 
-        { $sort: { priorityMerchant: -1, status: -1, distance: 1 } },
-        { $skip: skip },
-        { $limit: limit },
+      // STEP 7: Pagination
+      { $skip: skip },
+      { $limit: limit },
 
-        {
-          $project: {
-            _id: 1,
-            status: 1,
-            distance: { $round: ["$distance", 2] },
-            merchantName: "$merchantDetail.merchantName",
-            description: "$merchantDetail.description",
-            averageRating: "$merchantDetail.computedRating", // ✅
-            restaurantType: "$merchantDetail.merchantFoodType",
-            merchantImageURL: "$merchantDetail.merchantImageURL",
-            displayAddress: "$merchantDetail.displayAddress",
-            preOrderStatus: "$merchantDetail.preOrderStatus",
-            availability: "$merchantDetail.availability",
-          },
+      // STEP 8: Shape response
+      {
+        $project: {
+          _id: 1,
+          status: 1,
+          distance: { $round: ["$distance", 2] },
+          merchantName: "$merchantDetail.merchantName",
+          description: "$merchantDetail.description",
+          averageRating: "$merchantDetail.computedRating",
+          restaurantType: "$merchantDetail.merchantFoodType",
+          merchantImageURL: "$merchantDetail.merchantImageURL",
+          displayAddress: "$merchantDetail.displayAddress",
+          preOrderStatus: "$merchantDetail.preOrderStatus",
+          availability: "$merchantDetail.availability",
         },
-      ];
+      },
+    ];
 
-      // =====================================
-      // EXECUTE
-      // =====================================
+    // =====================================
+    // EXECUTE
+    // =====================================
 
-      const merchants =
-        await Merchant.aggregate(pipeline);
+    const merchants = await Merchant.aggregate(pipeline);
 
-      // =====================================
-      // RESPONSE (NO DB CALL HERE 🚀)
-      // =====================================
+    console.log("API TIME:", Date.now() - startTime, "ms");
 
-      const response = merchants.map(
-        (m) => ({
-          id: m._id,
-          merchantName: m.merchantName,
-          description: m.description,
-          averageRating:
-            m.averageRating || 0,
-          status: m.status,
-          restaurantType:
-            m.restaurantType,
-          merchantImageURL:
-            m.merchantImageURL,
-          displayAddress:
-            m.displayAddress,
-          preOrderStatus:
-            m.preOrderStatus,
-          distance: m.distance,
-          availability: m.availability,
-        })
-      );
+    // =====================================
+    // RESPONSE
+    // =====================================
 
-      // =====================================
-      // CACHE SAVE (OPTIONAL)
-      // =====================================
+    const response = merchants.map((m) => ({
+      id: m._id,
+      merchantName: m.merchantName,
+      description: m.description,
+      averageRating: m.averageRating || 0,
+      status: m.status,
+      restaurantType: m.restaurantType,
+      merchantImageURL: m.merchantImageURL,
+      displayAddress: m.displayAddress,
+      preOrderStatus: m.preOrderStatus,
+      distance: m.distance,
+      availability: m.availability,
+    }));
 
-      // await redis.setex(cacheKey, 30, JSON.stringify(response));
-
-      console.log(
-        "API TIME:",
-        Date.now() - startTime,
-        "ms"
-      );
-
-      res.status(200).json(response);
-    } catch (err) {
-      console.error(err);
-
-      return next(
-        appError(
-          "Failed to fetch merchants",
-          500
-        )
-      );
-    }
-  };
+    res.status(200).json(response);
+  } catch (err) {
+    console.error("[filterAndSearchMerchant] Error:", err);
+    return next(appError("Failed to fetch merchants", 500));
+  }
+};
 
 
 // GET /customers/products/often-bought-together/:productId

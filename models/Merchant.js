@@ -1,32 +1,488 @@
+// const mongoose = require("mongoose");
+// const DatabaseCounter = require("./DatabaseCounter");
+
+// const daySchema = new mongoose.Schema(
+//   {
+//     openAllDay: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     closedAllDay: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     specificTime: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     startTime: {
+//       type: String,
+//       default: null,
+//     },
+//     endTime: {
+//       type: String,
+//       default: null,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const availabilitySchema = new mongoose.Schema(
+//   {
+//     type: {
+//       type: String,
+//       enum: ["Full-time", "Specific-time"],
+//       required: false,
+//     },
+//     specificDays: {
+//       sunday: daySchema,
+//       monday: daySchema,
+//       tuesday: daySchema,
+//       wednesday: daySchema,
+//       thursday: daySchema,
+//       friday: daySchema,
+//       saturday: daySchema,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const ratingByCustomerSchema = new mongoose.Schema(
+//   {
+//     customerId: {
+//       type: String,
+//       ref: "User",
+//       required: true,
+//     },
+//     review: {
+//       type: String,
+//       default: null,
+//     },
+//     rating: {
+//       type: Number,
+//       required: true,
+//       min: 1,
+//       max: 5,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const bankDetailSchema = mongoose.Schema(
+//   {
+//     accountHolderName: {
+//       type: String,
+//       default: null,
+//     },
+//     accountNumber: {
+//       type: String,
+//       default: null,
+//     },
+//     ifscCode: {
+//       type: String,
+//       default: null,
+//     },
+//     upiId: {
+//       type: String,
+//       default: null,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const sponsorshipSchema = mongoose.Schema(
+//   {
+//     sponsorshipStatus: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     currentPlan: {
+//       type: String,
+//       default: null,
+//     },
+//     startDate: {
+//       type: Date,
+//       default: null,
+//     },
+//     endDate: {
+//       type: Date,
+//       default: null,
+//     },
+//     paymentDetails: {
+//       type: mongoose.Schema.Types.Mixed,
+//       default: null,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const merchantDetailSchema = new mongoose.Schema(
+//   {
+//     merchantName: {
+//       type: String,
+//       default: null,
+//     },
+//     merchantImageURL: {
+//       type: String,
+//       default: null,
+//     },
+//     displayAddress: {
+//       type: String,
+//       default: null,
+//     },
+//     description: {
+//       type: String,
+//       default: null,
+//     },
+//     geofenceId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "Geofence",
+//     },
+//     pricing: {
+//       type: [
+//         {
+//           modelType: { type: String, default: null },
+//           modelId: { type: mongoose.Schema.Types.ObjectId },
+//         },
+//       ],
+//       default: [],
+//     },
+//     geoLocation: {
+//       type: {
+//         type: String,
+//         enum: ["Point"],
+//       },
+//       coordinates: {
+//         type: [Number],
+//         default: undefined, // ← prevents Mongoose from initializing as []
+//         validate: {
+//           validator: function (value) {
+//             // Allow missing/undefined/empty
+//             if (!value || value.length === 0) return true;
+
+//             return (
+//               Array.isArray(value) &&
+//               value.length === 2 &&
+//               typeof value[0] === "number" &&
+//               typeof value[1] === "number"
+//             );
+//           },
+//           message: "Geo coordinates must contain [longitude, latitude]",
+//         },
+//       },
+//     },
+//     locationImage: {
+//       type: String,
+//       default: null,
+//     },
+//     ratingByCustomers: [ratingByCustomerSchema],
+//     pancardNumber: {
+//       type: String,
+//       default: null,
+//     },
+//     pancardImageURL: {
+//       type: String,
+//       default: null,
+//     },
+//     GSTINNumber: {
+//       type: String,
+//       default: null,
+//     },
+//     GSTINImageURL: {
+//       type: String,
+//       default: null,
+//     },
+//     FSSAINumber: {
+//       type: String,
+//       default: null,
+//     },
+//     FSSAIImageURL: {
+//       type: String,
+//       default: null,
+//     },
+//     aadharNumber: {
+//       type: String,
+//       default: null,
+//     },
+//     aadharImageURL: {
+//       type: String,
+//       default: null,
+//     },
+//     businessCategoryId: [
+//       {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: "BusinessCategory",
+//       },
+//     ],
+//     merchantFoodType: {
+//       type: String,
+//       enum: ["Veg", "Non-veg", "Both", " "],
+//       default: " ",
+//     },
+//     deliveryOption: {
+//       type: String,
+//       enum: ["On-demand", "Scheduled", "Both", " "],
+//       default: " ",
+//     },
+//     deliveryTime: {
+//       type: Number,
+//     },
+//     preOrderStatus: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     preOrderType: {
+//       type: String,
+//       default: null,
+//     },
+//     servingArea: {
+//       type: String,
+//       enum: ["No-restrictions", "Mention-radius", " "],
+//       default: " ",
+//     },
+//     servingRadius: {
+//       type: Number,
+//       default: null,
+//       validate: {
+//         validator: function (v) {
+//           // Allow either null or a valid number
+//           return v === null || typeof v === "number";
+//         },
+//         message: (props) => `${props.value} is not a valid number!`,
+//       },
+//     },
+//     availability: availabilitySchema,
+//     bankDetail: bankDetailSchema,
+//   },
+//   {
+//     _id: false,
+//     minimize: true,
+//     toJSON: { virtuals: true },
+//     toObject: { virtuals: true },
+//   }
+// );
+
+// const payoutSchema = new mongoose.Schema(
+//   {
+//     payoutId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       required: true,
+//     },
+//     date: {
+//       type: Date,
+//       required: true,
+//     },
+//     totalCostPrice: {
+//       type: Number,
+//       required: true,
+//     },
+//     completedOrders: {
+//       type: Number,
+//       required: true,
+//     },
+//     isSettled: {
+//       type: Boolean,
+//       default: false,
+//     },
+//   },
+//   {
+//     _id: false,
+//   }
+// );
+
+// const merchantSchema = new mongoose.Schema(
+//   {
+//     _id: {
+//       type: String,
+//     },
+//     fullName: {
+//       type: String,
+//       default: null,
+//     },
+//     email: {
+//       type: String,
+//       required: true,
+//     },
+//     password: {
+//       type: String,
+//       required: true,
+//     },
+//     phoneNumber: {
+//       type: String,
+//       required: true,
+//     },
+//     role: {
+//       type: String,
+//       default: "Merchant",
+//     },
+//     isApproved: {
+//       type: String,
+//       enum: ["Pending", "Approved"],
+//       default: "Pending",
+//     },
+//     status: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     isBlocked: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     reasonForBlockingOrDeleting: {
+//       type: String,
+//       default: null,
+//     },
+//     blockedDate: {
+//       type: Date,
+//       default: null,
+//     },
+//     openedToday: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     merchantDetail: merchantDetailSchema,
+//     sponsorshipDetail: {
+//       type: [sponsorshipSchema],
+//       default: [],
+//     },
+//     resetPasswordToken: {
+//       type: String,
+//     },
+//     resetPasswordExpiry: {
+//       type: Date,
+//     },
+//     payoutDetail: [payoutSchema],
+//     statusManualToggle: {
+//       type: Boolean,
+//       default: false,
+//     },
+//     refreshToken: {
+//       type: String,
+//       default: null,
+//     },
+//   },
+//   {
+//     timestamps: true,
+//     toJSON: { virtuals: true },
+//     toObject: { virtuals: true },
+//   },
+//   {
+//     timestamps: true,
+//     toJSON: { virtuals: true },
+//     toObject: { virtuals: true },
+//   }
+// );
+
+// // Middleware to set the custom _id before saving
+// merchantSchema.pre("save", async function (next) {
+//   try {
+//     if (this.isNew) {
+//       const now = new Date();
+//       const year = now.getFullYear().toString().slice(-2); // Last two digits of the year
+//       const month = `0${now.getMonth() + 1}`.slice(-2); // Zero-padded month
+
+//       let counter = await DatabaseCounter.findOneAndUpdate(
+//         {
+//           type: "Merchant",
+//           year: parseInt(year, 10),
+//           month: parseInt(month, 10),
+//         },
+//         { $inc: { count: 1 } },
+//         { new: true, upsert: true, setDefaultsOnInsert: true }
+//       );
+
+//       if (!counter) {
+//         throw new Error("Counter document could not be created or updated.");
+//       }
+
+//       const customId = `M${year}${month}${counter.count}`;
+//       this._id = customId;
+//     }
+//     next();
+//   } catch (error) {
+//     next(error);
+//   }
+// });
+
+// // Virtual field for calculating the average rating
+// merchantDetailSchema.virtual("averageRating").get(function () {
+//   if (!this.ratingByCustomers || this.ratingByCustomers.length === 0) {
+//     return 0;
+//   }
+
+//   const total = this?.ratingByCustomers?.reduce(
+//     (acc, rating) => acc + rating.rating,
+//     0
+//   );
+//   return total / this?.ratingByCustomers?.length;
+// });
+
+// // day schema validation before saving the document
+// // daySchema.pre("save", function (next) {
+// //   if (this.openAllDay) {
+// //     this.startTime = null;
+// //     this.endTime = null;
+// //   } else if (this.closedAllDay) {
+// //     this.startTime = null;
+// //     this.endTime = null;
+// //     this.specificTime = false;
+// //   } else if (this.specificTime) {
+// //     if (!this.startTime || !this.endTime) {
+// //       return next(
+// //         new Error(
+// //           "Start time and end time must be provided if specificTime is true"
+// //         )
+// //       );
+// //     }
+// //   }
+// //   next();
+// // });
+
+// merchantSchema.index({ "merchantDetail.geofenceId": 1 });
+// merchantSchema.index({ "merchantDetail.businessCategoryId": 1 });
+// merchantSchema.index({ "merchantDetail.merchantName": 1 });
+// merchantSchema.index({ isApproved: 1, isBlocked: 1 });
+// merchantSchema.index({ status: 1 });
+// merchantSchema.index({ phoneNumber: 1 });
+// merchantSchema.index(
+//   { "merchantDetail.geoLocation": "2dsphere" },
+//   { sparse: true }  // ← add this
+// );
+
+// merchantSchema.index(
+//   {
+//     "merchantDetail.geoLocation": "2dsphere",
+//     isBlocked: 1,
+//     isApproved: 1,
+//   },
+//   { sparse: true }  // ← add this too
+// );
+// const Merchant = mongoose.model("Merchant", merchantSchema);
+// module.exports = Merchant;
+
+
 const mongoose = require("mongoose");
 const DatabaseCounter = require("./DatabaseCounter");
 
 const daySchema = new mongoose.Schema(
   {
-    openAllDay: {
-      type: Boolean,
-      default: false,
-    },
-    closedAllDay: {
-      type: Boolean,
-      default: false,
-    },
-    specificTime: {
-      type: Boolean,
-      default: false,
-    },
-    startTime: {
-      type: String,
-      default: null,
-    },
-    endTime: {
-      type: String,
-      default: null,
-    },
+    openAllDay: { type: Boolean, default: false },
+    closedAllDay: { type: Boolean, default: false },
+    specificTime: { type: Boolean, default: false },
+    startTime: { type: String, default: null },
+    endTime: { type: String, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const availabilitySchema = new mongoose.Schema(
@@ -46,104 +502,45 @@ const availabilitySchema = new mongoose.Schema(
       saturday: daySchema,
     },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const ratingByCustomerSchema = new mongoose.Schema(
   {
-    customerId: {
-      type: String,
-      ref: "User",
-      required: true,
-    },
-    review: {
-      type: String,
-      default: null,
-    },
-    rating: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 5,
-    },
+    customerId: { type: String, ref: "User", required: true },
+    review: { type: String, default: null },
+    rating: { type: Number, required: true, min: 1, max: 5 },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const bankDetailSchema = mongoose.Schema(
   {
-    accountHolderName: {
-      type: String,
-      default: null,
-    },
-    accountNumber: {
-      type: String,
-      default: null,
-    },
-    ifscCode: {
-      type: String,
-      default: null,
-    },
-    upiId: {
-      type: String,
-      default: null,
-    },
+    accountHolderName: { type: String, default: null },
+    accountNumber: { type: String, default: null },
+    ifscCode: { type: String, default: null },
+    upiId: { type: String, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const sponsorshipSchema = mongoose.Schema(
   {
-    sponsorshipStatus: {
-      type: Boolean,
-      default: false,
-    },
-    currentPlan: {
-      type: String,
-      default: null,
-    },
-    startDate: {
-      type: Date,
-      default: null,
-    },
-    endDate: {
-      type: Date,
-      default: null,
-    },
-    paymentDetails: {
-      type: mongoose.Schema.Types.Mixed,
-      default: null,
-    },
+    sponsorshipStatus: { type: Boolean, default: false },
+    currentPlan: { type: String, default: null },
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    paymentDetails: { type: mongoose.Schema.Types.Mixed, default: null },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const merchantDetailSchema = new mongoose.Schema(
   {
-    merchantName: {
-      type: String,
-      default: null,
-    },
-    merchantImageURL: {
-      type: String,
-      default: null,
-    },
-    displayAddress: {
-      type: String,
-      default: null,
-    },
-    description: {
-      type: String,
-      default: null,
-    },
+    merchantName: { type: String, default: null },
+    merchantImageURL: { type: String, default: null },
+    displayAddress: { type: String, default: null },
+    description: { type: String, default: null },
     geofenceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Geofence",
@@ -164,12 +561,10 @@ const merchantDetailSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number],
-        default: undefined, // ← prevents Mongoose from initializing as []
+        default: undefined, // prevents Mongoose from initializing as []
         validate: {
           validator: function (value) {
-            // Allow missing/undefined/empty
             if (!value || value.length === 0) return true;
-
             return (
               Array.isArray(value) &&
               value.length === 2 &&
@@ -181,43 +576,16 @@ const merchantDetailSchema = new mongoose.Schema(
         },
       },
     },
-    locationImage: {
-      type: String,
-      default: null,
-    },
+    locationImage: { type: String, default: null },
     ratingByCustomers: [ratingByCustomerSchema],
-    pancardNumber: {
-      type: String,
-      default: null,
-    },
-    pancardImageURL: {
-      type: String,
-      default: null,
-    },
-    GSTINNumber: {
-      type: String,
-      default: null,
-    },
-    GSTINImageURL: {
-      type: String,
-      default: null,
-    },
-    FSSAINumber: {
-      type: String,
-      default: null,
-    },
-    FSSAIImageURL: {
-      type: String,
-      default: null,
-    },
-    aadharNumber: {
-      type: String,
-      default: null,
-    },
-    aadharImageURL: {
-      type: String,
-      default: null,
-    },
+    pancardNumber: { type: String, default: null },
+    pancardImageURL: { type: String, default: null },
+    GSTINNumber: { type: String, default: null },
+    GSTINImageURL: { type: String, default: null },
+    FSSAINumber: { type: String, default: null },
+    FSSAIImageURL: { type: String, default: null },
+    aadharNumber: { type: String, default: null },
+    aadharImageURL: { type: String, default: null },
     businessCategoryId: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -234,17 +602,9 @@ const merchantDetailSchema = new mongoose.Schema(
       enum: ["On-demand", "Scheduled", "Both", " "],
       default: " ",
     },
-    deliveryTime: {
-      type: Number,
-    },
-    preOrderStatus: {
-      type: Boolean,
-      default: false,
-    },
-    preOrderType: {
-      type: String,
-      default: null,
-    },
+    deliveryTime: { type: Number },
+    preOrderStatus: { type: Boolean, default: false },
+    preOrderType: { type: String, default: null },
     servingArea: {
       type: String,
       enum: ["No-restrictions", "Mention-radius", " "],
@@ -255,7 +615,6 @@ const merchantDetailSchema = new mongoose.Schema(
       default: null,
       validate: {
         validator: function (v) {
-          // Allow either null or a valid number
           return v === null || typeof v === "number";
         },
         message: (props) => `${props.value} is not a valid number!`,
@@ -274,107 +633,40 @@ const merchantDetailSchema = new mongoose.Schema(
 
 const payoutSchema = new mongoose.Schema(
   {
-    payoutId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-    },
-    date: {
-      type: Date,
-      required: true,
-    },
-    totalCostPrice: {
-      type: Number,
-      required: true,
-    },
-    completedOrders: {
-      type: Number,
-      required: true,
-    },
-    isSettled: {
-      type: Boolean,
-      default: false,
-    },
+    payoutId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    date: { type: Date, required: true },
+    totalCostPrice: { type: Number, required: true },
+    completedOrders: { type: Number, required: true },
+    isSettled: { type: Boolean, default: false },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
 const merchantSchema = new mongoose.Schema(
   {
-    _id: {
-      type: String,
-    },
-    fullName: {
-      type: String,
-      default: null,
-    },
-    email: {
-      type: String,
-      required: true,
-    },
-    password: {
-      type: String,
-      required: true,
-    },
-    phoneNumber: {
-      type: String,
-      required: true,
-    },
-    role: {
-      type: String,
-      default: "Merchant",
-    },
+    _id: { type: String },
+    fullName: { type: String, default: null },
+    email: { type: String, required: true },
+    password: { type: String, required: true },
+    phoneNumber: { type: String, required: true },
+    role: { type: String, default: "Merchant" },
     isApproved: {
       type: String,
       enum: ["Pending", "Approved"],
       default: "Pending",
     },
-    status: {
-      type: Boolean,
-      default: false,
-    },
-    isBlocked: {
-      type: Boolean,
-      default: false,
-    },
-    reasonForBlockingOrDeleting: {
-      type: String,
-      default: null,
-    },
-    blockedDate: {
-      type: Date,
-      default: null,
-    },
-    openedToday: {
-      type: Boolean,
-      default: false,
-    },
+    status: { type: Boolean, default: false },
+    isBlocked: { type: Boolean, default: false },
+    reasonForBlockingOrDeleting: { type: String, default: null },
+    blockedDate: { type: Date, default: null },
+    openedToday: { type: Boolean, default: false },
     merchantDetail: merchantDetailSchema,
-    sponsorshipDetail: {
-      type: [sponsorshipSchema],
-      default: [],
-    },
-    resetPasswordToken: {
-      type: String,
-    },
-    resetPasswordExpiry: {
-      type: Date,
-    },
+    sponsorshipDetail: { type: [sponsorshipSchema], default: [] },
+    resetPasswordToken: { type: String },
+    resetPasswordExpiry: { type: Date },
     payoutDetail: [payoutSchema],
-    statusManualToggle: {
-      type: Boolean,
-      default: false,
-    },
-    refreshToken: {
-      type: String,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    statusManualToggle: { type: Boolean, default: false },
+    refreshToken: { type: String, default: null },
   },
   {
     timestamps: true,
@@ -383,15 +675,15 @@ const merchantSchema = new mongoose.Schema(
   }
 );
 
-// Middleware to set the custom _id before saving
+// Custom _id pre-save
 merchantSchema.pre("save", async function (next) {
   try {
     if (this.isNew) {
       const now = new Date();
-      const year = now.getFullYear().toString().slice(-2); // Last two digits of the year
-      const month = `0${now.getMonth() + 1}`.slice(-2); // Zero-padded month
+      const year = now.getFullYear().toString().slice(-2);
+      const month = `0${now.getMonth() + 1}`.slice(-2);
 
-      let counter = await DatabaseCounter.findOneAndUpdate(
+      const counter = await DatabaseCounter.findOneAndUpdate(
         {
           type: "Merchant",
           year: parseInt(year, 10),
@@ -405,8 +697,7 @@ merchantSchema.pre("save", async function (next) {
         throw new Error("Counter document could not be created or updated.");
       }
 
-      const customId = `M${year}${month}${counter.count}`;
-      this._id = customId;
+      this._id = `M${year}${month}${counter.count}`;
     }
     next();
   } catch (error) {
@@ -414,40 +705,14 @@ merchantSchema.pre("save", async function (next) {
   }
 });
 
-// Virtual field for calculating the average rating
+// Virtual: averageRating
 merchantDetailSchema.virtual("averageRating").get(function () {
-  if (!this.ratingByCustomers || this.ratingByCustomers.length === 0) {
-    return 0;
-  }
-
-  const total = this?.ratingByCustomers?.reduce(
-    (acc, rating) => acc + rating.rating,
-    0
-  );
-  return total / this?.ratingByCustomers?.length;
+  if (!this.ratingByCustomers || this.ratingByCustomers.length === 0) return 0;
+  const total = this.ratingByCustomers.reduce((acc, r) => acc + r.rating, 0);
+  return total / this.ratingByCustomers.length;
 });
 
-// day schema validation before saving the document
-// daySchema.pre("save", function (next) {
-//   if (this.openAllDay) {
-//     this.startTime = null;
-//     this.endTime = null;
-//   } else if (this.closedAllDay) {
-//     this.startTime = null;
-//     this.endTime = null;
-//     this.specificTime = false;
-//   } else if (this.specificTime) {
-//     if (!this.startTime || !this.endTime) {
-//       return next(
-//         new Error(
-//           "Start time and end time must be provided if specificTime is true"
-//         )
-//       );
-//     }
-//   }
-//   next();
-// });
-
+// Indexes
 merchantSchema.index({ "merchantDetail.geofenceId": 1 });
 merchantSchema.index({ "merchantDetail.businessCategoryId": 1 });
 merchantSchema.index({ "merchantDetail.merchantName": 1 });
@@ -456,16 +721,16 @@ merchantSchema.index({ status: 1 });
 merchantSchema.index({ phoneNumber: 1 });
 merchantSchema.index(
   { "merchantDetail.geoLocation": "2dsphere" },
-  { sparse: true }  // ← add this
+  { sparse: true }
 );
-
 merchantSchema.index(
   {
     "merchantDetail.geoLocation": "2dsphere",
     isBlocked: 1,
     isApproved: 1,
   },
-  { sparse: true }  // ← add this too
+  { sparse: true }
 );
+
 const Merchant = mongoose.model("Merchant", merchantSchema);
 module.exports = Merchant;
