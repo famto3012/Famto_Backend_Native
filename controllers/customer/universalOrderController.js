@@ -889,6 +889,9 @@ const filterAndSearchMerchantController =
       const baseMatch = {
         isBlocked: false,
         isApproved: "Approved",
+        "merchantDetail.pricing.0": { $exists: true },
+        "merchantDetail.pricing.0.modelType": { $exists: true, $ne: null },
+        "merchantDetail.pricing.0.modelId": { $exists: true, $ne: null },
         "merchantDetail.businessCategoryId":
         {
           $in: [categoryObjId],
@@ -929,18 +932,10 @@ const filterAndSearchMerchantController =
       // =====================================
 
       const pipeline = [
-        // GEO INDEX (FASTEST PART)
         {
           $geoNear: {
-            near: {
-              type: "Point",
-              coordinates: [
-                longitude,
-                latitude,
-              ],
-            },
-            key:
-              "merchantDetail.geoLocation",
+            near: { type: "Point", coordinates: [longitude, latitude] },
+            key: "merchantDetail.geoLocation",
             distanceField: "distance",
             spherical: true,
             distanceMultiplier: 0.001,
@@ -949,91 +944,61 @@ const filterAndSearchMerchantController =
           },
         },
 
-        // SERVING FILTER
+        // ✅ Compute average rating early
+        {
+          $addFields: {
+            "merchantDetail.computedRating": {
+              $cond: {
+                if: { $gt: [{ $size: { $ifNull: ["$merchantDetail.ratingByCustomers", []] } }, 0] },
+                then: { $avg: "$merchantDetail.ratingByCustomers.rating" },
+                else: 0,
+              },
+            },
+          },
+        },
+
+        // ✅ Rating filter as separate stage
+        ...(filterType?.toLowerCase() === "rating 4.0+"
+          ? [{ $match: { "merchantDetail.computedRating": { $gte: 4 } } }]
+          : []),
+
         {
           $match: {
             $or: [
+              { "merchantDetail.servingArea": "No-restrictions" },
               {
-                "merchantDetail.servingArea":
-                  "No-restrictions",
-              },
-              {
-                "merchantDetail.servingArea":
-                  "Mention-radius",
-                $expr: {
-                  $lte: [
-                    "$distance",
-                    "$merchantDetail.servingRadius",
-                  ],
-                },
+                "merchantDetail.servingArea": "Mention-radius",
+                $expr: { $lte: ["$distance", "$merchantDetail.servingRadius"] },
               },
             ],
           },
         },
 
-        // PRIORITY MERCHANT
         {
           $addFields: {
             priorityMerchant: {
-              $cond: [
-                {
-                  $eq: [
-                    "$_id",
-                    merchantId || "",
-                  ],
-                },
-                1,
-                0,
-              ],
+              $cond: [merchantId ? { $eq: ["$_id", merchantId] } : false, 1, 0],
             },
           },
         },
 
-        // SORT (VERY IMPORTANT)
-        {
-          $sort: {
-            priorityMerchant: -1,
-            status: -1,
-            distance: 1,
-          },
-        },
-
-        // PAGINATION
+        { $sort: { priorityMerchant: -1, status: -1, distance: 1 } },
         { $skip: skip },
         { $limit: limit },
 
-        // FINAL SHAPE (NO HEAVY OPS)
         {
           $project: {
             _id: 1,
             status: 1,
-            distance: {
-              $round: ["$distance", 2],
-            },
-
-            merchantName:
-              "$merchantDetail.merchantName",
-
-            description:
-              "$merchantDetail.description",
-
-            averageRating:
-              "$merchantDetail.averageRating", // PRECOMPUTED ⚡
-
-            restaurantType:
-              "$merchantDetail.merchantFoodType",
-
-            merchantImageURL:
-              "$merchantDetail.merchantImageURL",
-
-            displayAddress:
-              "$merchantDetail.displayAddress",
-
-            preOrderStatus:
-              "$merchantDetail.preOrderStatus",
-
-            availability:
-              "$merchantDetail.availability",
+            distance: { $round: ["$distance", 2] },
+            merchantName: "$merchantDetail.merchantName",
+            description: "$merchantDetail.description",
+            averageRating: "$merchantDetail.computedRating", // ✅
+            restaurantType: "$merchantDetail.merchantFoodType",
+            merchantImageURL: "$merchantDetail.merchantImageURL",
+            displayAddress: "$merchantDetail.displayAddress",
+            preOrderStatus: "$merchantDetail.preOrderStatus",
+            availability: "$merchantDetail.availability",
           },
         },
       ];
