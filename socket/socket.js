@@ -102,7 +102,6 @@ const io = socketio(server, {
 const userSocketMap = {};
 
 const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
-
   console.log("=========== PUSH DEBUG ===========");
   console.log("Event:", eventName);
   console.log("Token:", fcmToken);
@@ -120,7 +119,6 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
       body: notificationSettings?.description || message?.body || "",
       image: message?.image || "",
     },
-
     data: {
       orderId: String(message?.orderId || ""),
       merchantName: String(message?.merchantName || ""),
@@ -132,7 +130,6 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
       taskTime: String(message?.taskTime || ""),
       timer: String(message?.timer || ""),
     },
-
     webpush: {
       fcm_options: {
         link: "https://dashboard.famto.in/home",
@@ -141,39 +138,50 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
         icon: "https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup%20427320384.svg?alt=media",
       },
     },
-
     token: fcmToken,
   };
 
+  // ✅ Try Project 1 first
   try {
-
     console.log("Sending push using Firebase Project 1...");
-
-    throw new Error("Project1 disabled");
-
     const response = await admin1.messaging(app1).send(payload);
-
     console.log("Push Success (Project1):", response);
-
-    return false;
-
+    return true;
   } catch (error1) {
-
     console.error("Project1 failed:", error1.message);
 
+    // ✅ Fall back to Project 2
     try {
-
       console.log("Retrying push using Firebase Project 2...");
-
       const response = await admin2.messaging(app2).send(payload);
-
       console.log("Push Success (Project2):", response);
-
       return true;
-
     } catch (error2) {
-
       console.error("Project2 failed:", error2.message);
+
+      // ✅ Auto-clean invalid tokens from DB
+      const invalidErrors = [
+        "registration-token-not-registered",
+        "invalid-registration-token",
+        "Requested entity was not found",
+        "SenderId mismatch",
+      ];
+
+      const shouldClean = invalidErrors.some((e) =>
+        error2.message?.includes(e)
+      );
+
+      if (shouldClean) {
+        try {
+          await FcmToken.updateMany(
+            { token: fcmToken },
+            { $pull: { token: fcmToken } }
+          );
+          console.log("Cleaned invalid FCM token:", fcmToken);
+        } catch (cleanErr) {
+          console.error("Failed to clean FCM token:", cleanErr.message);
+        }
+      }
 
       return false;
     }
