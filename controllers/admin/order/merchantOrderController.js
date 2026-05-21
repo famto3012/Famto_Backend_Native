@@ -2168,7 +2168,7 @@ const createInvoiceController = async (req, res, next) => {
       newPickupAddress?.latitude,
       newPickupAddress?.longitude,
     ];
-    const merchantLocation = merchantFound.merchantDetail.location;
+    const merchantLocation = merchantFound.merchantDetail.geoLocation.coordinates;
 
     const customerAddressFromPickOrDrop = locationArraysEqual(
       newPickLocation,
@@ -2544,7 +2544,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
     }
 
     const { distanceInKM } = await getDistanceFromPickupToDelivery(
-      merchant.merchantDetail.location,
+      merchant.merchantDetail.geoLocation.coordinates,
       address.coordinates
     );
 

@@ -55,49 +55,84 @@ const getDistanceFromPickupToDelivery = async (
   deliveryCoordinates,
   profile = "biking"
 ) => {
-  if (pickupCoordinates.length !== 2 || deliveryCoordinates.length !== 2) {
+  console.log("pickupcordinates", pickupCoordinates);
+  console.log("deliverycordinates", deliveryCoordinates);
+
+  // -----------------------------
+  // CONVERT ANY INPUT → [lat,lng]
+  // -----------------------------
+  const normalize = (input) => {
+    if (!input) return null;
+
+    // if string "lat,lng"
+    if (typeof input === "string") {
+      const parts = input.split(",");
+      if (parts.length !== 2) return null;
+      return [Number(parts[0]), Number(parts[1])];
+    }
+
+    if (!Array.isArray(input)) return null;
+    if (input.length !== 2) return null;
+
+    let a = Number(input[0]);
+    let b = Number(input[1]);
+
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+    // detect lng,lat → swap
+    if (Math.abs(a) > 90 && Math.abs(b) <= 90) {
+      return [b, a];
+    }
+
+    return [a, b];
+  };
+
+  const pickup = normalize(pickupCoordinates);
+  const delivery = normalize(deliveryCoordinates);
+
+  if (!pickup || !delivery) {
+    console.log("Error: invalid input after normalization");
     throw new Error("Invalid coordinates to find the distance");
   }
 
-console.log("Cordinated", pickupCoordinates , deliveryCoordinates , profile);
+  const [pickLat, pickLng] = pickup;
+  const [delLat, delLng] = delivery;
 
-  // if (process.env.NODE_ENV === "development") {
-  //   const getRandomFloat = (min, max) => {
-  //     const random = Math.random() * (max - min) + min;
-  //     return Number(random.toFixed(2));
-  //   };
+  // MapMyIndia expects lng,lat
+  const url = `https://apis.mapmyindia.com/advancedmaps/v1/${
+    process.env.MapMyIndiaAPIKey
+  }/distance_matrix/${profile}/${pickLng},${pickLat};${delLng},${delLat}`;
 
-  //   return {
-  //     distanceInKM: getRandomFloat(2, 10),
-  //     durationInMinutes: getRandomFloat(5.5, 30),
-  //   };
-  // }
+  console.log("Distance URL:", url);
 
-  const { data } = await axios.get(
-    `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${pickupCoordinates[1]},${pickupCoordinates[0]};${deliveryCoordinates[1]},${deliveryCoordinates[0]}`
-  );
+  const { data } = await axios.get(url);
 
-  if (
-    data &&
-    data.results &&
-    data.results.distances &&
-    data.results.distances.length > 0
-  ) {
-    const finalDistance = data.results.distances[0]?.length - 1;
-    const finalDuration = data.results.distances[0]?.length - 1;
-    const distance = (data.results.distances[0][finalDistance] / 1000).toFixed(
-      2
-    );
-    const durationInMinutes = Math.ceil(
-      data.results.durations[0][finalDuration] / 60
-    );
+  console.log("MapMyIndia response:", JSON.stringify(data, null, 2));
 
-    const distanceInKM = parseFloat(distance);
+  const matrix = data?.results?.distances?.[0];
+  const durationMatrix = data?.results?.durations?.[0];
 
-    return { distanceInKM, durationInMinutes };
+  if (!Array.isArray(matrix) || !Array.isArray(durationMatrix)) {
+    throw new Error("No distance matrix returned from MapMyIndia");
   }
-};
 
+  const distanceMeters = matrix[1] ?? matrix[0];
+  const durationSeconds = durationMatrix[1] ?? durationMatrix[0];
+
+  if (distanceMeters == null) {
+    throw new Error("Distance not found in matrix");
+  }
+
+  const distanceInKM = Number((distanceMeters / 1000).toFixed(2));
+  const durationInMinutes = Math.ceil((durationSeconds || 0) / 60);
+
+  console.log("Distance in KM:", distanceInKM);
+
+  return {
+    distanceInKM,
+    durationInMinutes,
+  };
+};
 
 const getDistanceFromMultipleCoordinates = async (
   coordinates,

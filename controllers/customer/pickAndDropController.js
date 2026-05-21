@@ -1248,6 +1248,8 @@ const addPickUpAddressController = async (req, res, next) => {
 
     const coordinates = filterCoordinatesFromData(parsedData);
 
+    console.log(coordinates);
+
     const { distanceInKM, duration } = await getDistanceFromMultipleCoordinates(
       coordinates
     );
@@ -1325,6 +1327,7 @@ const addPickUpAddressController = async (req, res, next) => {
 
     res.status(200).json({ success: true, cartId: newCart._id });
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message));
   }
 };
@@ -1760,6 +1763,7 @@ const confirmPickAndDropController = async (req, res, next) => {
           0,
         paymentMode: "Famto-cash",
         paymentStatus: "PAYMENT_COMPLETED",
+        expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec cancellation window
       });
 
       if (!tempOrder)
@@ -1806,7 +1810,10 @@ const confirmPickAndDropController = async (req, res, next) => {
 
             totalAmount: storedOrderData.totalAmount,
             paymentMode: storedOrderData.paymentMode,
-            paymentStatus: storedOrderData.paymentStatus,
+            paymentStatus:
+            tempOrder.paymentStatus === "PAYMENT_COMPLETED"
+              ? "Completed"
+              : "Pending",
             paymentId: storedOrderData.paymentId,
             orderDetailStepper: {
               created: {

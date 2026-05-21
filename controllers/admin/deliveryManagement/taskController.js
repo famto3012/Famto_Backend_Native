@@ -192,7 +192,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
     const deliveryMode = task?.orderId?.deliveryMode;
     const deliveryLocation = task?.orderId?.pickups?.[0]?.location;
     const merchant = task?.orderId?.merchantId;
-    const merchantLocation = merchant?.merchantDetail?.location;
+    const merchantLocation = merchant?.merchantDetail.geoLocation.coordinates;
     const geofence = merchant?.merchantDetail?.geofenceId;
 
     // Match Criteria

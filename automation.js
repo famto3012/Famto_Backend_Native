@@ -11,6 +11,8 @@ const Product = require("./models/Product");
 const csvWriter = require("csv-writer").createObjectCsvWriter;
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
+
 
 const moment = require("moment-timezone");
 const {
@@ -831,7 +833,7 @@ const migrateOrdersToNewSchema = async () => {
         paymentMode: order.paymentMode || "Famto-cash",
         paymentId: order.paymentId || null,
         refundId: order.refundId || null,
-        paymentStatus: order.paymentStatus || "Pending",
+        paymentStatus: order.paymentStatus || "PENDING",
         paymentCollectedFromCustomer: order.paymentCollectedFromCustomer || "Pending",
         cancellationReason: order.cancellationReason || null,
         cancellationDescription: order.cancellationDescription || null,
@@ -862,7 +864,84 @@ const migrateOrdersToNewSchema = async () => {
   }
 };
 
+const migrateMerchantGeoLocations =
+  async () => {
+    try {
+      console.log(
+        "Starting geo migration..."
+      );
 
-  
+      const merchants =
+        await Merchant.find({}).lean();
+
+      console.log(
+        `Total merchants: ${merchants.length}`
+      );
+
+      let updated = 0;
+
+      for (const merchant of merchants) {
+        const location =
+          merchant?.merchantDetail?.location;
+
+        // STRICT VALIDATION
+        if (
+          !Array.isArray(location) ||
+          location.length !== 2 ||
+          typeof location[0] !==
+          "number" ||
+          typeof location[1] !==
+          "number"
+        ) {
+          console.log(
+            `Skipping invalid: ${merchant._id}`
+          );
+          continue;
+        }
+
+        const latitude = location[0];
+        const longitude = location[1];
+
+        await Merchant.updateOne(
+          { _id: merchant._id },
+          {
+            $set: {
+              "merchantDetail.geoLocation":
+              {
+                type: "Point",
+                coordinates: [
+                  longitude,
+                  latitude,
+                ],
+              },
+            },
+          }
+        );
+
+        updated++;
+
+        console.log(
+          `Updated ${merchant._id}`
+        );
+      }
+
+      console.log(
+        "========================"
+      );
+
+      console.log(
+        `TOTAL UPDATED: ${updated}`
+      );
+
+      console.log(
+        "Geo migration completed"
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  };
+// migrateMerchantGeoLocations();
+
+
 // migrateOrdersToNewSchema();
 // prepareOrderDetailsInPayout();

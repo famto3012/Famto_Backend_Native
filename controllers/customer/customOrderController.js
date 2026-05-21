@@ -514,14 +514,14 @@ const getCustomCartBill = async (req, res, next) => {
     const billDetail = {
       deliveryCharge: havePickupLocation
         ? cart?.billDetail?.discountedDeliveryCharge ||
-          cart?.billDetail?.originalDeliveryCharge
+        cart?.billDetail?.originalDeliveryCharge
         : null,
       discountedAmount: havePickupLocation
         ? cart?.billDetail?.discountedAmount
         : null,
       grandTotal: havePickupLocation
         ? cart?.billDetail?.discountedGrandTotal ||
-          cart?.billDetail?.originalGrandTotal
+        cart?.billDetail?.originalGrandTotal
         : null,
       taxAmount: havePickupLocation ? cart?.billDetail?.taxAmount : null,
       itemTotal: cart?.billDetail?.itemTotal || null,
@@ -601,7 +601,7 @@ const confirmCustomOrderController = async (req, res, next) => {
       endDate: cart.endDate,
       time: cart.time,
       numOfDays: cart.numOfDays,
-
+      expiresAt: new Date(Date.now() + 60 * 1000), // 60 sec cancellation window
       totalAmount:
         cart?.billDetail?.discountedGrandTotal ||
         cart?.billDetail?.originalGrandTotal ||
@@ -672,7 +672,11 @@ const confirmCustomOrderController = async (req, res, next) => {
           totalAmount: storedOrderData.totalAmount,
 
           paymentMode: storedOrderData.paymentMode,
-          paymentStatus: storedOrderData.paymentStatus,
+          paymentStatus:
+        tempOrder.paymentStatus === "PAYMENT_COMPLETED"
+          ? "Completed"
+          : "Pending",
+
           purchasedItems: storedOrderData.purchasedItems || [],
           orderDetailStepper: {
             created: {
@@ -694,11 +698,9 @@ const confirmCustomOrderController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Custom Order (#${
-              newOrder._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Custom Order (#${newOrder._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
         ]);
 

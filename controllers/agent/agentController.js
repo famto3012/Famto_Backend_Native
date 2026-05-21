@@ -56,6 +56,7 @@ const {
 } = require("../../utils/razorpayPayment");
 const AgentPricing = require("../../models/AgentPricing");
 const BatchOrder = require("../../models/BatchOrder");
+const { normalizeLatLng } = require("../../utils/createOrderHelpers");
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
@@ -1475,8 +1476,8 @@ const getPickUpDetailController = async (req, res, next) => {
         pickupLocation:
           taskFound[0]?.deliveryMode === "Home Delivery" ||
             taskFound[0]?.deliveryMode === "Take Away"
-            ? merchantFound?.merchantDetail?.location || null
-            : pickupDetail?.location || null,
+            ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
+            : normalizeLatLng(pickupDetail?.location) || null,
         deliveryMode: taskFound[0]?.deliveryMode || null,
         orderItems: taskFound.flatMap(
           (task) => task?.orderId?.purchasedItems || []
@@ -1539,8 +1540,8 @@ const getPickUpDetailController = async (req, res, next) => {
         pickupLocation:
           taskFound?.deliveryMode === "Home Delivery" ||
             taskFound?.deliveryMode === "Take Away"
-            ? merchantFound?.merchantDetail?.location || null
-            : pickupDetail?.location || null,
+            ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
+            : normalizeLatLng(pickupDetail?.location) || null,
         deliveryMode: taskFound?.deliveryMode || null,
         orderItems: taskFound?.orderId?.purchasedItems || [],
         billDetail: taskFound?.orderId?.billDetail || {},
@@ -2097,11 +2098,11 @@ const completeOrderController = async (req, res, next) => {
       await processReferralRewards(customerFound, itemTotal);
     }
 
-    // Agent earnings
-    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
-      agentFound,
-      orderFound
-    );
+    const { calculatedSalary: rawSalary, calculatedSurge: rawSurge } =
+      await calculateAgentEarnings(agentFound, orderFound);
+
+    const calculatedSalary = Number.isFinite(rawSalary) ? rawSalary : 0;
+    const calculatedSurge = Number.isFinite(rawSurge) ? rawSurge : 0;
 
     console.log("✅ Calculated Salary:", calculatedSalary);
     console.log("✅ Calculated Surge:", calculatedSurge);

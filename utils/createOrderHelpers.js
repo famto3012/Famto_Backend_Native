@@ -503,12 +503,38 @@ const handleAddressDetails = async (
 ) => {
   let pickupLocation, pickupAddress, deliveryLocation, deliveryAddress;
 
-  const merchantLocation = merchantFound?.merchantDetail?.location;
+  const merchantLocation =
+    merchantFound?.merchantDetail?.geoLocation?.coordinates ||
+    merchantFound?.merchantDetail?.location;
   const merchantInfo = {
     fullName: merchantFound?.merchantDetail?.merchantName,
     area: merchantFound?.merchantDetail?.displayAddress,
     phoneNumber: merchantFound?.phoneNumber,
   };
+
+  // if (!merchantLocation || merchantLocation.length !== 2) {
+  //   throw new Error("Merchant location is missing or invalid");
+  // }
+
+  const normalize = (loc) => {
+    if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+    let [a, b] = loc.map(Number);
+
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+    // Detect lat/lng swap safely
+    const isLatLng = Math.abs(a) <= 90 && Math.abs(b) <= 180;
+    const isLngLat = Math.abs(a) <= 180 && Math.abs(b) <= 90;
+
+    if (isLatLng && !isLngLat) {
+      // already lat,lng → convert to lng,lat
+      return [b, a];
+    }
+
+    return [a, b]; // assume already lng,lat
+  };
+  console.log("merchant location", merchantLocation);
 
   // Set pickup and delivery details for "Take Away"
   if (deliveryMode === "Take Away") {
@@ -519,7 +545,7 @@ const handleAddressDetails = async (
 
   // Set pickup details for "Home Delivery"
   if (deliveryMode === "Home Delivery") {
-    pickupLocation = merchantLocation;
+    pickupLocation = normalize(merchantLocation);
     pickupAddress = merchantInfo;
 
     if (newCustomer) {
@@ -715,10 +741,12 @@ const handleDeliveryMode = async (
   if (deliveryMode !== "Take Away") {
     // For Pick and Drop, use the actual pickup location (could be customer address or merchant shop).
     // For Home Delivery, pickup is always the merchant's shop.
-    const fromLocation =
+     const rawFrom =
       deliveryMode === "Pick and Drop"
         ? addressDetails.pickupLocation
-        : merchant.merchantDetail.location;
+        : merchant.merchantDetail.geoLocation.coordinates;
+
+    const fromLocation = normalizeLatLng(rawFrom);
 
     if (fromLocation?.length === 2 && addressDetails.deliveryLocation?.length === 2) {
       const { distanceInKM } = await getDistanceFromPickupToDelivery(
@@ -820,11 +848,11 @@ const calculateDeliveryChargesHelper = async ({
         console.log("🔄 Return Charge:", returnCharge);
       }
     }
-// ✅ ADD HERE
-if (returnCharge) {
-  console.log("➕ Adding Return Charge to Delivery Charge");
-  oneTimeDeliveryCharge += returnCharge;
-}
+    // ✅ ADD HERE
+    if (returnCharge) {
+      console.log("➕ Adding Return Charge to Delivery Charge");
+      oneTimeDeliveryCharge += returnCharge;
+    }
     console.log("⚡ Fetching Surge Pricing...");
     const customerSurge = await CustomerSurge.findOne({
       geofenceId: customer.customerDetails.geofenceId,
@@ -1028,7 +1056,7 @@ const applyDiscounts = async ({ items, itemTotal, merchantId }) => {
       product.discountId.status &&
       new Date(product.discountId.validFrom) <= currentDate &&
       new Date(product.discountId.validTo).setHours(23, 59, 59, 999) >=
-        currentDate;
+      currentDate;
 
     if (validProductDiscount) continue;
 
@@ -1042,14 +1070,14 @@ const applyDiscounts = async ({ items, itemTotal, merchantId }) => {
       if (
         new Date(merchantDiscount.validFrom) <= currentDate &&
         new Date(merchantDiscount.validTo).setHours(23, 59, 59, 999) >=
-          currentDate
+        currentDate
       ) {
         const discountValue =
           merchantDiscount.discountType === "Percentage-discount"
             ? Math.min(
-                (itemTotal * merchantDiscount.discountValue) / 100,
-                merchantDiscount.maxDiscountValue
-              )
+              (itemTotal * merchantDiscount.discountValue) / 100,
+              merchantDiscount.maxDiscountValue
+            )
             : merchantDiscount.discountValue;
         merchantDiscountAmount += discountValue;
       }
@@ -1206,25 +1234,211 @@ const handleDeliveryModeForAdmin = async (
     customPickupLocation
   );
 
-  let distance = 0;
+  // -----------------------------
+  // SAFE NORMALIZER (fixes lng/lat issues)
+  // -----------------------------
+  const normalizeLatLng = (loc) => {
+  if (!loc) return null;
 
-  const customOrderWithPick = addressDetails?.pickupLocation?.length === 2;
-
-  // Calculate distance only if the delivery mode is not "Take Away" and pickupLocation is available
-  if (deliveryMode !== "Take Away" && customOrderWithPick) {
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
-      addressDetails.pickupLocation,
-      addressDetails.deliveryLocation
-    );
-
-    distance = distanceInKM;
+  if (typeof loc.toObject === "function") {
+    loc = loc.toObject();
   }
 
+  if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+  let a = Number(loc[0]);
+  let b = Number(loc[1]);
+
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+  // Standard out-of-range swap (handles |lng| > 90 cases)
+  if (Math.abs(a) > 90 && Math.abs(b) <= 90) {
+    return [b, a];
+  }
+
+  // India-specific heuristic:
+  // lng is ~68–98, lat is ~6–38
+  // If a looks like an Indian longitude and b looks like a latitude → swap
+  const looksLikeIndianLng = (v) => v >= 60 && v <= 100;
+  const looksLikeIndianLat = (v) => v >= 5 && v <= 40;
+
+  if (looksLikeIndianLng(a) && looksLikeIndianLat(b)) {
+    return [b, a]; // swap [lng, lat] → [lat, lng]
+  }
+
+  return [a, b];
+};
+
+  // -----------------------------
+  // MAPMYINDIA FORMAT (string)
+  // -----------------------------
+  const toMapMyIndia = (loc) => {
+    if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+    const lat = Number(loc[0]);
+    const lng = Number(loc[1]);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+    return `${lat},${lng}`;
+  };
+
+  // -----------------------------
+  // MERCHANT LOCATION SAFE PICK
+  // -----------------------------
+  const rawMerchantLocation =
+    merchant?.merchantDetail?.location ||
+    merchant?.merchantDetail?.geoLocation?.coordinates ||
+    merchant?.location ||
+    null;
+
+  const merchantLocation = normalizeLatLng(rawMerchantLocation);
+
+  console.log("RAW MERCHANT:", rawMerchantLocation);
+  console.log("NORMALIZED MERCHANT:", merchantLocation);
+
+  // -----------------------------
+  // PICKUP / DELIVERY LOGIC
+  // -----------------------------
+  const isMerchantPickup =
+    deliveryMode === "Take Away" ||
+    deliveryMode === "Home Delivery";
+
+  let pickup = isMerchantPickup
+    ? merchantLocation
+    : addressDetails?.pickupLocation;
+
+  let delivery = addressDetails?.deliveryLocation;
+
+  // -----------------------------
+  // FINAL NORMALIZATION
+  // -----------------------------
+  pickup = normalizeLatLng(pickup);
+  delivery = normalizeLatLng(delivery);
+
+  console.log("FINAL PICKUP:", pickup);
+  console.log("FINAL DELIVERY:", delivery);
+
+  if (!delivery) {
+    throw new Error("Invalid coordinates for distance calculation");
+  }
+
+  // -----------------------------
+  // MAPMYINDIA INPUT FORMAT FIX
+  // -----------------------------
+  const pickupStr = toMapMyIndia(pickup);
+  const deliveryStr = toMapMyIndia(delivery);
+
+  console.log("MAP PICKUP:", pickupStr);
+  console.log("MAP DELIVERY:", deliveryStr);
+
+  if (!deliveryStr) {
+    throw new Error("Invalid MapMyIndia coordinate format");
+  }
+
+  // -----------------------------
+  // DISTANCE API CALL
+  // -----------------------------
+  let distance = 0;
+
+  if (deliveryMode !== "Take Away" && pickupStr) {
+    const result = await getDistanceFromPickupToDelivery(
+      pickupStr,
+      deliveryStr
+    );
+
+    distance = result?.distanceInKM || 0;
+  }
+
+  // -----------------------------
+  // RESPONSE
+  // -----------------------------
   return {
     ...addressDetails,
     distanceInKM: distance,
   };
 };
+
+
+// const handleDeliveryModeForAdmin = async (
+//   deliveryMode,
+//   customer,
+//   customerAddressType,
+//   customerAddressOtherAddressId,
+//   newCustomer,
+//   newCustomerAddress,
+//   merchant,
+//   pickUpAddressType,
+//   pickUpAddressOtherAddressId,
+//   deliveryAddressType,
+//   deliveryAddressOtherAddressId,
+//   newPickupAddress,
+//   newDeliveryAddress,
+//   customPickupLocation
+// ) => {
+//   const addressDetails = await handleAddressDetails(
+//     deliveryMode,
+//     customer,
+//     customerAddressType,
+//     customerAddressOtherAddressId,
+//     newCustomer,
+//     newCustomerAddress,
+//     merchant,
+//     pickUpAddressType,
+//     pickUpAddressOtherAddressId,
+//     deliveryAddressType,
+//     deliveryAddressOtherAddressId,
+//     newPickupAddress,
+//     newDeliveryAddress,
+//     customPickupLocation
+//   );
+
+//   const normalize = (loc) => {
+//     if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+//     const [a, b] = loc;
+
+//     // if latitude > 90 → swapped
+//     if (Math.abs(a) > 90) {
+//       return [b, a];
+//     }
+
+//     return [a, b];
+//   };
+
+//   const pickup = addressDetails?.pickupLocation;
+//   const delivery = addressDetails?.deliveryLocation;
+
+//   console.log("Pickup", pickup);
+//   console.log("delivery", delivery);
+
+//   let distance = 0;
+
+//   if (!pickup || !delivery) {
+//     throw new Error("Invalid coordinates for distance calculation");
+//   }
+
+//   const isValidRoute =
+//     deliveryMode !== "Take Away" &&
+//     pickup &&
+//     delivery;
+
+//   if (isValidRoute) {
+//     const result = await getDistanceFromPickupToDelivery(
+//       pickup,
+//       delivery
+//     );
+
+//     distance = result?.distanceInKM || 0;
+//   }
+
+//   return {
+//     ...addressDetails,
+//     distanceInKM: distance,
+//   };
+// };
 
 const calculateDeliveryChargeHelperForAdmin = async (
   deliveryMode,
@@ -1362,11 +1576,11 @@ const pickAndDropCharges = async (
 
   const surgeCharges = customerSurge
     ? calculateDeliveryCharges(
-        distanceInKM,
-        customerSurge.baseFare,
-        customerSurge.baseDistance,
-        customerSurge.fareAfterBaseDistance
-      )
+      distanceInKM,
+      customerSurge.baseFare,
+      customerSurge.baseDistance,
+      customerSurge.fareAfterBaseDistance
+    )
     : 0;
 
   // Find pricing for the selected vehicle
@@ -1487,11 +1701,11 @@ const customOrderCharges = async (
 
   const surgeCharges = customerSurge
     ? calculateDeliveryCharges(
-        distance,
-        customerSurge.baseFare,
-        customerSurge.baseDistance,
-        customerSurge.fareAfterBaseDistance
-      )
+      distance,
+      customerSurge.baseFare,
+      customerSurge.baseDistance,
+      customerSurge.fareAfterBaseDistance
+    )
     : 0;
 
   // Calculate total weight of items for additional weight charges
@@ -1569,9 +1783,9 @@ const saveCustomerCart = async (
   const updatedItems =
     deliveryMode === "Custom Order"
       ? items.map((item) => ({
-          ...item,
-          itemId: new mongoose.Types.ObjectId(),
-        }))
+        ...item,
+        itemId: new mongoose.Types.ObjectId(),
+      }))
       : items;
 
   const cartDetails = {
@@ -1629,8 +1843,10 @@ const saveCustomerCart = async (
     endDate: scheduledDetails?.endDate,
     time: scheduledDetails?.time,
     numOfDays: scheduledDetails?.numOfDays,
-    purchasedItems : updatedItems,
+    purchasedItems: updatedItems,
   };
+
+  console.log("Distance from handler:", distance);
 
   if (["Take Away", "Home Delivery"].includes(deliveryMode)) {
     console.log("CustomerCart updated or created", cartDetails);
@@ -1689,7 +1905,7 @@ const prepareOrderDetails = async (cart, paymentMode) => {
 
     formattedItems = populatedCartWithVariantNames.items.map((item) => ({
       productId: item.productId,
-      variantId : item.variantTypeId,
+      variantId: item.variantTypeId,
       itemName: item.productId?.productName || "Unnamed",
       itemImageURL: item.productId?.productImageURL || null,
       quantity: item.quantity,
@@ -1827,6 +2043,24 @@ const processDeliveryDetailInApp = async (
   };
 };
 
+const normalizeLatLng = (loc) => {
+  if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+  let [a, b] = [Number(loc[0]), Number(loc[1])];
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+  // Standard swap: |a| > 90 means a is definitely longitude
+  if (Math.abs(a) > 90 && Math.abs(b) <= 90) return [b, a];
+
+  // India heuristic: lng ~68–98, lat ~6–38
+  const isIndianLng = (v) => v >= 60 && v <= 100;
+  const isIndianLat = (v) => v >= 5 && v <= 40;
+
+  if (isIndianLng(a) && isIndianLat(b)) return [b, a]; // [lng,lat] → [lat,lng]
+
+  return [a, b];
+};
+
 const processHomeDeliveryDetailInApp = async (
   deliveryMode,
   customer,
@@ -1842,7 +2076,9 @@ const processHomeDeliveryDetailInApp = async (
   distance = 0;
 
   if (merchant) {
-    pickupLocation = merchant.merchantDetail.location;
+    pickupLocation = normalizeLatLng(
+      merchant.merchantDetail.geoLocation.coordinates
+    );
 
     pickupAddress = {
       fullName: merchant.merchantDetail.merchantName,
@@ -1946,4 +2182,6 @@ module.exports = {
   processDeliveryDetailInApp,
   processHomeDeliveryDetailInApp,
   locationArraysEqual,
+
+  normalizeLatLng
 };

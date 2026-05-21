@@ -157,9 +157,31 @@ const merchantDetailSchema = new mongoose.Schema(
       ],
       default: [],
     },
-    location: {
-      type: [Number],
-      default: [],
+    geoLocation: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [],
+
+        validate: {
+          validator: function (value) {
+            return (
+              Array.isArray(value) &&
+              value.length === 2 &&
+              typeof value[0] === "number" &&
+              typeof value[1] === "number"
+            );
+          },
+
+          message:
+            "Geo coordinates must contain [longitude, latitude]",
+        },
+      },
     },
     locationImage: {
       type: String,
@@ -433,6 +455,13 @@ merchantSchema.index({ "merchantDetail.merchantName": 1 });
 merchantSchema.index({ isApproved: 1, isBlocked: 1 });
 merchantSchema.index({ status: 1 });
 merchantSchema.index({ phoneNumber: 1 });
-
+merchantSchema.index({
+  "merchantDetail.geoLocation": "2dsphere",
+});
+merchantSchema.index({
+  "merchantDetail.geoLocation": "2dsphere",
+  isBlocked: 1,
+  isApproved: 1,
+});
 const Merchant = mongoose.model("Merchant", merchantSchema);
 module.exports = Merchant;

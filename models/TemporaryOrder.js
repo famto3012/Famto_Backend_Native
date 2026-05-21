@@ -136,7 +136,6 @@ const temporaryOrderSchema = new mongoose.Schema(
     merchantId: {
       type: String,
       ref: "Merchant",
-      required: true,
     },
 
     idempotencyKey: {
