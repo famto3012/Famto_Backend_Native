@@ -147,15 +147,15 @@ const sendPushNotificationToUser = async (fcmToken, message, eventName) => {
 
   try {
 
-    // console.log("Sending push using Firebase Project 1...");
+    console.log("Sending push using Firebase Project 1...");
 
     throw new Error("Project1 disabled");
 
-    // const response = await admin1.messaging(app1).send(payload);
+    const response = await admin1.messaging(app1).send(payload);
 
-    // console.log("Push Success (Project1):", response);
+    console.log("Push Success (Project1):", response);
 
-    // return false;
+    return false;
 
   } catch (error1) {
 
