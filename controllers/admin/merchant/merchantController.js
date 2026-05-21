@@ -89,19 +89,19 @@ const transformAvailabilityValues = (availability) => {
       transformedAvailability[day] =
         dayData && typeof dayData === "object"
           ? {
-              ...dayData,
-              openAllDay:
-                dayData.openAllDay === "true" || dayData.openAllDay === true,
-              closedAllDay:
-                dayData.closedAllDay === "true" ||
-                dayData.closedAllDay === true,
-              specificTime:
-                dayData.specificTime === "true" ||
-                dayData.specificTime === true,
-              startTime:
-                dayData.startTime === "null" ? null : dayData.startTime,
-              endTime: dayData.endTime === "null" ? null : dayData.endTime,
-            }
+            ...dayData,
+            openAllDay:
+              dayData.openAllDay === "true" || dayData.openAllDay === true,
+            closedAllDay:
+              dayData.closedAllDay === "true" ||
+              dayData.closedAllDay === true,
+            specificTime:
+              dayData.specificTime === "true" ||
+              dayData.specificTime === true,
+            startTime:
+              dayData.startTime === "null" ? null : dayData.startTime,
+            endTime: dayData.endTime === "null" ? null : dayData.endTime,
+          }
           : dayData;
     }
   }
@@ -434,10 +434,7 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
     const merchantId = req.userAuth;
 
     const merchantFound = await Merchant.findById(merchantId);
-
     if (!merchantFound) return next(appError("Merchant not found", 404));
-
-    // Apply the helper function to handle null or empty string values
 
     if (merchantDetail) {
       convertNullValues(merchantDetail);
@@ -448,97 +445,79 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
       }
     }
 
-    let merchantImageURL =
-      merchantFound?.merchantDetail?.merchantImageURL || "";
+    let merchantImageURL = merchantFound?.merchantDetail?.merchantImageURL || "";
     let pancardImageURL = merchantFound?.merchantDetail?.pancardImageURL || "";
     let GSTINImageURL = merchantFound?.merchantDetail?.GSTINImageURL || "";
     let FSSAIImageURL = merchantFound?.merchantDetail?.FSSAIImageURL || "";
     let aadharImageURL = merchantFound?.merchantDetail?.aadharImageURL || "";
 
     if (req.files) {
-      const {
-        merchantImage,
-        pancardImage,
-        gstinImage,
-        fssaiImage,
-        aadharImage,
-      } = req.files;
+      const { merchantImage, pancardImage, gstinImage, fssaiImage, aadharImage } = req.files;
 
       if (merchantImage) {
-        if (merchantImageURL) {
-          await deleteFromFirebase(merchantImageURL);
-        }
-        merchantImageURL = await uploadToFirebase(
-          merchantImage[0],
-          "MerchantImages"
-        );
+        if (merchantImageURL) await deleteFromFirebase(merchantImageURL);
+        merchantImageURL = await uploadToFirebase(merchantImage[0], "MerchantImages");
       }
       if (pancardImage) {
-        if (pancardImageURL) {
-          await deleteFromFirebase(pancardImageURL);
-        }
-        pancardImageURL = await uploadToFirebase(
-          pancardImage[0],
-          "PancardImages"
-        );
+        if (pancardImageURL) await deleteFromFirebase(pancardImageURL);
+        pancardImageURL = await uploadToFirebase(pancardImage[0], "PancardImages");
       }
       if (gstinImage) {
-        if (GSTINImageURL) {
-          await deleteFromFirebase(GSTINImageURL);
-        }
+        if (GSTINImageURL) await deleteFromFirebase(GSTINImageURL);
         GSTINImageURL = await uploadToFirebase(gstinImage[0], "GSTINImages");
       }
       if (fssaiImage) {
-        if (FSSAIImageURL) {
-          await deleteFromFirebase(FSSAIImageURL);
-        }
+        if (FSSAIImageURL) await deleteFromFirebase(FSSAIImageURL);
         FSSAIImageURL = await uploadToFirebase(fssaiImage[0], "FSSAIImages");
       }
       if (aadharImage) {
-        if (aadharImageURL) {
-          await deleteFromFirebase(aadharImageURL);
-        }
+        if (aadharImageURL) await deleteFromFirebase(aadharImageURL);
         aadharImageURL = await uploadToFirebase(aadharImage[0], "AadharImages");
       }
     }
 
-    let newLocation = [
-      parseFloat(merchantDetail?.location[0]),
-      parseFloat(merchantDetail?.location[1]),
-    ];
-
+    // ✅ Define before use
     const arraysAreEqual = (arr1, arr2) => {
+      if (!arr1 || !arr2) return false;
       return (
-        arr1?.length === arr2?.length &&
-        arr1?.every((value, index) => value === arr2[index])
+        arr1.length === arr2.length &&
+        arr1.every((value, index) => value === arr2[index])
       );
     };
 
+    // ✅ Guard against missing location
+    let newLocation = [];
+    if (
+      merchantDetail?.location &&
+      Array.isArray(merchantDetail.location) &&
+      merchantDetail.location.length === 2
+    ) {
+      newLocation = [
+        parseFloat(merchantDetail.location[0]),
+        parseFloat(merchantDetail.location[1]),
+      ];
+    }
+
+    const existingCoords = merchantFound?.merchantDetail?.geoLocation?.coordinates;
+
     let locationImage = merchantFound?.merchantDetail?.locationImage;
 
-    if (!arraysAreEqual(newLocation, merchantFound?.merchantDetail?.location)) {
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${newLocation[0]}, ${newLocation[1]}&size=400x500&markers=${newLocation[0]}, ${newLocation[1]}&zoom=15`;
+    // ✅ Compare against geoLocation.coordinates, not legacy .location
+    if (newLocation.length === 2 && !arraysAreEqual(newLocation, existingCoords)) {
+      const [lng, lat] = newLocation;
+      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
 
       try {
         const response = await axios.get(url, { responseType: "arraybuffer" });
         const uniqueName = uuidv4();
-        const format = `jpeg`;
-        const fileName = path.join(
-          __dirname,
-          `../../../${uniqueName}-location.jpeg`
-        );
+        const fileName = path.join(__dirname, `../../../${uniqueName}-location.jpeg`);
         const buffer = Buffer.from(response.data);
-        const imageBuffer = await changeBufferToImage(buffer, fileName, format);
+        const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
 
-        locationImage = await uploadToFirebase(
-          imageBuffer,
-          "MerchantLocationImage"
-        );
+        locationImage = await uploadToFirebase(imageBuffer, "MerchantLocationImage");
 
         if (merchantFound?.merchantDetail?.locationImage) {
-          await deleteFromFirebase(
-            merchantFound?.merchantDetail?.locationImage
-          );
+          await deleteFromFirebase(merchantFound.merchantDetail.locationImage);
         }
 
         if (locationImage) await fs.unlink(fileName);
@@ -549,6 +528,9 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
 
     merchantDetail.locationImage = locationImage;
 
+    // ✅ Remove raw location field before spread
+    delete merchantDetail.location;
+
     const details = {
       ...merchantDetail,
       "availability.type":
@@ -558,14 +540,29 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
       "availability.specificDays": merchantDetail?.availability?.specificDays,
       geofenceId: merchantDetail?.geofenceId || null,
       businessCategoryId: merchantDetail?.businessCategoryId || null,
-      pricing: merchantFound?.merchantDetail?.pricing
-        ? merchantFound?.merchantDetail.pricing
-        : [],
+      pricing: merchantFound?.merchantDetail?.pricing || [],
       merchantImageURL,
       pancardImageURL,
       GSTINImageURL,
       FSSAIImageURL,
       aadharImageURL,
+      locationImage,
+      // ✅ Save geoLocation correctly
+      ...(newLocation.length === 2
+        ? {
+            geoLocation: {
+              type: "Point",
+              coordinates: newLocation,
+            },
+          }
+        : existingCoords?.length === 2
+        ? {
+            geoLocation: {
+              type: "Point",
+              coordinates: existingCoords,
+            },
+          }
+        : {}),
     };
 
     merchantFound.fullName = fullName;
@@ -984,9 +981,8 @@ const getAllMerchantsForDropDownController = async (req, res, next) => {
     const formattedResponse = merchantsFound?.map((merchant) => {
       return {
         _id: merchant._id,
-        merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${
-          merchant?.merchantDetail?.displayAddress || "-"
-        }`,
+        merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${merchant?.merchantDetail?.displayAddress || "-"
+          }`,
       };
     });
 
@@ -1154,55 +1150,83 @@ const getSingleMerchantController = async (req, res, next) => {
 
 // Add merchant
 const addMerchantController = async (req, res, next) => {
-  const { fullName, email, phoneNumber, password, latitude, longitude, geofenceId} =
-    req.body;
+  const {
+    fullName,
+    email,
+    phoneNumber,
+    password,
+    latitude,
+    longitude,
+    geofenceId,
+  } = req.body;
 
   const errors = validationResult(req);
 
   let formattedErrors = {};
+
   if (!errors.isEmpty()) {
     errors.array().forEach((error) => {
       formattedErrors[error.path] = error.msg;
     });
+
     return res.status(500).json({ errors: formattedErrors });
   }
 
   try {
     const normalizedEmail = email.toLowerCase();
 
-    const merchantFound = await Merchant.findOne({ email: normalizedEmail });
+    const merchantFound = await Merchant.findOne({
+      email: normalizedEmail,
+    });
 
     if (merchantFound) {
       formattedErrors.email = "Email already exists";
-      return res.status(409).json({ errors: formattedErrors });
+
+      return res.status(409).json({
+        errors: formattedErrors,
+      });
     }
 
-    // // Auto-detect geofence from location if provided
-    // let assignedGeofence = null;
-    // if (latitude != null && longitude != null) {
-    //   assignedGeofence = await getGeofenceByCoordinates(
-    //     parseFloat(latitude),
-    //     parseFloat(longitude)
-    //   );
-    // }
-
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      salt
+    );
+
+    // Create merchant detail object
+    const merchantDetail = {
+      geofenceId,
+    };
+
+    // Add geoLocation only if coordinates exist
+    if (
+      latitude != null &&
+      longitude != null &&
+      latitude !== "" &&
+      longitude !== ""
+    ) {
+      merchantDetail.geoLocation = {
+        type: "Point",
+        coordinates: [
+          parseFloat(longitude),
+          parseFloat(latitude),
+        ],
+      };
+    }
 
     const newMerchant = await Merchant.create({
       fullName,
       email: normalizedEmail,
       phoneNumber,
       password: hashedPassword,
-    
-        merchantDetail: {
-          geofenceId: geofenceId,
-        },
-    
+      merchantDetail,
     });
 
     if (!newMerchant) {
-      return next(appError("Error in creating new merchant"));
+      return next(
+        appError("Error in creating new merchant")
+      );
     }
 
     await ActivityLog.create({
@@ -1223,12 +1247,12 @@ const addMerchantController = async (req, res, next) => {
       isServiceableToday: "Closed",
     };
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Merchant added successfully",
       data: formattedResponse,
     });
   } catch (err) {
-    next(appError(err.message));
+    return next(appError(err.message));
   }
 };
 
@@ -1414,45 +1438,44 @@ const updateMerchantDetailsController = async (req, res, next) => {
 
     let newLocation = [];
 
-    if (merchantDetail?.location?.length === 2) {
+    // Frontend sends location as [longitude, latitude]
+    if (
+      merchantDetail?.location &&
+      Array.isArray(merchantDetail.location) &&
+      merchantDetail.location.length === 2
+    ) {
       newLocation = [
-        parseFloat(merchantDetail?.location[0]),
-        parseFloat(merchantDetail?.location[1]),
+        parseFloat(merchantDetail.location[0]),
+        parseFloat(merchantDetail.location[1]),
       ];
     }
 
+    const existingCoords = merchantFound?.merchantDetail?.geoLocation?.coordinates;
+
     const arraysAreEqual = (arr1, arr2) => {
+      if (!arr1 || !arr2) return false;
       return (
-        arr1?.length === arr2?.length &&
-        arr1?.every((value, index) => value === arr2[index])
+        arr1.length === arr2.length &&
+        arr1.every((value, index) => value === arr2[index])
       );
     };
 
-    let locationImage = merchantFound?.merchantDetail?.locationImage;
-
-    if (!arraysAreEqual(newLocation, merchantFound?.merchantDetail?.location)) {
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${newLocation[0]}, ${newLocation[1]}&size=400x500&markers=${newLocation[0]}, ${newLocation[1]}&zoom=15`;
+    // Only regenerate location image if coordinates actually changed
+    if (newLocation.length === 2 && !arraysAreEqual(newLocation, existingCoords)) {
+      const [lng, lat] = newLocation;
+      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
 
       try {
         const response = await axios.get(url, { responseType: "arraybuffer" });
         const uniqueName = uuidv4();
-        const format = `jpeg`;
-        const fileName = path.join(
-          __dirname,
-          `../../../${uniqueName}-location.jpeg`
-        );
+        const fileName = path.join(__dirname, `../../../${uniqueName}-location.jpeg`);
         const buffer = Buffer.from(response.data);
-        const imageBuffer = await changeBufferToImage(buffer, fileName, format);
+        const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
 
-        locationImage = await uploadToFirebase(
-          imageBuffer,
-          "MerchantLocationImage"
-        );
+        locationImage = await uploadToFirebase(imageBuffer, "MerchantLocationImage");
 
         if (merchantFound?.merchantDetail?.locationImage) {
-          await deleteFromFirebase(
-            merchantFound?.merchantDetail?.locationImage
-          );
+          await deleteFromFirebase(merchantFound.merchantDetail.locationImage);
         }
 
         if (locationImage) await fs.unlink(fileName);
@@ -1463,6 +1486,9 @@ const updateMerchantDetailsController = async (req, res, next) => {
 
     merchantDetail.locationImage = locationImage;
 
+    // Remove raw location field before saving — not in schema anymore
+    delete merchantDetail.location;
+
     const details = {
       ...merchantDetail,
       "availability.type":
@@ -1472,14 +1498,29 @@ const updateMerchantDetailsController = async (req, res, next) => {
       "availability.specificDays": modifiedAvailability,
       geofenceId: merchantDetail?.geofenceId || null,
       businessCategoryId: merchantDetail?.businessCategoryId || null,
-      pricing: merchantFound?.merchantDetail?.pricing
-        ? merchantFound?.merchantDetail?.pricing
-        : [],
+      pricing: merchantFound?.merchantDetail?.pricing || [],
       merchantImageURL,
       pancardImageURL,
       GSTINImageURL,
       FSSAIImageURL,
       aadharImageURL,
+      locationImage,
+      // ✅ Always write geoLocation if coordinates exist
+      ...(newLocation.length === 2
+        ? {
+          geoLocation: {
+            type: "Point",
+            coordinates: newLocation,
+          },
+        }
+        : existingCoords?.length === 2
+          ? {
+            geoLocation: {
+              type: "Point",
+              coordinates: existingCoords,
+            },
+          }
+          : {}),
     };
 
     merchantFound.fullName = fullName;
@@ -2435,9 +2476,8 @@ const fetchMerchantsAccordingToBusinessCategory = async (req, res, next) => {
 
     const formattedResponse = allMerchants?.map((merchant) => ({
       merchantId: merchant._id,
-      merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${
-        merchant?.merchantDetail?.displayAddress || "-"
-      }`,
+      merchantName: `${merchant?.merchantDetail?.merchantName || "-"} - ${merchant?.merchantDetail?.displayAddress || "-"
+        }`,
     }));
 
     res.status(200).json(formattedResponse);

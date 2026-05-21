@@ -161,15 +161,15 @@ const merchantDetailSchema = new mongoose.Schema(
       type: {
         type: String,
         enum: ["Point"],
-        default: "Point",
       },
-
       coordinates: {
-        type: [Number], // [longitude, latitude]
-        default: [],
-
+        type: [Number],
+        default: undefined, // ← prevents Mongoose from initializing as []
         validate: {
           validator: function (value) {
+            // Allow missing/undefined/empty
+            if (!value || value.length === 0) return true;
+
             return (
               Array.isArray(value) &&
               value.length === 2 &&
@@ -177,9 +177,7 @@ const merchantDetailSchema = new mongoose.Schema(
               typeof value[1] === "number"
             );
           },
-
-          message:
-            "Geo coordinates must contain [longitude, latitude]",
+          message: "Geo coordinates must contain [longitude, latitude]",
         },
       },
     },
@@ -268,6 +266,7 @@ const merchantDetailSchema = new mongoose.Schema(
   },
   {
     _id: false,
+    minimize: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
@@ -455,13 +454,18 @@ merchantSchema.index({ "merchantDetail.merchantName": 1 });
 merchantSchema.index({ isApproved: 1, isBlocked: 1 });
 merchantSchema.index({ status: 1 });
 merchantSchema.index({ phoneNumber: 1 });
-merchantSchema.index({
-  "merchantDetail.geoLocation": "2dsphere",
-});
-merchantSchema.index({
-  "merchantDetail.geoLocation": "2dsphere",
-  isBlocked: 1,
-  isApproved: 1,
-});
+merchantSchema.index(
+  { "merchantDetail.geoLocation": "2dsphere" },
+  { sparse: true }  // ← add this
+);
+
+merchantSchema.index(
+  {
+    "merchantDetail.geoLocation": "2dsphere",
+    isBlocked: 1,
+    isApproved: 1,
+  },
+  { sparse: true }  // ← add this too
+);
 const Merchant = mongoose.model("Merchant", merchantSchema);
 module.exports = Merchant;

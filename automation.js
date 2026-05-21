@@ -940,7 +940,7 @@ const migrateMerchantGeoLocations =
       console.error(error);
     }
   };
-// migrateMerchantGeoLocations();
+migrateMerchantGeoLocations();
 
 
 // migrateOrdersToNewSchema();

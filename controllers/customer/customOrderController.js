@@ -673,9 +673,9 @@ const confirmCustomOrderController = async (req, res, next) => {
 
           paymentMode: storedOrderData.paymentMode,
           paymentStatus:
-        tempOrder.paymentStatus === "PAYMENT_COMPLETED"
-          ? "Completed"
-          : "Pending",
+            tempOrder.paymentStatus === "PAYMENT_COMPLETED"
+              ? "Completed"
+              : "Pending",
 
           purchasedItems: storedOrderData.purchasedItems || [],
           orderDetailStepper: {

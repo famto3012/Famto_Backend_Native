@@ -412,7 +412,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
 
     console.log("Purchased Items:", orderFound);
 
-    if (orderFound?.purchasedItems && orderFound.merchantId) {
+    if (orderFound?.purchasedItems && orderFound.deliveryMode === "Take Away" || orderFound.deliveryMode === "Home Delivery") {
       await reduceProductAvailableQuantity(
         orderFound.purchasedItems,
         orderFound.merchantId
