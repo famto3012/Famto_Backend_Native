@@ -57,6 +57,7 @@ const {
   prepareOrderDetails,
   clearCart,
   updateCustomerTransaction,
+  normalizeLatLng,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -2109,7 +2110,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       deliveryOption,
       merchantFound,
       customer,
-      pickupLocation,
+      normalizeLatLng(pickupLocation),
       pickupAddress,
       deliveryLocation,
       deliveryAddress,
@@ -3267,43 +3268,118 @@ const reassignAgentController = async (req, res, next) => {
     if (!task) return next(appError("Task not found for this order", 404));
     if (!newAgent) return next(appError("New agent not found", 404));
 
+    // Validate order is reassignable
+    const terminalStatuses = ["Completed", "Cancelled"];
+    if (terminalStatuses.includes(order.status)) {
+      return next(appError(`Cannot reassign a ${order.status} order`, 400));
+    }
+
+    // Validate new agent is available
+    if (newAgent.isBlocked) {
+      return next(appError("New agent is blocked", 400));
+    }
+    if (newAgent.isApproved !== "Approved") {
+      return next(appError("New agent is not approved", 400));
+    }
+    if (newAgent.status === "Inactive") {
+      return next(appError("New agent is offline", 400));
+    }
+
     const oldAgentId = order.agentId;
 
-    // Decrement old agent's pending orders and notify them
-    if (oldAgentId && oldAgentId.toString() !== newAgentId.toString()) {
+    // Block same-agent reassignment
+    if (oldAgentId && oldAgentId.toString() === newAgentId.toString()) {
+      return next(appError("Order is already assigned to this agent", 400));
+    }
+
+    // ── Handle old agent ──────────────────────────────────────
+    if (oldAgentId) {
       const oldAgent = await Agent.findById(oldAgentId);
       if (oldAgent) {
-        if (!oldAgent.appDetail) oldAgent.appDetail = { pendingOrders: 0 };
-        oldAgent.appDetail.pendingOrders = Math.max(
-          0,
-          (oldAgent.appDetail.pendingOrders || 1) - 1
-        );
+        // Check if old agent has any OTHER active tasks
+        const otherActiveTasks = await Task.countDocuments({
+          agentId: oldAgentId,
+          taskStatus: "Assigned",
+          _id: { $ne: task._id },
+        });
+
+        if (otherActiveTasks === 0) {
+          oldAgent.status = "Free";
+        }
+
         await oldAgent.save();
-        sendSocketData(oldAgentId.toString(), "orderRemoved", { orderId });
+
+        // Notify old agent that order was removed
+        sendSocketData(oldAgentId.toString(), "orderRemoved", {
+          orderId,
+          message: "Order has been reassigned to another agent",
+        });
       }
     }
 
-    // Update order and task
+    // ── Update order ──────────────────────────────────────────
+    const stepperDetail = {
+      by: newAgent.fullName,
+      userId: newAgentId,
+      date: new Date(),
+      location: getUserLocationFromSocket(newAgentId) || newAgent.location,
+    };
+
     order.agentId = newAgentId;
+    order.orderDetail = order.orderDetail || {};
+    order.orderDetail.agentAcceptedAt = new Date();
+    order.orderDetailStepper = order.orderDetailStepper || {};
+    order.orderDetailStepper.assigned = stepperDetail;
+
+    // Reset old agent's distance data
+    order.detailAddedByAgent = {
+      startToPickDistance: null,
+      distanceCoveredByAgent: null,
+      agentEarning: null,
+      notes: null,
+      signatureImageURL: null,
+      imageURL: null,
+      shopUpdates: [],
+    };
+
+    // ── Update task ───────────────────────────────────────────
     task.agentId = newAgentId;
     task.taskStatus = "Assigned";
 
-    // Increment new agent's pending orders
+    // Reset pickup/drop statuses for new agent
+    if (task.pickupDropDetails?.length) {
+      for (const detail of task.pickupDropDetails) {
+        for (const pickup of detail.pickups || []) {
+          pickup.status = "Accepted";
+          pickup.startTime = null;
+          pickup.completedTime = null;
+        }
+        for (const drop of detail.drops || []) {
+          drop.status = "Accepted";
+          drop.startTime = null;
+          drop.completedTime = null;
+        }
+      }
+      task.markModified("pickupDropDetails");
+    }
+
+    // ── Update new agent ──────────────────────────────────────
+    newAgent.status = "Busy";
     if (!newAgent.appDetail) {
       newAgent.appDetail = {
         totalEarning: 0,
         orders: 0,
         pendingOrders: 0,
         totalDistance: 0,
+        totalStartToPickDistance: 0,
         cancelledOrders: 0,
         loginDuration: 0,
       };
     }
-    newAgent.appDetail.pendingOrders += 1;
 
     await Promise.all([order.save(), task.save(), newAgent.save()]);
 
-    // Notify new agent and related roles
+    // ── Notify new agent and roles ────────────────────────────
     const eventName = "newOrder";
     const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
@@ -3315,9 +3391,10 @@ const reassignAgentController = async (req, res, next) => {
       else if (role === "customer") roleId = order?.customerId;
       else {
         const roleValue = await ManagerRoles.findOne({ roleName: role });
-        let manager;
-        if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
-        if (manager) roleId = manager._id;
+        if (roleValue) {
+          const manager = await Manager.findOne({ role: roleValue._id });
+          if (manager) roleId = manager._id;
+        }
       }
 
       if (roleId) {
@@ -3352,7 +3429,7 @@ const reassignAgentController = async (req, res, next) => {
       merchantName: order?.pickups[0]?.address?.fullName || null,
       pickAddress: order?.pickups[0]?.address || null,
       customerName: order?.drops[0]?.address?.fullName || null,
-      customerAddress: order?.drops[0]?.address,
+      customerAddress: order?.drops[0]?.address || null,
       agentId: newAgentId,
       orderType: order?.deliveryMode || null,
       taskDate: formatDate(order?.deliveryTime),
@@ -3364,7 +3441,7 @@ const reassignAgentController = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: "Agent reassigned successfully",
+      message: `Agent reassigned from ${oldAgentId || "none"} to ${newAgentId}`,
     });
   } catch (err) {
     next(appError(err.message));

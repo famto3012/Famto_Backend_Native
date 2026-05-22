@@ -550,19 +550,19 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
       // ✅ Save geoLocation correctly
       ...(newLocation.length === 2
         ? {
-            geoLocation: {
-              type: "Point",
-              coordinates: newLocation,
-            },
-          }
+          geoLocation: {
+            type: "Point",
+            coordinates: newLocation,
+          },
+        }
         : existingCoords?.length === 2
-        ? {
+          ? {
             geoLocation: {
               type: "Point",
               coordinates: existingCoords,
             },
           }
-        : {}),
+          : {}),
     };
 
     merchantFound.fullName = fullName;

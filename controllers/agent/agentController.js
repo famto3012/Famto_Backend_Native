@@ -1452,6 +1452,7 @@ const getPickUpDetailController = async (req, res, next) => {
       const formattedResponse = {
         taskId: taskFound[0]._id,
         orderId: taskFound[0].orderId?._id || taskFound.orderId, // handle string ID
+        messageReceiverId: taskFound[0]?.orderId?.customerId || null,
         merchantId: merchantFound?._id || null,
         merchantName: merchantFound?.merchantDetail?.merchantName || null,
         customerId: taskFound[0]?.orderId?.customerId || null,
@@ -1516,6 +1517,7 @@ const getPickUpDetailController = async (req, res, next) => {
       const formattedResponse = {
         taskId: taskFound._id,
         orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
+        messageReceiverId: taskFound?.orderId?.customerId || null,
         merchantId: merchantFound?._id || null,
         merchantName: merchantFound?.merchantDetail?.merchantName || null,
         customerId: taskFound?.orderId?.customerId || null,

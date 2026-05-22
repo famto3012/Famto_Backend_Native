@@ -237,6 +237,24 @@ const findOrCreateCustomer = async ({
   }
 };
 
+const normalizeLatLng = (loc) => {
+  if (!Array.isArray(loc) || loc.length !== 2) return null;
+
+  let [a, b] = [Number(loc[0]), Number(loc[1])];
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+
+  // Standard swap: |a| > 90 means a is definitely longitude
+  if (Math.abs(a) > 90 && Math.abs(b) <= 90) return [b, a];
+
+  // India heuristic: lng ~68–98, lat ~6–38
+  const isIndianLng = (v) => v >= 60 && v <= 100;
+  const isIndianLat = (v) => v >= 5 && v <= 40;
+
+  if (isIndianLng(a) && isIndianLat(b)) return [b, a]; // [lng,lat] → [lat,lng]
+
+  return [a, b];
+};
+
 const processSchedule = (ifScheduled) => {
   console.log("Processing schedule:", ifScheduled);
   if (
@@ -741,7 +759,7 @@ const handleDeliveryMode = async (
   if (deliveryMode !== "Take Away") {
     // For Pick and Drop, use the actual pickup location (could be customer address or merchant shop).
     // For Home Delivery, pickup is always the merchant's shop.
-     const rawFrom =
+    const rawFrom =
       deliveryMode === "Pick and Drop"
         ? addressDetails.pickupLocation
         : merchant.merchantDetail.geoLocation.coordinates;
@@ -1238,36 +1256,36 @@ const handleDeliveryModeForAdmin = async (
   // SAFE NORMALIZER (fixes lng/lat issues)
   // -----------------------------
   const normalizeLatLng = (loc) => {
-  if (!loc) return null;
+    if (!loc) return null;
 
-  if (typeof loc.toObject === "function") {
-    loc = loc.toObject();
-  }
+    if (typeof loc.toObject === "function") {
+      loc = loc.toObject();
+    }
 
-  if (!Array.isArray(loc) || loc.length !== 2) return null;
+    if (!Array.isArray(loc) || loc.length !== 2) return null;
 
-  let a = Number(loc[0]);
-  let b = Number(loc[1]);
+    let a = Number(loc[0]);
+    let b = Number(loc[1]);
 
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
 
-  // Standard out-of-range swap (handles |lng| > 90 cases)
-  if (Math.abs(a) > 90 && Math.abs(b) <= 90) {
-    return [b, a];
-  }
+    // Standard out-of-range swap (handles |lng| > 90 cases)
+    if (Math.abs(a) > 90 && Math.abs(b) <= 90) {
+      return [b, a];
+    }
 
-  // India-specific heuristic:
-  // lng is ~68–98, lat is ~6–38
-  // If a looks like an Indian longitude and b looks like a latitude → swap
-  const looksLikeIndianLng = (v) => v >= 60 && v <= 100;
-  const looksLikeIndianLat = (v) => v >= 5 && v <= 40;
+    // India-specific heuristic:
+    // lng is ~68–98, lat is ~6–38
+    // If a looks like an Indian longitude and b looks like a latitude → swap
+    const looksLikeIndianLng = (v) => v >= 60 && v <= 100;
+    const looksLikeIndianLat = (v) => v >= 5 && v <= 40;
 
-  if (looksLikeIndianLng(a) && looksLikeIndianLat(b)) {
-    return [b, a]; // swap [lng, lat] → [lat, lng]
-  }
+    if (looksLikeIndianLng(a) && looksLikeIndianLat(b)) {
+      return [b, a]; // swap [lng, lat] → [lat, lng]
+    }
 
-  return [a, b];
-};
+    return [a, b];
+  };
 
   // -----------------------------
   // MAPMYINDIA FORMAT (string)
@@ -2043,23 +2061,7 @@ const processDeliveryDetailInApp = async (
   };
 };
 
-const normalizeLatLng = (loc) => {
-  if (!Array.isArray(loc) || loc.length !== 2) return null;
 
-  let [a, b] = [Number(loc[0]), Number(loc[1])];
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
-
-  // Standard swap: |a| > 90 means a is definitely longitude
-  if (Math.abs(a) > 90 && Math.abs(b) <= 90) return [b, a];
-
-  // India heuristic: lng ~68–98, lat ~6–38
-  const isIndianLng = (v) => v >= 60 && v <= 100;
-  const isIndianLat = (v) => v >= 5 && v <= 40;
-
-  if (isIndianLng(a) && isIndianLat(b)) return [b, a]; // [lng,lat] → [lat,lng]
-
-  return [a, b];
-};
 
 const processHomeDeliveryDetailInApp = async (
   deliveryMode,

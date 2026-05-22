@@ -125,7 +125,7 @@ const assignAgentToTaskController = async (req, res, next) => {
             merchantName: order?.pickups[0]?.address?.fullName || null,
             pickAddress: order?.pickups[0]?.address || null,
             customerName: order?.drops[0]?.address.fullName || null,
-            customerAddress: customerAddress, 
+            customerAddress: customerAddress,
             orderType: order?.deliveryMode || null,
             taskDate: formatDate(order?.deliveryTime),
             taskTime: formatTime(order?.deliveryTime),
@@ -496,11 +496,11 @@ const batchOrder = async (req, res, next) => {
     let deliveryAddress = tasks[0]?.pickupDropDetails?.[0]?.drops?.[0]?.address;
 
     const customerAddresses = tasks.flatMap(order =>
-  order.pickupDropDetails.flatMap(detail =>
-    detail.drops.map(drop => drop.address)
-  )
-);
-console.log("customerAddresses", customerAddresses)
+      order.pickupDropDetails.flatMap(detail =>
+        detail.drops.map(drop => drop.address)
+      )
+    );
+    console.log("customerAddresses", customerAddresses)
 
     const eventName = "newOrder";
 
@@ -516,8 +516,9 @@ console.log("customerAddresses", customerAddresses)
         roleId = merchantId;
       } else if (role === "driver") {
         roleId = agentId;
+
       } else if (role === "customer") {
-        roleId = customerId;
+        roleId = tasks[0]?.orderId?.customerId;
       } else {
         const roleValue = await ManagerRoles.findOne({ roleName: role });
         let manager;
@@ -580,194 +581,194 @@ console.log("customerAddresses", customerAddresses)
 };
 
 
-const testSocket = async(req, res, next) => {
-const userSocketMap = {};
+const testSocket = async (req, res, next) => {
+  const userSocketMap = {};
 
-const handleAgentDeliveryStarted = async (taskId, agentId, location, dropIndex) => {
-          
-        const [agentFound, taskFound] = await Promise.all([
-          Agent.findById(agentId),
-          Task.findById(taskId),
-        ]);
+  const handleAgentDeliveryStarted = async (taskId, agentId, location, dropIndex) => {
 
-        const eventName = "agentDeliveryStarted";
+    const [agentFound, taskFound] = await Promise.all([
+      Agent.findById(agentId),
+      Task.findById(taskId),
+    ]);
 
-        if (!agentFound) {
-          return socket.emit("error", {
-            message: "Agent not found",
-            success: false,
-          });
-        }
+    const eventName = "agentDeliveryStarted";
 
-        if (!taskFound) {
-          return socket.emit("error", {
-            message: "Task not found",
-            success: false,
-          });
-        }
+    if (!agentFound) {
+      return socket.emit("error", {
+        message: "Agent not found",
+        success: false,
+      });
+    }
 
-        // ✅ Check if pickupDropDetails exists
-        if (!taskFound.pickupDropDetails?.length) {
-          return socket.emit("error", {
-            message: "No pickup/drop details found",
-            success: false,
-          });
-        }
+    if (!taskFound) {
+      return socket.emit("error", {
+        message: "Task not found",
+        success: false,
+      });
+    }
 
-        const delivery = taskFound.pickupDropDetails[0].drops?.[dropIndex];
+    // ✅ Check if pickupDropDetails exists
+    if (!taskFound.pickupDropDetails?.length) {
+      return socket.emit("error", {
+        message: "No pickup/drop details found",
+        success: false,
+      });
+    }
 
-        if (!delivery) {
-          return socket.emit("error", {
-            message: "Invalid drop index",
-            success: false,
-          });
-        }
+    const delivery = taskFound.pickupDropDetails[0].drops?.[dropIndex];
 
-        // ✅ Prevent duplicate start
-        if (delivery.status === "Started") {
-          const agentSocketId = userSocketMap[agentId]?.socketId;
-          if (agentSocketId) {
-            io.to(agentSocketId).emit(eventName, {
-              data: "Delivery already started",
-              success: true,
-            });
-          }
-          return;
-        }
+    if (!delivery) {
+      return socket.emit("error", {
+        message: "Invalid drop index",
+        success: false,
+      });
+    }
 
-        const orderFound = await Order.findById(taskFound.orderId).populate(
-          "customerId",
-          "customerDetails.geofenceId"
-        );
+    // ✅ Prevent duplicate start
+    if (delivery.status === "Started") {
+      const agentSocketId = userSocketMap[agentId]?.socketId;
+      if (agentSocketId) {
+        io.to(agentSocketId).emit(eventName, {
+          data: "Delivery already started",
+          success: true,
+        });
+      }
+      return;
+    }
 
-        if (!orderFound) {
-          return socket.emit("error", {
-            message: "Order not found",
-            success: false,
-          });
-        }
+    const orderFound = await Order.findById(taskFound.orderId).populate(
+      "customerId",
+      "customerDetails.geofenceId"
+    );
 
-        let distanceCoveredByAgent = 0;
+    if (!orderFound) {
+      return socket.emit("error", {
+        message: "Order not found",
+        success: false,
+      });
+    }
 
-        if (orderFound?.deliveryMode === "Custom Order") {
-          const { distanceInKM } = await getDistanceFromPickupToDelivery(
-            location,
-            delivery.location
-          );
+    let distanceCoveredByAgent = 0;
 
-          distanceCoveredByAgent =
-            (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-            distanceInKM;
-        } else {
-          distanceCoveredByAgent =
-            (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-            (orderFound?.orderDetail?.distance || 0);
-        }
+    if (orderFound?.deliveryMode === "Custom Order") {
+      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        location,
+        delivery.location
+      );
 
-        // ✅ Update task drop
-        delivery.status = "Started";
-        delivery.startTime = new Date();
+      distanceCoveredByAgent =
+        (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+        distanceInKM;
+    } else {
+      distanceCoveredByAgent =
+        (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+        (orderFound?.orderDetail?.distance || 0);
+    }
 
-        // ✅ Order stepper
-        const stepperDetail = {
-          by: agentFound.fullName,
-          userId: agentId,
-          date: new Date(),
-          location,
+    // ✅ Update task drop
+    delivery.status = "Started";
+    delivery.startTime = new Date();
+
+    // ✅ Order stepper
+    const stepperDetail = {
+      by: agentFound.fullName,
+      userId: agentId,
+      date: new Date(),
+      location,
+    };
+
+    if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+    orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+      distanceCoveredByAgent.toFixed(2)
+    );
+
+    if (!orderFound.orderDetailStepper) orderFound.orderDetailStepper = {};
+    orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
+
+    if (orderFound?.deliveryMode === "Custom Order") {
+      await updateBillOfCustomOrderInDelivery(
+        orderFound,
+        taskFound,
+        socket
+      );
+    }
+
+    await Promise.all([orderFound.save(), taskFound.save()]);
+
+    // 🔔 Notify roles
+    const { rolesToNotify } = await findRolesToNotify(eventName);
+
+    for (const role of rolesToNotify) {
+      const roleId = {
+        admin: process.env.ADMIN_ID,
+        merchant: orderFound?.merchantId,
+        driver: orderFound?.agentId,
+        customer: orderFound?.customerId._id,
+      }[role];
+
+      if (roleId) {
+        const notificationData = {
+          fcm: {
+            customerId: orderFound.customerId,
+            orderId: taskFound.orderId,
+          },
         };
 
-        if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
-        orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
-          distanceCoveredByAgent.toFixed(2)
+        await sendNotification(
+          roleId,
+          eventName,
+          notificationData,
+          role.charAt(0).toUpperCase() + role.slice(1)
         );
-
-        if (!orderFound.orderDetailStepper) orderFound.orderDetailStepper = {};
-        orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
-
-        if (orderFound?.deliveryMode === "Custom Order") {
-          await updateBillOfCustomOrderInDelivery(
-            orderFound,
-            taskFound,
-            socket
-          );
-        }
-
-        await Promise.all([orderFound.save(), taskFound.save()]);
-
-        // 🔔 Notify roles
-        const { rolesToNotify } = await findRolesToNotify(eventName);
-
-        for (const role of rolesToNotify) {
-          const roleId = {
-            admin: process.env.ADMIN_ID,
-            merchant: orderFound?.merchantId,
-            driver: orderFound?.agentId,
-            customer: orderFound?.customerId._id,
-          }[role];
-
-          if (roleId) {
-            const notificationData = {
-              fcm: {
-                customerId: orderFound.customerId,
-                orderId: taskFound.orderId,
-              },
-            };
-
-            await sendNotification(
-              roleId,
-              eventName,
-              notificationData,
-              role.charAt(0).toUpperCase() + role.slice(1)
-            );
-          }
-        }
-
-        // 🔔 Emit socket events
-        const socketData = { orderDetailStepper: stepperDetail };
-        sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-        sendSocketData(orderFound?.customerId._id, eventName, socketData);
-
-        if (orderFound?.merchantId)
-          sendSocketData(orderFound.merchantId, eventName, socketData);
-
-        const agentSocketId = userSocketMap[agentId]?.socketId;
-        if (agentSocketId) {
-          io.to(agentSocketId).emit(eventName, {
-            data: "Delivery successfully started",
-            success: true,
-          });
-        }
       }
-        
-       if (batchOrder ) {
-          const batchOrderById = await BatchOrder.findById(req.body.orderId);
-          for (const drop of batchOrderById.dropDetails) {
-            await handleAgentDeliveryStarted(
-              drop.taskId,
-              "A25041",
-              req.body.location,
-              0
-            );
-          }
-        }
+    }
+
+    // 🔔 Emit socket events
+    const socketData = { orderDetailStepper: stepperDetail };
+    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+    sendSocketData(orderFound?.customerId._id, eventName, socketData);
+
+    if (orderFound?.merchantId)
+      sendSocketData(orderFound.merchantId, eventName, socketData);
+
+    const agentSocketId = userSocketMap[agentId]?.socketId;
+    if (agentSocketId) {
+      io.to(agentSocketId).emit(eventName, {
+        data: "Delivery successfully started",
+        success: true,
+      });
+    }
+  }
+
+  if (batchOrder) {
+    const batchOrderById = await BatchOrder.findById(req.body.orderId);
+    for (const drop of batchOrderById.dropDetails) {
+      await handleAgentDeliveryStarted(
+        drop.taskId,
+        "A25041",
+        req.body.location,
+        0
+      );
+    }
+  }
 
 
 
 
 
-// console.log("testSocket worked")
-//   // const eventName = "agentPickupStarted";
-//       const socketData1 = {
-//       taskId: req.body.orderId,
-//       agentId: "A25041",
-//       location: req.body.location,
-//       pickupIndex: 0,
-//       dropIndex: null,
-//       batchOrder: true,
-//     };
+  // console.log("testSocket worked")
+  //   // const eventName = "agentPickupStarted";
+  //       const socketData1 = {
+  //       taskId: req.body.orderId,
+  //       agentId: "A25041",
+  //       location: req.body.location,
+  //       pickupIndex: 0,
+  //       dropIndex: null,
+  //       batchOrder: true,
+  //     };
 
-//     sendSocketData(process.env.ADMIN_ID, "agentPickupStarted", socketData1);
-    res.status(200).json({ success: true });
+  //     sendSocketData(process.env.ADMIN_ID, "agentPickupStarted", socketData1);
+  res.status(200).json({ success: true });
 }
 
 module.exports = {

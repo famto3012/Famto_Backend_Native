@@ -17,6 +17,7 @@ const {
 const { formatDate, formatTime } = require("./formatters");
 
 const BatchOrder = require("../models/BatchOrder");
+const { normalizeLatLng } = require("./createOrderHelpers");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main helpers
@@ -40,7 +41,7 @@ const orderCreateTaskHelper = async (orderId) => {
     let pickups = (order.pickups || []).map((pick, index) => ({
       status: "Pending",
       stepIndex: index,
-      location: pick.location,
+      location: normalizeLatLng(pick.location),
       address: pick.address,
       items: pick.items || [],
     }));
@@ -48,10 +49,11 @@ const orderCreateTaskHelper = async (orderId) => {
     let drops = (order.drops || []).map((drop, index) => ({
       status: "Pending",
       stepIndex: index,
-      location: drop.location,
+      location: normalizeLatLng(drop.location),
       address: drop.address,
       items: drop.items || [],
     }));
+    
 
     await Task.create({
       orderId,

@@ -86,4 +86,7 @@ const AgentWorkHistory = mongoose.model(
   agentWorkHistorySchema
 );
 
+// In AgentWorkHistory model:
+agentWorkHistorySchema.index({ agentId: 1, workDate: 1 }, { unique: true });
+
 module.exports = AgentWorkHistory;

@@ -456,7 +456,7 @@ const sendNotification = async (userId, eventName, data, role) => {
 
 const sendSocketData = (userId, eventName, data) => {
   const socketId = userSocketMap[userId]?.socketId;
-  console.log("userSocketMap", userSocketMap);
+  // console.log("userSocketMap", userSocketMap);s
   if (socketId) io.to(socketId).emit(eventName, data);
 };
 
@@ -1210,108 +1210,192 @@ io.on("connection", async (socket) => {
   //   }
   // });
 
-  socket.on("agentOrderAccepted", async ({ orderId, batchOrder, agentId }) => {
-    try {
-      console.log("orderId", orderId);
-      console.log("batchOrder", batchOrder);
-      console.log("agentId", agentId);
-      // if(batchReport){
+  socket.on(
+    "agentOrderAccepted",
+    async ({ orderId, batchOrder, agentId }) => {
+      try {
+        console.log("orderId", orderId);
+        console.log("batchOrder", batchOrder);
+        console.log("agentId", agentId);
 
-      // }
-      const [agent, task, order, agentNotification, sameCancelledOrders] =
-        await Promise.all([
-          Agent.findById(agentId),
-          Task.findOne({ orderId }).populate("orderId"),
-          batchOrder ? BatchOrder.findById(orderId) : Order.findById(orderId),
-          AgentNotificationLogs.findOne({
-            orderId: { $in: [orderId] },
-            agentId,
-            status: "Pending",
-          }),
-          AgentNotificationLogs.countDocuments({
-            orderId: { $in: [orderId] },
-            agentId,
-            status: "Rejected",
-          }),
-        ]);
+        const [agent, task, order, agentNotification, sameCancelledOrders] =
+          await Promise.all([
+            Agent.findById(agentId),
+            Task.findOne({ orderId }).populate("orderId"),
+            batchOrder
+              ? BatchOrder.findById(orderId)
+              : Order.findById(orderId),
+            AgentNotificationLogs.findOne({
+              orderId: { $in: [orderId] },
+              agentId,
+              status: "Pending",
+            }),
+            AgentNotificationLogs.countDocuments({
+              orderId: { $in: [orderId] },
+              agentId,
+              status: "Rejected",
+            }),
+          ]);
 
-      if (!agent) {
-        return socket.emit("error", {
-          message: "Agent not found",
-          success: false,
-        });
-      }
+        // =========================
+        // VALIDATIONS
+        // =========================
 
-      if (agent.status === "Inactive") {
-        return socket.emit("error", {
-          message: "Agent should be online to accept new order",
-          success: false,
-        });
-      }
+        if (!agent) {
+          return socket.emit("error", {
+            message: "Agent not found",
+            success: false,
+          });
+        }
 
-      if (!agentNotification) {
-        console.log("Agent Notification Log not found");
-        return socket.emit("error", {
-          message: "Notification log of agent is not found",
-          success: false,
-        });
-      }
+        if (agent.status === "Inactive") {
+          return socket.emit("error", {
+            message: "Agent should be online to accept new order",
+            success: false,
+          });
+        }
 
-      // Update agentNotification status
-      agentNotification.status = "Accepted";
-      await agentNotification.save();
+        if (!agentNotification) {
+          console.log("Agent Notification Log not found");
 
-      const stepperDetail = {
-        by: agent.fullName,
-        userId: agent._id,
-        date: new Date(),
-        location: getUserLocationFromSocket(agentId),
-      };
+          return socket.emit("error", {
+            message: "Notification log of agent is not found",
+            success: false,
+          });
+        }
 
-      // Update order and task status
-      if (batchOrder) {
-        const batchOrderResp = await BatchOrder.findById(orderId);
+        const stepperDetail = {
+          by: agent.fullName,
+          userId: agent._id,
+          date: new Date(),
+          location: getUserLocationFromSocket(agentId),
+        };
 
-        if (batchOrderResp?.dropDetails?.length) {
-          for (const e of batchOrderResp.dropDetails) {
-            console.log("batchOrderResp.dropDetails", e);
-            await Promise.all([
-              Order.findByIdAndUpdate(
-                e.orderId,
-                {
-                  agentId: agentId,
-                  "orderDetail.agentAcceptedAt": new Date(),
-                  "orderDetailStepper.assigned": stepperDetail,
-                  "detailAddedByAgent.distanceCoveredByAgent": null,
-                },
-                { new: true }
-              ),
-              Task.findByIdAndUpdate(
-                e.taskId,
-                {
-                  agentId: agentId,
-                  taskStatus: "Assigned",
-                  "pickupDropDetails.$[].pickups.$[].status": "Accepted",
-                  "pickupDropDetails.$[].drops.$[].status": "Accepted",
-                },
-                { new: true }
-              ),
-              await BatchOrder.findByIdAndUpdate(
-                orderId,
-                {
-                  $set: {
-                    "pickupAddress.status": "Accepted",
-                    "dropDetails.$[].drops.status": "Accepted",
+        // =========================
+        // BATCH ORDER FLOW
+        // =========================
+
+        if (batchOrder) {
+          // =====================================
+          // ATOMIC LOCK
+          // =====================================
+
+          const lockedTask = await Task.findOneAndUpdate(
+            {
+              orderId,
+              taskStatus: "Unassigned",
+            },
+            {
+              agentId,
+              taskStatus: "Assigned",
+              "pickupDropDetails.$[].pickups.$[].status": "Accepted",
+              "pickupDropDetails.$[].drops.$[].status": "Accepted",
+            },
+            { new: true }
+          );
+
+          if (!lockedTask) {
+            return socket.emit("orderAlreadyAccepted", {
+              message:
+                "This batch order has already been accepted by another agent",
+              success: false,
+            });
+          }
+
+          // =====================================
+          // UPDATE CURRENT AGENT NOTIFICATION
+          // =====================================
+
+          agentNotification.status = "Accepted";
+          await agentNotification.save();
+
+          const batchOrderResp = await BatchOrder.findById(orderId);
+
+          if (batchOrderResp?.dropDetails?.length) {
+            for (const e of batchOrderResp.dropDetails) {
+              console.log("batchOrderResp.dropDetails", e);
+
+              await Promise.all([
+                Order.findByIdAndUpdate(
+                  e.orderId,
+                  {
+                    agentId,
+                    "orderDetail.agentAcceptedAt": new Date(),
+                    "orderDetailStepper.assigned": stepperDetail,
+                    "detailAddedByAgent.distanceCoveredByAgent": null,
                   },
+                  { new: true }
+                ),
+
+                Task.findByIdAndUpdate(
+                  e.taskId,
+                  {
+                    agentId,
+                    taskStatus: "Assigned",
+                    "pickupDropDetails.$[].pickups.$[].status": "Accepted",
+                    "pickupDropDetails.$[].drops.$[].status": "Accepted",
+                  },
+                  { new: true }
+                ),
+              ]);
+            }
+
+            await BatchOrder.findByIdAndUpdate(
+              orderId,
+              {
+                $set: {
+                  "pickupAddress.status": "Accepted",
+                  "dropDetails.$[].drops.status": "Accepted",
                 },
-                { new: true }
-              ),
-            ]);
+              },
+              { new: true }
+            );
           }
         }
-      } else {
-        await Promise.all([
-          Order.findByIdAndUpdate(
+
+        // =========================
+        // NORMAL ORDER FLOW
+        // =========================
+
+        else {
+          // =====================================
+          // ATOMIC LOCK
+          // =====================================
+
+          const lockedTask = await Task.findOneAndUpdate(
+            {
+              orderId,
+              taskStatus: "Unassigned",
+            },
+            {
+              agentId,
+              taskStatus: "Assigned",
+              "pickupDropDetails.$[].pickups.$[].status": "Accepted",
+              "pickupDropDetails.$[].drops.$[].status": "Accepted",
+            },
+            { new: true }
+          );
+
+          if (!lockedTask) {
+            return socket.emit("orderAlreadyAccepted", {
+              message:
+                "This order has already been accepted by another agent",
+              success: false,
+            });
+          }
+
+          // =====================================
+          // UPDATE CURRENT AGENT NOTIFICATION
+          // =====================================
+
+          agentNotification.status = "Accepted";
+          await agentNotification.save();
+
+          // =====================================
+          // UPDATE ORDER
+          // =====================================
+
+          await Order.findByIdAndUpdate(
             orderId,
             {
               agentId,
@@ -1320,96 +1404,188 @@ io.on("connection", async (socket) => {
               "detailAddedByAgent.distanceCoveredByAgent": null,
             },
             { new: true }
-          ),
-          Task.findByIdAndUpdate(task._id, {
-            agentId,
-            taskStatus: "Assigned",
-            "pickupDropDetails.$[].pickups.$[].status": "Accepted",
-            "pickupDropDetails.$[].drops.$[].status": "Accepted",
-          }),
-        ]);
-      }
+          );
+        }
 
-      // Update agent status
-      agent.status = "Busy";
-      agent.appDetail.pendingOrders = Math.max(
-        0,
-        agent.appDetail.pendingOrders - 1
-      );
-      agent.appDetail.cancelledOrders = Math.max(
-        0,
-        agent.appDetail.cancelledOrders - sameCancelledOrders
-      );
-      await agent.save();
+        // =========================
+        // CANCEL OTHER NOTIFICATIONS
+        // =========================
 
-      const eventName = "agentOrderAccepted";
+        await AgentNotificationLogs.updateMany(
+          {
+            orderId: { $in: [orderId] },
+            agentId: { $ne: agentId },
+            status: "Pending",
+          },
+          {
+            status: "Cancelled",
+          }
+        );
 
-      // Send dynamic notifications
-      const { rolesToNotify, data } = await findRolesToNotify(eventName);
-      let manager;
-      const notifications = rolesToNotify.map(async (role) => {
-        let roleId;
+        // =========================
+        // REDUCE OTHER AGENT PENDING COUNT
+        // =========================
 
-        if (role === "admin") {
-          roleId = process.env.ADMIN_ID;
-        } else if (role === "merchant") {
-          roleId = order?.merchantId;
-        } else if (role === "driver") {
-          roleId = order?.agentId;
-        } else if (role === "customer") {
-          roleId = order?.customerId;
-        } else {
-          const roleValue = await ManagerRoles.findOne({ roleName: role });
-          if (roleValue) {
-            manager = await Manager.findOne({ role: roleValue._id });
-          } // Assuming `role` is the role field to match in Manager model
-          if (manager) {
-            roleId = manager._id; // Set roleId to the Manager's ID
+        const otherAgentIds = await AgentNotificationLogs.distinct(
+          "agentId",
+          {
+            orderId: { $in: [orderId] },
+            agentId: { $ne: agentId },
+            status: { $in: ["Cancelled", "Pending"] },
+          }
+        );
+
+        if (otherAgentIds.length > 0) {
+          await Agent.updateMany(
+            {
+              _id: { $in: otherAgentIds },
+              "appDetail.pendingOrders": { $gt: 0 },
+            },
+            {
+              $inc: {
+                "appDetail.pendingOrders": -1,
+              },
+            }
+          );
+
+          // Notify other agents
+          for (const otherId of otherAgentIds) {
+            sendSocketData(otherId, "orderAlreadyAccepted", {
+              orderId,
+              message: "This order has been accepted by another agent",
+            });
           }
         }
 
-        if (roleId) {
-          const notificationData = { fcm: { customerId: order?.customerId } };
-          return sendNotification(
-            roleId,
+        // =========================
+        // UPDATE CURRENT AGENT STATUS
+        // =========================
+
+        agent.status = "Busy";
+
+        agent.appDetail.pendingOrders = Math.max(
+          0,
+          agent.appDetail.pendingOrders - 1
+        );
+
+        agent.appDetail.cancelledOrders = Math.max(
+          0,
+          agent.appDetail.cancelledOrders - sameCancelledOrders
+        );
+
+        await agent.save();
+
+        // =========================
+        // SEND NOTIFICATIONS
+        // =========================
+
+        const eventName = "agentOrderAccepted";
+
+        const { rolesToNotify, data } =
+          await findRolesToNotify(eventName);
+
+        let manager;
+
+        const notifications = rolesToNotify.map(async (role) => {
+          let roleId;
+
+          if (role === "admin") {
+            roleId = process.env.ADMIN_ID;
+          } else if (role === "merchant") {
+            roleId = order?.merchantId;
+          } else if (role === "driver") {
+            roleId = order?.agentId;
+          } else if (role === "customer") {
+            roleId = order?.customerId;
+          } else {
+            const roleValue = await ManagerRoles.findOne({
+              roleName: role,
+            });
+
+            if (roleValue) {
+              manager = await Manager.findOne({
+                role: roleValue._id,
+              });
+            }
+
+            if (manager) {
+              roleId = manager._id;
+            }
+          }
+
+          if (roleId) {
+            const notificationData = {
+              fcm: {
+                customerId: order?.customerId,
+              },
+            };
+
+            return sendNotification(
+              roleId,
+              eventName,
+              notificationData,
+              role.charAt(0).toUpperCase() + role.slice(1)
+            );
+          }
+        });
+
+        await Promise.all(notifications);
+
+        // =========================
+        // SOCKET DATA
+        // =========================
+
+        const socketData = {
+          ...data,
+          agentName: agent.fullName,
+          agentImgURL: agent.agentImageURL,
+          customerId: task?.orderId?.customerId,
+          orderDetailStepper: stepperDetail,
+          success: true,
+        };
+
+        // =========================
+        // SEND SOCKET EVENTS
+        // =========================
+
+        sendSocketData(
+          order?.customerId,
+          eventName,
+          socketData
+        );
+
+        sendSocketData(
+          process.env.ADMIN_ID,
+          eventName,
+          socketData
+        );
+
+        if (task?.orderId?.merchantId) {
+          sendSocketData(
+            task.orderId.merchantId,
             eventName,
-            notificationData,
-            role.charAt(0).toUpperCase() + role.slice(1)
+            socketData
           );
         }
-      });
 
-      await Promise.all(notifications);
+        if (manager?._id) {
+          sendSocketData(manager._id, eventName, socketData);
+        }
 
-      const socketData = {
-        ...data,
-        agentName: agent.fullName,
-        agentImgURL: agent.agentImageURL,
-        customerId: task?.orderId?.customerId,
-        orderDetailStepper: stepperDetail,
-        success: true,
-      };
+        console.log("Order accepted successfully");
+      } catch (err) {
+        console.error(
+          "Error in accepting order:",
+          err.message
+        );
 
-      // Send socket updates
-      sendSocketData(order?.customerId, eventName, socketData);
-      sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-      if (task?.orderId?.merchantId) {
-        sendSocketData(task.orderId.merchantId, eventName, socketData);
+        socket.emit("error", {
+          message: err.message,
+          success: false,
+        });
       }
-      if (manager?._id) {
-        sendSocketData(manager._id, eventName, socketData);
-      }
-
-      // console.log("Order accepted successfully");
-    } catch (err) {
-      console.error("Error in accepting order:", err.message);
-
-      socket.emit("error", {
-        message: err.message,
-        success: false,
-      });
     }
-  });
+  );
 
   // Order rejected socket
 
@@ -1778,6 +1954,19 @@ io.on("connection", async (socket) => {
             if (order) {
               order.orderDetailStepper = order.orderDetailStepper || {};
               order.orderDetailStepper.reachedPickupLocation = stepperDetail;
+
+              // ADD: Calculate start-to-pick distance for batch order
+              const pickupStartedLoc = order.orderDetailStepper?.pickupStarted?.location;
+              if (pickupStartedLoc?.length === 2 && agentLocation?.length === 2) {
+                const { distanceInKM } = await getDistanceFromPickupToDelivery(
+                  pickupStartedLoc,
+                  agentLocation
+                );
+                if (!order.detailAddedByAgent) order.detailAddedByAgent = {};
+                order.detailAddedByAgent.startToPickDistance = distanceInKM;
+                order.detailAddedByAgent.distanceCoveredByAgent = distanceInKM;
+              }
+
               saveOps.push(order.save());
             }
           }
@@ -1912,6 +2101,18 @@ io.on("connection", async (socket) => {
 
           orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
           orderFound.orderDetailStepper.reachedPickupLocation = stepperDetail;
+
+          // Calculate start-to-pick distance (agent's travel from start to merchant)
+          const pickupStartLocation = orderFound.orderDetailStepper?.pickupStarted?.location;
+          if (pickupStartLocation?.length === 2 && agentLocation?.length === 2) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              pickupStartLocation,   // where agent was when they tapped "Start Pickup"
+              agentLocation          // where agent is now (at the merchant)
+            );
+            if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+            orderFound.detailAddedByAgent.startToPickDistance = distanceInKM;
+            orderFound.detailAddedByAgent.distanceCoveredByAgent = distanceInKM;
+          }
 
           await Promise.all([taskFound.save(), orderFound.save()]);
 
@@ -2860,40 +3061,40 @@ io.on("connection", async (socket) => {
             });
 
           // 4) compute distanceCoveredByAgent (log intermediate)
-          let distanceCoveredByAgent = 0;
-          try {
-            if (orderFound?.deliveryMode === "Custom Order") {
-              const { distanceInKM } = await getDistanceFromPickupToDelivery(
-                location,
-                delivery.location
-              );
-              console.log(
-                TAG,
-                "[TASK] Custom Order: distanceInKM:",
-                distanceInKM
-              );
-              distanceCoveredByAgent =
-                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-                distanceInKM;
-            } else {
-              const base = orderFound?.orderDetail?.distance || 0;
-              console.log(
-                TAG,
-                "[TASK] Non-custom: orderDetail.distance:",
-                base
-              );
-              distanceCoveredByAgent =
-                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-                base;
-            }
-            console.log(
-              TAG,
-              "[TASK] distanceCoveredByAgent computed:",
-              distanceCoveredByAgent
-            );
-          } catch (distErr) {
-            console.error(TAG, "[TASK] Error computing distance:", distErr);
-          }
+          // let distanceCoveredByAgent = 0;
+          // try {
+          //   if (orderFound?.deliveryMode === "Custom Order") {
+          //     const { distanceInKM } = await getDistanceFromPickupToDelivery(
+          //       location,
+          //       delivery.location
+          //     );
+          //     console.log(
+          //       TAG,
+          //       "[TASK] Custom Order: distanceInKM:",
+          //       distanceInKM
+          //     );
+          //     distanceCoveredByAgent =
+          //       (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+          //       distanceInKM;
+          //   } else {
+          //     const base = orderFound?.orderDetail?.distance || 0;
+          //     console.log(
+          //       TAG,
+          //       "[TASK] Non-custom: orderDetail.distance:",
+          //       base
+          //     );
+          //     distanceCoveredByAgent =
+          //       (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+          //       base;
+          //   }
+          //   console.log(
+          //     TAG,
+          //     "[TASK] distanceCoveredByAgent computed:",
+          //     distanceCoveredByAgent
+          //   );
+          // } catch (distErr) {
+          //   console.error(TAG, "[TASK] Error computing distance:", distErr);
+          // }
 
           // 5) update delivery and order stepper
           delivery.status = "Started";
@@ -2905,9 +3106,9 @@ io.on("connection", async (socket) => {
             location,
           };
           orderFound.detailAddedByAgent = orderFound.detailAddedByAgent || {};
-          orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
-            (distanceCoveredByAgent || 0).toFixed(2)
-          );
+          // orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+          //   (distanceCoveredByAgent || 0).toFixed(2)
+          // );
           orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
           orderFound.orderDetailStepper.deliveryStarted = stepperDetail;
 
@@ -3136,6 +3337,21 @@ io.on("connection", async (socket) => {
             orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
             orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
             orderFound.deliveryTime = new Date();
+
+            // ADD: Calculate pick-to-delivery distance for batch order
+            const delivStartLoc = orderFound.orderDetailStepper?.deliveryStarted?.location;
+            if (delivStartLoc?.length === 2 && agentLocation?.length === 2) {
+              const { distanceInKM } = await getDistanceFromPickupToDelivery(
+                delivStartLoc,
+                agentLocation
+              );
+              if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+              const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
+              orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+                (startToPick + distanceInKM).toFixed(2)
+              );
+            }
+
             saveOps.push(orderFound.save());
           }
           await Promise.all(saveOps);
@@ -3235,6 +3451,20 @@ io.on("connection", async (socket) => {
           orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
           orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
           orderFound.deliveryTime = new Date();
+
+          // Calculate pick-to-delivery distance (agent's actual travel from merchant to customer)
+          const deliveryStartedLocation = orderFound.orderDetailStepper?.deliveryStarted?.location;
+          if (deliveryStartedLocation?.length === 2 && agentLocation?.length === 2) {
+            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              deliveryStartedLocation,  // where agent was when they left the merchant
+              agentLocation             // where agent is now (at customer)
+            );
+            if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+            const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
+            orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+              (startToPick + distanceInKM).toFixed(2)
+            );
+          }
 
           const allDone = taskFound.pickupDropDetails?.[0]?.drops?.every(
             (d) => d.status === "Completed"
