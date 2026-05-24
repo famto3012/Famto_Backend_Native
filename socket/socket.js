@@ -1320,7 +1320,7 @@ io.on("connection", async (socket) => {
                   e.orderId,
                   {
                     agentId,
-                    "orderDetail.agentAcceptedAt": new Date(),
+                    "agentAcceptedAt": new Date(),
                     "orderDetailStepper.assigned": stepperDetail,
                     "detailAddedByAgent.distanceCoveredByAgent": null,
                   },
@@ -1399,7 +1399,7 @@ io.on("connection", async (socket) => {
             orderId,
             {
               agentId,
-              "orderDetail.agentAcceptedAt": new Date(),
+              "agentAcceptedAt": new Date(),
               "orderDetailStepper.assigned": stepperDetail,
               "detailAddedByAgent.distanceCoveredByAgent": null,
             },
@@ -4279,15 +4279,15 @@ io.on("connection", async (socket) => {
         const currentTime = new Date();
         let delayedBy = null;
 
-        if (currentTime > new Date(orderFound.orderDetail.deliveryTime)) {
+        if (currentTime > new Date(orderFound.deliveryTime)) {
           delayedBy =
-            currentTime - new Date(orderFound.orderDetail.deliveryTime);
+            currentTime - new Date(orderFound.deliveryTime);
         }
 
-        orderFound.orderDetail.deliveryTime = currentTime;
-        orderFound.orderDetail.timeTaken =
-          currentTime - new Date(orderFound.orderDetail.agentAcceptedAt);
-        orderFound.orderDetail.delayedBy = delayedBy;
+        orderFound.deliveryTime = currentTime;
+        orderFound.timeTaken =
+          currentTime - new Date(orderFound.agentAcceptedAt);
+        orderFound.delayedBy = delayedBy;
 
         orderFound.detailAddedByAgent.shopUpdates.push(dataByAgent);
         orderFound.status = "Cancelled";

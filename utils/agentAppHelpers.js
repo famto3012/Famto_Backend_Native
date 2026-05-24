@@ -410,7 +410,7 @@ const updateOrderDetails = (order, calculatedSalary) => {
 
   order.status = "Completed";
   order.paymentStatus = "Completed";
-  order.deliveryTime = currentTime;
+  // order.deliveryTime = currentTime;
   order.timeTaken = currentTime - new Date(order.agentAcceptedAt);
   order.delayedBy = delayedBy;
 

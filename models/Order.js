@@ -269,7 +269,11 @@ const orderSchema = mongoose.Schema(
     endDate: { type: Date, default: null },
     time: { type: Date, default: null },
     numOfDays: { type: Number, default: null },
-
+    // Add inside orderSchema definition:
+    agentAcceptedAt: { type: Date, default: null },
+    timeTaken: { type: Number, default: null },        // milliseconds
+    delayedBy: { type: Number, default: null },         // milliseconds
+    actualDeliveryTime: { type: Date, default: null },  // when agent actually delivered
     totalAmount: { type: Number, default: 0 },
     status: {
       type: String,

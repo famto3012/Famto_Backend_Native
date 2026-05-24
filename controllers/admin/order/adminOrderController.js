@@ -68,6 +68,7 @@ const {
   sendNotification,
   findRolesToNotify,
   sendSocketData,
+  getUserLocationFromSocket,
 } = require("../../../socket/socket");
 
 const fetchAllOrdersByAdminController = async (req, res, next) => {
@@ -738,7 +739,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
-          review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
+          review: orderFound?.orderRating?.ratingToDeliveryAgent?.review || "-",
         },
         ratingsByDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingByDeliveryAgent?.rating || 0,
@@ -770,8 +771,8 @@ const getOrderDetailByAdminController = async (req, res, next) => {
           orderFound?.orderDetail?.instructionToDeliveryAgent || "-",
         distanceTravelled:
           orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0,
-        timeTaken: formatToHours(orderFound?.orderDetail?.timeTaken) || "-",
-        delayedBy: formatToHours(orderFound?.orderDetail?.delayedBy) || "-",
+        timeTaken: formatToHours(orderFound?.timeTaken) || "-",
+        delayedBy: formatToHours(orderFound?.delayedBy) || "-",
       },
       billDetail: orderFound.billDetail || null,
       agentLocation: orderFound?.agentId?.location || null,

@@ -118,16 +118,16 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
           merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
           customerName:
             order?.customerId?.fullName ||
-            order?.orderDetail?.deliveryAddress?.fullName ||
+            order?.deliveryAddress?.fullName ||
             "-",
-          deliveryMode: order?.orderDetail?.deliveryMode,
+          deliveryMode: order?.deliveryMode,
           orderDate: formatDate(order.createdAt),
           orderTime: formatTime(order.createdAt),
-          deliveryDate: order?.orderDetail?.deliveryTime
-            ? formatDate(order.orderDetail.deliveryTime)
+          deliveryDate: order?.deliveryTime
+            ? formatDate(order.deliveryTime)
             : "-",
-          deliveryTime: order?.orderDetail?.deliveryTime
-            ? formatTime(order.orderDetail.deliveryTime)
+          deliveryTime: order?.deliveryTime
+            ? formatTime(order.deliveryTime)
             : "-",
           paymentMethod:
             order.paymentMode === "Cash-on-delivery"
@@ -2628,7 +2628,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
       success: true,
       data: {
         orderId: newOrder._id,
-        deliveryTime: newOrder.orderDetail.deliveryTime,
+        deliveryTime: newOrder.deliveryTime,
       },
     });
 
