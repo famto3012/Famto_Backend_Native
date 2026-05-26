@@ -16,7 +16,6 @@ const MerchantNotificationLogs = require("../models/MerchantNotificationLog");
 const {
   getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
-  calculateDeliveryCharges,
 } = require("../utils/customerAppHelpers");
 const {
   calculateAgentEarnings,
@@ -3462,52 +3461,10 @@ io.on("connection", async (socket) => {
                 totalDistance;
 
               // ---------------- CUSTOM ORDER PRICING ----------------
-              if (orderFound.deliveryMode === "Custom Order") {
-                const geofenceId =
-                  orderFound?.customerId?.customerDetails?.geofenceId;
-
-                const customerPricing = await CustomerPricing.findOne({
-                  deliveryMode: "Custom Order",
-                  geofenceId,
-                  status: true,
-                });
-
-                if (customerPricing) {
-                  const baseFare = Number(customerPricing.baseFare || 0);
-                  const baseDistance = Number(customerPricing.baseDistance || 0);
-                  const fareAfterBaseDistance = Number(
-                    customerPricing.fareAfterBaseDistance || 0
-                  );
-
-                  const deliveryCharge = calculateDeliveryCharges(
-                    totalDistance,
-                    baseFare,
-                    baseDistance,
-                    fareAfterBaseDistance
-                  );
-
-                  const itemTotal = Number(
-                    orderFound.billDetail?.itemTotal || 0
-                  );
-
-                  orderFound.billDetail = orderFound.billDetail || {};
-                  orderFound.billDetail.deliveryCharge = parseFloat(
-                    deliveryCharge.toFixed(2)
-                  );
-                  orderFound.billDetail.subTotal = parseFloat(
-                    (itemTotal + deliveryCharge).toFixed(2)
-                  );
-                  orderFound.billDetail.grandTotal = parseFloat(
-                    (
-                      itemTotal +
-                      deliveryCharge -
-                      Number(orderFound.billDetail?.discountedAmount || 0)
-                    ).toFixed(2)
-                  );
-
-                  orderFound.markModified("billDetail");
-                }
-              }
+              // if (orderFound.deliveryMode === "Custom Order") {
+              
+              //   await updateBillOfCustomOrderInDelivery(orderFound, taskFound, socket);
+              // }
             }
 
             saveOps.push(orderFound.save());
@@ -3702,51 +3659,31 @@ io.on("connection", async (socket) => {
               totalDistance;
 
             // ---------------- CUSTOM ORDER PRICING ----------------
-            if (orderFound.deliveryMode === "Custom Order") {
-              const geofenceId =
-                orderFound?.customerId?.customerDetails?.geofenceId;
+            if (orderFound.orderType === "CustomOrder") {
+              const baseKm = 5;
+              const extraKmRate = 12;
 
-              const customerPricing = await CustomerPricing.findOne({
-                deliveryMode: "Custom Order",
-                geofenceId,
-                status: true,
-              });
+              let extraCharge = 0;
 
-              if (customerPricing) {
-                const baseFare = Number(customerPricing.baseFare || 0);
-                const baseDistance = Number(customerPricing.baseDistance || 0);
-                const fareAfterBaseDistance = Number(
-                  customerPricing.fareAfterBaseDistance || 0
-                );
-
-                const deliveryCharge = calculateDeliveryCharges(
-                  totalDistance,
-                  baseFare,
-                  baseDistance,
-                  fareAfterBaseDistance
-                );
-
-                const itemTotal = Number(
-                  orderFound.billDetail?.itemTotal || 0
-                );
-
-                orderFound.billDetail = orderFound.billDetail || {};
-                orderFound.billDetail.deliveryCharge = parseFloat(
-                  deliveryCharge.toFixed(2)
-                );
-                orderFound.billDetail.subTotal = parseFloat(
-                  (itemTotal + deliveryCharge).toFixed(2)
-                );
-                orderFound.billDetail.grandTotal = parseFloat(
-                  (
-                    itemTotal +
-                    deliveryCharge -
-                    Number(orderFound.billDetail?.discountedAmount || 0)
-                  ).toFixed(2)
-                );
-
-                orderFound.markModified("billDetail");
+              if (totalDistance > baseKm) {
+                extraCharge =
+                  (totalDistance - baseKm) * extraKmRate;
               }
+
+              orderFound.pricing = orderFound.pricing || {};
+
+              orderFound.pricing.customOrderPricing = {
+                totalDistance,
+                extraCharge: Number(extraCharge.toFixed(2)),
+                finalPrice: Number(
+                  (
+                    (orderFound.pricing.basePrice || 0) +
+                    extraCharge
+                  ).toFixed(2)
+                ),
+              };
+
+              orderFound.markModified("pricing");
             }
           }
 
