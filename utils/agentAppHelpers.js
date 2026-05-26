@@ -644,16 +644,8 @@ const updateCustomerSubscriptionCount = async (customerId) => {
   }
 };
 
-const updateBillOfCustomOrderInDelivery = async (
-  order,
-  task,
-  socket
-) => {
+const updateBillOfCustomOrderInDelivery = async (order, task, socket) => {
   try {
-    // =========================
-    // VALIDATIONS
-    // =========================
-
     if (!order) {
       return socket.emit("error", {
         message: "Order not found",
@@ -668,252 +660,99 @@ const updateBillOfCustomOrderInDelivery = async (
       });
     }
 
-    // =========================
-    // TASK TIMES
-    // =========================
-
+    // Task timestamps (correct paths)
     const reachedPickupAt =
-      task.pickupDropDetails[0].pickups[0].completedTime;
-
-
-    const deliveryStartAt = task.pickupDropDetails[0].drops[0].startTime;
-
+      task.pickupDropDetails?.[0]?.pickups?.[0]?.completedTime;
+    const deliveryStartAt =
+      task.pickupDropDetails?.[0]?.drops?.[0]?.startTime;
     const pickupStartAt =
-      task.pickupDropDetails[0].pickups[0].startTime;
+      task.pickupDropDetails?.[0]?.pickups?.[0]?.startTime;
 
-    if (
-      !reachedPickupAt ||
-      !deliveryStartAt ||
-      !pickupStartAt
-    ) {
+    if (!reachedPickupAt || !deliveryStartAt || !pickupStartAt) {
       return socket.emit("error", {
         message: "Required task timestamps are missing",
         success: false,
       });
     }
 
-    // =========================
-    // CUSTOMER PRICING
-    // =========================
-
-    const geofenceId =
-      order?.customerId?.customerDetails?.geofenceId;
-
-    const customerPricing =
-      await CustomerPricing.findOne({
-        deliveryMode: "Custom Order",
-        geofenceId,
-        status: true,
-      });
+    // Fetch customer pricing from DB
+    const customerPricing = await CustomerPricing.findOne({
+      deliveryMode: "Custom Order",
+      geofenceId: order?.customerId?.customerDetails?.geofenceId,
+      status: true,
+    });
 
     if (!customerPricing) {
       return socket.emit("error", {
-        message:
-          "Customer pricing for custom order not found",
+        message: "Customer pricing for custom order not found",
         success: false,
       });
     }
 
-    // =========================
-    // NORMALIZE PRICING VALUES
-    // =========================
+    const baseFare = Number(customerPricing.baseFare || 0);
+    const baseDistance = Number(customerPricing.baseDistance || 0);
+    const fareAfterBaseDistance = Number(customerPricing.fareAfterBaseDistance || 0);
+    const waitingFare = Number(customerPricing.waitingFare || 0);
+    const waitingTime = Number(customerPricing.waitingTime || 0);
+    const purchaseFarePerHour = Number(customerPricing.purchaseFarePerHour || 0);
 
-    const baseFare = Number(
-      customerPricing?.baseFare || 0
+    // Delivery charge (distance-based)
+    const totalDistance = Number(order.distance || 0);
+    const calculatedDeliveryCharge = calculateDeliveryCharges(
+      totalDistance,
+      baseFare,
+      baseDistance,
+      fareAfterBaseDistance
     );
 
-    const baseDistance = Number(
-      customerPricing?.baseDistance || 0
-    );
-
-    const fareAfterBaseDistance = Number(
-      customerPricing?.fareAfterBaseDistance || 0
-    );
-
-    const waitingFare = Number(
-      customerPricing?.waitingFare || 0
-    );
-
-    const waitingTime = Number(
-      customerPricing?.waitingTime || 0
-    );
-
-    const purchaseFarePerHour = Number(
-      customerPricing?.purchaseFarePerHour || 0
-    );
-
-    // =========================
-    // DISTANCE
-    // =========================
-
-    const totalDistance = Number(order?.distance || 0);
-
-    // =========================
-    // DELIVERY CHARGE
-    // =========================
-
-    const calculatedDeliveryCharge =
-      calculateDeliveryCharges(
-        totalDistance,
-        baseFare,
-        baseDistance,
-        fareAfterBaseDistance
-      );
-
-    // =========================
-    // WAITING CHARGE
-    // =========================
-
+    // Waiting charge (time agent waited at pickup beyond free waiting period)
     let calculatedWaitingFare = 0;
-
-    const waitingMinutes = Math.max(
-      0,
-      Math.floor(
-        (new Date(deliveryStartAt) -
-          new Date(reachedPickupAt)) /
-        60000
-      )
+    const minutesWaitedAtPickup = Math.floor(
+      (new Date(deliveryStartAt) - new Date(reachedPickupAt)) / 60000
     );
 
-    if (waitingMinutes > waitingTime) {
-      const extraMinutes =
-        waitingMinutes - waitingTime;
-
-      calculatedWaitingFare = parseFloat(
-        (extraMinutes * waitingFare).toFixed(2)
-      );
+    if (minutesWaitedAtPickup > waitingTime) {
+      const extraMinutes = minutesWaitedAtPickup - waitingTime;
+      calculatedWaitingFare = parseFloat((extraMinutes * waitingFare).toFixed(2));
     }
 
-    // =========================
-    // PURCHASE CHARGE
-    // =========================
-
+    // Purchase charge (hourly rate for total task duration)
     let calculatedPurchaseFare = 0;
+    const totalTaskDurationMs = new Date() - new Date(pickupStartAt);
+    const diffInHours = Math.ceil(totalTaskDurationMs / 3600000);
 
-    const totalTaskDurationMs =
-      new Date() - new Date(pickupStartAt);
-
-    // Charge hourly
-    const totalHours =
-      totalTaskDurationMs / 3600000;
-
-    if (totalHours > 0) {
+    if (diffInHours > 0) {
       calculatedPurchaseFare = parseFloat(
-        (
-          totalHours * purchaseFarePerHour
-        ).toFixed(2)
+        (diffInHours * purchaseFarePerHour).toFixed(2)
       );
     }
 
-    // =========================
-    // TOTAL ADDITIONAL CHARGES
-    // =========================
-
-    const additionalCharges =
-      calculatedDeliveryCharge +
-      calculatedWaitingFare +
-      calculatedPurchaseFare;
-
-    // =========================
-    // INITIAL BILL VALUES
-    // =========================
-
-    const itemTotal = Number(
-      order?.billDetail?.itemTotal || 0
+    // Combine all into deliveryCharge (matches billSchema)
+    const combinedDeliveryCharge = parseFloat(
+      (calculatedDeliveryCharge + calculatedWaitingFare + calculatedPurchaseFare).toFixed(2)
     );
 
-    const tax = Number(
-      order?.billDetail?.tax || 0
-    );
+    // Recalculate totals from scratch (no +=)
+    const itemTotal = Number(order.billDetail?.itemTotal || 0);
+    const surgePrice = Number(order.billDetail?.surgePrice || 0);
+    const taxAmount = Number(order.billDetail?.taxAmount || 0);
+    const discountedAmount = Number(order.billDetail?.discountedAmount || 0);
 
-    const discount = Number(
-      order?.billDetail?.discount || 0
-    );
-
-    // =========================
-    // UPDATE BILL DETAILS
-    // =========================
-
-    order.billDetail = order.billDetail || {};
-
-    order.billDetail.deliveryCharge =
-      parseFloat(
-        calculatedDeliveryCharge.toFixed(2)
-      );
-
-    order.billDetail.waitingCharges =
-      parseFloat(
-        calculatedWaitingFare.toFixed(2)
-      );
-
-    order.billDetail.purchaseCharges =
-      parseFloat(
-        calculatedPurchaseFare.toFixed(2)
-      );
-
-    order.billDetail.additionalCharges =
-      parseFloat(
-        additionalCharges.toFixed(2)
-      );
-
-    // =========================
-    // RECALCULATE TOTALS
-    // =========================
-
+    order.billDetail.deliveryCharge = combinedDeliveryCharge;
     order.billDetail.subTotal = parseFloat(
-      (
-        itemTotal + additionalCharges
-      ).toFixed(2)
+      (itemTotal + combinedDeliveryCharge + surgePrice).toFixed(2)
     );
-
-    order.billDetail.grandTotal =
-      parseFloat(
-        (
-          order.billDetail.subTotal +
-          tax -
-          discount
-        ).toFixed(2)
-      );
-
-    // =========================
-    // OPTIONAL DEBUG INFO
-    // =========================
-
-    order.billDetail.calculationBreakdown = {
-      distance: totalDistance,
-      waitingMinutes,
-      purchaseHours: parseFloat(
-        totalHours.toFixed(2)
-      ),
-      updatedAt: new Date(),
-    };
-
-    // =========================
-    // SAVE ORDER
-    // =========================
+    order.billDetail.grandTotal = parseFloat(
+      (order.billDetail.subTotal + taxAmount - discountedAmount).toFixed(2)
+    );
 
     await order.save();
 
-    return {
-      success: true,
-      deliveryCharge:
-        order.billDetail.deliveryCharge,
-      waitingCharges:
-        order.billDetail.waitingCharges,
-      purchaseCharges:
-        order.billDetail.purchaseCharges,
-      grandTotal:
-        order.billDetail.grandTotal,
-    };
+    return { success: true };
   } catch (err) {
-    console.error(
-      "[updateBillOfCustomOrderInDelivery]",
-      err
-    );
-
+    console.error("[updateBillOfCustomOrderInDelivery]", err);
     return socket.emit("error", {
-      message: `Error updating custom order bill: ${err?.message || err
-        }`,
+      message: `Error in updating bill: ${err?.message || err}`,
       success: false,
     });
   }
