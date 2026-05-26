@@ -16,6 +16,7 @@ const MerchantNotificationLogs = require("../models/MerchantNotificationLog");
 const {
   getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
+  calculateDeliveryCharges,
 } = require("../utils/customerAppHelpers");
 const {
   calculateAgentEarnings,
@@ -1218,24 +1219,29 @@ io.on("connection", async (socket) => {
         console.log("batchOrder", batchOrder);
         console.log("agentId", agentId);
 
-        const [agent, task, order, agentNotification, sameCancelledOrders] =
-          await Promise.all([
-            Agent.findById(agentId),
-            Task.findOne({ orderId }).populate("orderId"),
-            batchOrder
-              ? BatchOrder.findById(orderId)
-              : Order.findById(orderId),
-            AgentNotificationLogs.findOne({
-              orderId: { $in: [orderId] },
-              agentId,
-              status: "Pending",
-            }),
-            AgentNotificationLogs.countDocuments({
-              orderId: { $in: [orderId] },
-              agentId,
-              status: "Rejected",
-            }),
-          ]);
+        const [
+          agent,
+          task,
+          order,
+          agentNotification,
+          sameCancelledOrders,
+        ] = await Promise.all([
+          Agent.findById(agentId),
+          Task.findOne({ orderId }).populate("orderId"),
+          batchOrder
+            ? BatchOrder.findById(orderId)
+            : Order.findById(orderId),
+          AgentNotificationLogs.findOne({
+            orderId: { $in: [orderId] },
+            agentId,
+            status: "Pending",
+          }),
+          AgentNotificationLogs.countDocuments({
+            orderId: { $in: [orderId] },
+            agentId,
+            status: "Rejected",
+          }),
+        ]);
 
         // =========================
         // VALIDATIONS
@@ -1277,24 +1283,33 @@ io.on("connection", async (socket) => {
 
         if (batchOrder) {
           // =====================================
-          // ATOMIC LOCK
+          // GET BATCH ORDER
           // =====================================
 
-          const lockedTask = await Task.findOneAndUpdate(
-            {
-              orderId,
-              taskStatus: "Unassigned",
-            },
-            {
-              agentId,
-              taskStatus: "Assigned",
-              "pickupDropDetails.$[].pickups.$[].status": "Accepted",
-              "pickupDropDetails.$[].drops.$[].status": "Accepted",
-            },
-            { new: true }
+          const batchOrderDoc = await BatchOrder.findById(orderId);
+
+          if (!batchOrderDoc) {
+            return socket.emit("error", {
+              message: "Batch order not found",
+              success: false,
+            });
+          }
+
+          const taskIds = batchOrderDoc.dropDetails.map(
+            (e) => e.taskId
           );
 
-          if (!lockedTask) {
+          // =====================================
+          // CHECK IF ALL TASKS ARE UNASSIGNED
+          // =====================================
+
+          const unassignedTasksCount =
+            await Task.countDocuments({
+              _id: { $in: taskIds },
+              taskStatus: "Unassigned",
+            });
+
+          if (unassignedTasksCount !== taskIds.length) {
             return socket.emit("orderAlreadyAccepted", {
               message:
                 "This batch order has already been accepted by another agent",
@@ -1303,53 +1318,77 @@ io.on("connection", async (socket) => {
           }
 
           // =====================================
+          // ASSIGN ALL TASKS
+          // =====================================
+
+          const tasks = await Task.find({
+            _id: { $in: taskIds },
+          });
+
+          for (const taskItem of tasks) {
+            taskItem.agentId = agentId;
+            taskItem.taskStatus = "Assigned";
+
+            taskItem.pickupDropDetails?.forEach((pd) => {
+              pd.pickups?.forEach((pickup) => {
+                pickup.status = "Accepted";
+              });
+
+              pd.drops?.forEach((drop) => {
+                drop.status = "Accepted";
+              });
+            });
+
+            await taskItem.save();
+          }
+
+          // =====================================
           // UPDATE CURRENT AGENT NOTIFICATION
           // =====================================
 
           agentNotification.status = "Accepted";
+
           await agentNotification.save();
 
-          const batchOrderResp = await BatchOrder.findById(orderId);
+          // =====================================
+          // UPDATE ALL ORDERS
+          // =====================================
 
-          if (batchOrderResp?.dropDetails?.length) {
-            for (const e of batchOrderResp.dropDetails) {
-              console.log("batchOrderResp.dropDetails", e);
+          if (batchOrderDoc?.dropDetails?.length) {
+            for (const e of batchOrderDoc.dropDetails) {
+              console.log(
+                "batchOrderDoc.dropDetails",
+                e
+              );
 
-              await Promise.all([
-                Order.findByIdAndUpdate(
-                  e.orderId,
-                  {
-                    agentId,
-                    "agentAcceptedAt": new Date(),
-                    "orderDetailStepper.assigned": stepperDetail,
-                    "detailAddedByAgent.distanceCoveredByAgent": null,
-                  },
-                  { new: true }
-                ),
-
-                Task.findByIdAndUpdate(
-                  e.taskId,
-                  {
-                    agentId,
-                    taskStatus: "Assigned",
-                    "pickupDropDetails.$[].pickups.$[].status": "Accepted",
-                    "pickupDropDetails.$[].drops.$[].status": "Accepted",
-                  },
-                  { new: true }
-                ),
-              ]);
+              await Order.findByIdAndUpdate(
+                e.orderId,
+                {
+                  agentId,
+                  agentAcceptedAt: new Date(),
+                  "orderDetailStepper.assigned":
+                    stepperDetail,
+                  "detailAddedByAgent.distanceCoveredByAgent":
+                    null,
+                },
+                { new: true }
+              );
             }
 
-            await BatchOrder.findByIdAndUpdate(
-              orderId,
-              {
-                $set: {
-                  "pickupAddress.status": "Accepted",
-                  "dropDetails.$[].drops.status": "Accepted",
-                },
-              },
-              { new: true }
-            );
+            // =====================================
+            // UPDATE BATCH ORDER
+            // =====================================
+
+            batchOrderDoc.pickupAddress.status =
+              "Accepted";
+
+            batchOrderDoc.dropDetails.forEach((drop) => {
+              if (drop?.drops) {
+                drop.drops.status = "Accepted";
+              }
+            });
+
+            await batchOrderDoc.save();
           }
         }
 
@@ -1362,26 +1401,32 @@ io.on("connection", async (socket) => {
           // ATOMIC LOCK
           // =====================================
 
-          const lockedTask = await Task.findOneAndUpdate(
-            {
-              orderId,
-              taskStatus: "Unassigned",
-            },
-            {
-              agentId,
-              taskStatus: "Assigned",
-              "pickupDropDetails.$[].pickups.$[].status": "Accepted",
-              "pickupDropDetails.$[].drops.$[].status": "Accepted",
-            },
-            { new: true }
-          );
+          const lockedTask =
+            await Task.findOneAndUpdate(
+              {
+                orderId,
+                taskStatus: "Unassigned",
+              },
+              {
+                agentId,
+                taskStatus: "Assigned",
+                "pickupDropDetails.$[].pickups.$[].status":
+                  "Accepted",
+                "pickupDropDetails.$[].drops.$[].status":
+                  "Accepted",
+              },
+              { new: true }
+            );
 
           if (!lockedTask) {
-            return socket.emit("orderAlreadyAccepted", {
-              message:
-                "This order has already been accepted by another agent",
-              success: false,
-            });
+            return socket.emit(
+              "orderAlreadyAccepted",
+              {
+                message:
+                  "This order has already been accepted by another agent",
+                success: false,
+              }
+            );
           }
 
           // =====================================
@@ -1389,6 +1434,7 @@ io.on("connection", async (socket) => {
           // =====================================
 
           agentNotification.status = "Accepted";
+
           await agentNotification.save();
 
           // =====================================
@@ -1399,9 +1445,11 @@ io.on("connection", async (socket) => {
             orderId,
             {
               agentId,
-              "agentAcceptedAt": new Date(),
-              "orderDetailStepper.assigned": stepperDetail,
-              "detailAddedByAgent.distanceCoveredByAgent": null,
+              agentAcceptedAt: new Date(),
+              "orderDetailStepper.assigned":
+                stepperDetail,
+              "detailAddedByAgent.distanceCoveredByAgent":
+                null,
             },
             { new: true }
           );
@@ -1426,14 +1474,17 @@ io.on("connection", async (socket) => {
         // REDUCE OTHER AGENT PENDING COUNT
         // =========================
 
-        const otherAgentIds = await AgentNotificationLogs.distinct(
-          "agentId",
-          {
-            orderId: { $in: [orderId] },
-            agentId: { $ne: agentId },
-            status: { $in: ["Cancelled", "Pending"] },
-          }
-        );
+        const otherAgentIds =
+          await AgentNotificationLogs.distinct(
+            "agentId",
+            {
+              orderId: { $in: [orderId] },
+              agentId: { $ne: agentId },
+              status: {
+                $in: ["Cancelled", "Pending"],
+              },
+            }
+          );
 
         if (otherAgentIds.length > 0) {
           await Agent.updateMany(
@@ -1450,10 +1501,15 @@ io.on("connection", async (socket) => {
 
           // Notify other agents
           for (const otherId of otherAgentIds) {
-            sendSocketData(otherId, "orderAlreadyAccepted", {
-              orderId,
-              message: "This order has been accepted by another agent",
-            });
+            sendSocketData(
+              otherId,
+              "orderAlreadyAccepted",
+              {
+                orderId,
+                message:
+                  "This order has been accepted by another agent",
+              }
+            );
           }
         }
 
@@ -1470,7 +1526,8 @@ io.on("connection", async (socket) => {
 
         agent.appDetail.cancelledOrders = Math.max(
           0,
-          agent.appDetail.cancelledOrders - sameCancelledOrders
+          agent.appDetail.cancelledOrders -
+          sameCancelledOrders
         );
 
         await agent.save();
@@ -1486,48 +1543,52 @@ io.on("connection", async (socket) => {
 
         let manager;
 
-        const notifications = rolesToNotify.map(async (role) => {
-          let roleId;
+        const notifications = rolesToNotify.map(
+          async (role) => {
+            let roleId;
 
-          if (role === "admin") {
-            roleId = process.env.ADMIN_ID;
-          } else if (role === "merchant") {
-            roleId = order?.merchantId;
-          } else if (role === "driver") {
-            roleId = order?.agentId;
-          } else if (role === "customer") {
-            roleId = order?.customerId;
-          } else {
-            const roleValue = await ManagerRoles.findOne({
-              roleName: role,
-            });
+            if (role === "admin") {
+              roleId = process.env.ADMIN_ID;
+            } else if (role === "merchant") {
+              roleId = order?.merchantId;
+            } else if (role === "driver") {
+              roleId = order?.agentId;
+            } else if (role === "customer") {
+              roleId = order?.customerId;
+            } else {
+              const roleValue =
+                await ManagerRoles.findOne({
+                  roleName: role,
+                });
 
-            if (roleValue) {
-              manager = await Manager.findOne({
-                role: roleValue._id,
-              });
+              if (roleValue) {
+                manager = await Manager.findOne({
+                  role: roleValue._id,
+                });
+              }
+
+              if (manager) {
+                roleId = manager._id;
+              }
             }
 
-            if (manager) {
-              roleId = manager._id;
+            if (roleId) {
+              const notificationData = {
+                fcm: {
+                  customerId: order?.customerId,
+                },
+              };
+
+              return sendNotification(
+                roleId,
+                eventName,
+                notificationData,
+                role.charAt(0).toUpperCase() +
+                role.slice(1)
+              );
             }
           }
-
-          if (roleId) {
-            const notificationData = {
-              fcm: {
-                customerId: order?.customerId,
-              },
-            };
-
-            return sendNotification(
-              roleId,
-              eventName,
-              notificationData,
-              role.charAt(0).toUpperCase() + role.slice(1)
-            );
-          }
-        });
+        );
 
         await Promise.all(notifications);
 
@@ -1569,10 +1630,16 @@ io.on("connection", async (socket) => {
         }
 
         if (manager?._id) {
-          sendSocketData(manager._id, eventName, socketData);
+          sendSocketData(
+            manager._id,
+            eventName,
+            socketData
+          );
         }
 
-        console.log("Order accepted successfully");
+        console.log(
+          "Order accepted successfully"
+        );
       } catch (err) {
         console.error(
           "Error in accepting order:",
@@ -3061,40 +3128,40 @@ io.on("connection", async (socket) => {
             });
 
           // 4) compute distanceCoveredByAgent (log intermediate)
-          // let distanceCoveredByAgent = 0;
-          // try {
-          //   if (orderFound?.deliveryMode === "Custom Order") {
-          //     const { distanceInKM } = await getDistanceFromPickupToDelivery(
-          //       location,
-          //       delivery.location
-          //     );
-          //     console.log(
-          //       TAG,
-          //       "[TASK] Custom Order: distanceInKM:",
-          //       distanceInKM
-          //     );
-          //     distanceCoveredByAgent =
-          //       (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-          //       distanceInKM;
-          //   } else {
-          //     const base = orderFound?.orderDetail?.distance || 0;
-          //     console.log(
-          //       TAG,
-          //       "[TASK] Non-custom: orderDetail.distance:",
-          //       base
-          //     );
-          //     distanceCoveredByAgent =
-          //       (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
-          //       base;
-          //   }
-          //   console.log(
-          //     TAG,
-          //     "[TASK] distanceCoveredByAgent computed:",
-          //     distanceCoveredByAgent
-          //   );
-          // } catch (distErr) {
-          //   console.error(TAG, "[TASK] Error computing distance:", distErr);
-          // }
+          let distanceCoveredByAgent = 0;
+          try {
+            if (orderFound?.deliveryMode === "Custom Order") {
+              const { distanceInKM } = await getDistanceFromPickupToDelivery(
+                location,
+                delivery.location
+              );
+              console.log(
+                TAG,
+                "[TASK] Custom Order: distanceInKM:",
+                distanceInKM
+              );
+              distanceCoveredByAgent =
+                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+                distanceInKM;
+            } else {
+              const base = orderFound?.distance || 0;
+              console.log(
+                TAG,
+                "[TASK] Non-custom: orderDetail.distance:",
+                base
+              );
+              distanceCoveredByAgent =
+                (orderFound?.detailAddedByAgent?.distanceCoveredByAgent || 0) +
+                base;
+            }
+            console.log(
+              TAG,
+              "[TASK] distanceCoveredByAgent computed:",
+              distanceCoveredByAgent
+            );
+          } catch (distErr) {
+            console.error(TAG, "[TASK] Error computing distance:", distErr);
+          }
 
           // 5) update delivery and order stepper
           delivery.status = "Started";
@@ -3276,38 +3343,56 @@ io.on("connection", async (socket) => {
         if (batchOrder) {
           // ---------- BatchOrder flow ----------
           const batchOrderDoc = await BatchOrder.findById(taskId);
+
           if (!batchOrderDoc) {
-            return socket.emit("error", { message: "BatchOrder not found", success: false });
+            return socket.emit("error", {
+              message: "BatchOrder not found",
+              success: false,
+            });
           }
 
           const dropIndex = Number(deliveryIndex);
           const ddLen = batchOrderDoc.dropDetails?.length || 0;
-          if (Number.isNaN(dropIndex) || dropIndex < 0 || dropIndex >= ddLen) {
-            return socket.emit("error", { message: "Invalid drop index (batch)", success: false });
+
+          if (
+            Number.isNaN(dropIndex) ||
+            dropIndex < 0 ||
+            dropIndex >= ddLen
+          ) {
+            return socket.emit("error", {
+              message: "Invalid drop index (batch)",
+              success: false,
+            });
           }
 
           const drop = batchOrderDoc.dropDetails[dropIndex];
+
           if (!drop?.drops) {
-            return socket.emit("error", { message: "Drop detail not found", success: false });
+            return socket.emit("error", {
+              message: "Drop detail not found",
+              success: false,
+            });
           }
 
           if (drop.drops.status === "Completed") {
-            // Use sendSocketData so it always does a fresh socketId lookup
             sendSocketData(agentId, "reachedDeliveryLocation", {
               data: "Delivery completed (BatchOrder)",
               success: true,
             });
+
             return;
           }
 
-          // Distance check for delivery location (fixed tolerance: 0.5 km)
+          // Distance check for delivery location
           const dropLocation = drop.drops.location;
+
           if (dropLocation && dropLocation.length === 2) {
             const distance = turf.distance(
               turf.point([dropLocation[1], dropLocation[0]]),
               turf.point([agentLocation[1], agentLocation[0]]),
               { units: "kilometers" }
             );
+
             if (distance >= 0.5) {
               return socket.emit("error", {
                 message: "Agent is far from delivery point",
@@ -3318,11 +3403,15 @@ io.on("connection", async (socket) => {
 
           drop.drops.status = "Completed";
           drop.drops.completedTime = new Date();
+
           batchOrderDoc.markModified(`dropDetails.${dropIndex}.drops`);
 
           const [agentFound, orderFound] = await Promise.all([
             Agent.findById(agentId),
-            Order.findById(drop.orderId).populate("customerId", "customerDetails.geofenceId"),
+            Order.findById(drop.orderId).populate(
+              "customerId",
+              "customerDetails.geofenceId"
+            ),
           ]);
 
           const stepperDetail = {
@@ -3333,33 +3422,106 @@ io.on("connection", async (socket) => {
           };
 
           const saveOps = [batchOrderDoc.save()];
+
           if (orderFound) {
-            orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
-            orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
+            orderFound.orderDetailStepper =
+              orderFound.orderDetailStepper || {};
+
+            orderFound.orderDetailStepper.reachedDeliveryLocation =
+              stepperDetail;
+
             orderFound.deliveryTime = new Date();
 
-            // ADD: Calculate pick-to-delivery distance for batch order
-            const delivStartLoc = orderFound.orderDetailStepper?.deliveryStarted?.location;
-            if (delivStartLoc?.length === 2 && agentLocation?.length === 2) {
-              const { distanceInKM } = await getDistanceFromPickupToDelivery(
-                delivStartLoc,
-                agentLocation
-              );
-              if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
-              const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
-              orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+            // ---------------- DISTANCE CALCULATION ----------------
+            const deliveryStartedLocation =
+              orderFound.orderDetailStepper?.deliveryStarted?.location;
+
+            if (
+              deliveryStartedLocation?.length === 2 &&
+              agentLocation?.length === 2
+            ) {
+              const { distanceInKM } =
+                await getDistanceFromPickupToDelivery(
+                  deliveryStartedLocation,
+                  agentLocation
+                );
+
+              if (!orderFound.detailAddedByAgent) {
+                orderFound.detailAddedByAgent = {};
+              }
+
+              const startToPick =
+                orderFound.detailAddedByAgent
+                  ?.startToPickDistance || 0;
+
+              const totalDistance = Number(
                 (startToPick + distanceInKM).toFixed(2)
               );
+
+              orderFound.detailAddedByAgent.distanceCoveredByAgent =
+                totalDistance;
+
+              // ---------------- CUSTOM ORDER PRICING ----------------
+              if (orderFound.deliveryMode === "Custom Order") {
+                const geofenceId =
+                  orderFound?.customerId?.customerDetails?.geofenceId;
+
+                const customerPricing = await CustomerPricing.findOne({
+                  deliveryMode: "Custom Order",
+                  geofenceId,
+                  status: true,
+                });
+
+                if (customerPricing) {
+                  const baseFare = Number(customerPricing.baseFare || 0);
+                  const baseDistance = Number(customerPricing.baseDistance || 0);
+                  const fareAfterBaseDistance = Number(
+                    customerPricing.fareAfterBaseDistance || 0
+                  );
+
+                  const deliveryCharge = calculateDeliveryCharges(
+                    totalDistance,
+                    baseFare,
+                    baseDistance,
+                    fareAfterBaseDistance
+                  );
+
+                  const itemTotal = Number(
+                    orderFound.billDetail?.itemTotal || 0
+                  );
+
+                  orderFound.billDetail = orderFound.billDetail || {};
+                  orderFound.billDetail.deliveryCharge = parseFloat(
+                    deliveryCharge.toFixed(2)
+                  );
+                  orderFound.billDetail.subTotal = parseFloat(
+                    (itemTotal + deliveryCharge).toFixed(2)
+                  );
+                  orderFound.billDetail.grandTotal = parseFloat(
+                    (
+                      itemTotal +
+                      deliveryCharge -
+                      Number(orderFound.billDetail?.discountedAmount || 0)
+                    ).toFixed(2)
+                  );
+
+                  orderFound.markModified("billDetail");
+                }
+              }
             }
 
             saveOps.push(orderFound.save());
           }
+
           await Promise.all(saveOps);
 
           const eventName = "reachedDeliveryLocation";
-          const { rolesToNotify } = await findRolesToNotify(eventName);
+
+          const { rolesToNotify } =
+            await findRolesToNotify(eventName);
 
           const notifyPromises = [];
+
           for (const role of rolesToNotify) {
             const roleId = {
               admin: process.env.ADMIN_ID,
@@ -3367,22 +3529,48 @@ io.on("connection", async (socket) => {
               driver: orderFound?.agentId,
               customer: orderFound?.customerId?._id,
             }[role];
+
             if (roleId) {
               notifyPromises.push(
                 sendNotification(
                   roleId,
                   eventName,
-                  { fcm: { customerId: orderFound?.customerId?._id, orderId: drop.orderId, agentName: agentFound?.fullName } },
-                  role.charAt(0).toUpperCase() + role.slice(1)
+                  {
+                    fcm: {
+                      customerId:
+                        orderFound?.customerId?._id,
+                      orderId: drop.orderId,
+                      agentName: agentFound?.fullName,
+                    },
+                  },
+                  role.charAt(0).toUpperCase() +
+                  role.slice(1)
                 )
               );
             }
           }
+
           await Promise.all(notifyPromises);
 
-          const emitPayload = { orderId: drop.orderId, orderDetailStepper: stepperDetail };
-          sendSocketData(process.env.ADMIN_ID, eventName, emitPayload);
-          if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, emitPayload);
+          const emitPayload = {
+            orderId: drop.orderId,
+            orderDetailStepper: stepperDetail,
+          };
+
+          sendSocketData(
+            process.env.ADMIN_ID,
+            eventName,
+            emitPayload
+          );
+
+          if (orderFound?.customerId?._id) {
+            sendSocketData(
+              orderFound.customerId._id,
+              eventName,
+              emitPayload
+            );
+          }
+
           sendSocketData(agentId, "reachedDeliveryLocation", {
             data: "Delivery completed (BatchOrder)",
             success: true,
@@ -3395,15 +3583,29 @@ io.on("connection", async (socket) => {
           ]);
 
           if (!agentFound) {
-            return socket.emit("error", { message: "Agent not found", success: false });
-          }
-          if (!taskFound) {
-            return socket.emit("error", { message: "Task not found", success: false });
+            return socket.emit("error", {
+              message: "Agent not found",
+              success: false,
+            });
           }
 
-          const deliveryDetail = taskFound.pickupDropDetails?.[0]?.drops?.[deliveryIndex];
+          if (!taskFound) {
+            return socket.emit("error", {
+              message: "Task not found",
+              success: false,
+            });
+          }
+
+          const deliveryDetail =
+            taskFound.pickupDropDetails?.[0]?.drops?.[
+            deliveryIndex
+            ];
+
           if (!deliveryDetail) {
-            return socket.emit("error", { message: "Delivery detail not found", success: false });
+            return socket.emit("error", {
+              message: "Delivery detail not found",
+              success: false,
+            });
           }
 
           if (deliveryDetail.status === "Completed") {
@@ -3411,17 +3613,20 @@ io.on("connection", async (socket) => {
               data: "Delivery completed",
               success: true,
             });
+
             return;
           }
 
-          // Distance check for delivery location
+          // Distance check
           const dropLocation = deliveryDetail.location;
+
           if (dropLocation && dropLocation.length === 2) {
             const distance = turf.distance(
               turf.point([dropLocation[1], dropLocation[0]]),
               turf.point([agentLocation[1], agentLocation[0]]),
               { units: "kilometers" }
             );
+
             if (distance >= 0.5) {
               return socket.emit("error", {
                 message: "Agent is far from delivery point",
@@ -3430,17 +3635,26 @@ io.on("connection", async (socket) => {
             }
           }
 
-          const orderFound = await Order.findById(taskFound.orderId).populate(
+          const orderFound = await Order.findById(
+            taskFound.orderId
+          ).populate(
             "customerId",
             "customerDetails.geofenceId"
           );
+
           if (!orderFound) {
-            return socket.emit("error", { message: "Order not found", success: false });
+            return socket.emit("error", {
+              message: "Order not found",
+              success: false,
+            });
           }
 
           deliveryDetail.status = "Completed";
           deliveryDetail.completedTime = new Date();
-          taskFound.markModified(`pickupDropDetails.0.drops.${deliveryIndex}`);
+
+          taskFound.markModified(
+            `pickupDropDetails.0.drops.${deliveryIndex}`
+          );
 
           const stepperDetail = {
             by: agentFound.fullName,
@@ -3448,35 +3662,115 @@ io.on("connection", async (socket) => {
             date: new Date(),
             location: agentLocation,
           };
-          orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
-          orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
+
+          orderFound.orderDetailStepper =
+            orderFound.orderDetailStepper || {};
+
+          orderFound.orderDetailStepper.reachedDeliveryLocation =
+            stepperDetail;
+
           orderFound.deliveryTime = new Date();
 
-          // Calculate pick-to-delivery distance (agent's actual travel from merchant to customer)
-          const deliveryStartedLocation = orderFound.orderDetailStepper?.deliveryStarted?.location;
-          if (deliveryStartedLocation?.length === 2 && agentLocation?.length === 2) {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
-              deliveryStartedLocation,  // where agent was when they left the merchant
-              agentLocation             // where agent is now (at customer)
-            );
-            if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
-            const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
-            orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+          // ---------------- DISTANCE CALCULATION ----------------
+          const deliveryStartedLocation =
+            orderFound.orderDetailStepper?.deliveryStarted
+              ?.location;
+
+          if (
+            deliveryStartedLocation?.length === 2 &&
+            agentLocation?.length === 2
+          ) {
+            const { distanceInKM } =
+              await getDistanceFromPickupToDelivery(
+                deliveryStartedLocation,
+                agentLocation
+              );
+
+            if (!orderFound.detailAddedByAgent) {
+              orderFound.detailAddedByAgent = {};
+            }
+
+            const startToPick =
+              orderFound.detailAddedByAgent
+                ?.startToPickDistance || 0;
+
+            const totalDistance = Number(
               (startToPick + distanceInKM).toFixed(2)
             );
+
+            orderFound.detailAddedByAgent.distanceCoveredByAgent =
+              totalDistance;
+
+            // ---------------- CUSTOM ORDER PRICING ----------------
+            if (orderFound.deliveryMode === "Custom Order") {
+              const geofenceId =
+                orderFound?.customerId?.customerDetails?.geofenceId;
+
+              const customerPricing = await CustomerPricing.findOne({
+                deliveryMode: "Custom Order",
+                geofenceId,
+                status: true,
+              });
+
+              if (customerPricing) {
+                const baseFare = Number(customerPricing.baseFare || 0);
+                const baseDistance = Number(customerPricing.baseDistance || 0);
+                const fareAfterBaseDistance = Number(
+                  customerPricing.fareAfterBaseDistance || 0
+                );
+
+                const deliveryCharge = calculateDeliveryCharges(
+                  totalDistance,
+                  baseFare,
+                  baseDistance,
+                  fareAfterBaseDistance
+                );
+
+                const itemTotal = Number(
+                  orderFound.billDetail?.itemTotal || 0
+                );
+
+                orderFound.billDetail = orderFound.billDetail || {};
+                orderFound.billDetail.deliveryCharge = parseFloat(
+                  deliveryCharge.toFixed(2)
+                );
+                orderFound.billDetail.subTotal = parseFloat(
+                  (itemTotal + deliveryCharge).toFixed(2)
+                );
+                orderFound.billDetail.grandTotal = parseFloat(
+                  (
+                    itemTotal +
+                    deliveryCharge -
+                    Number(orderFound.billDetail?.discountedAmount || 0)
+                  ).toFixed(2)
+                );
+
+                orderFound.markModified("billDetail");
+              }
+            }
           }
 
-          const allDone = taskFound.pickupDropDetails?.[0]?.drops?.every(
-            (d) => d.status === "Completed"
-          );
-          if (allDone) taskFound.taskStatus = "Completed";
+          const allDone =
+            taskFound.pickupDropDetails?.[0]?.drops?.every(
+              (d) => d.status === "Completed"
+            );
 
-          await Promise.all([orderFound.save(), taskFound.save()]);
+          if (allDone) {
+            taskFound.taskStatus = "Completed";
+          }
+
+          await Promise.all([
+            orderFound.save(),
+            taskFound.save(),
+          ]);
 
           const eventName = "reachedDeliveryLocation";
-          const { rolesToNotify } = await findRolesToNotify(eventName);
+
+          const { rolesToNotify } =
+            await findRolesToNotify(eventName);
 
           const notifyPromises = [];
+
           for (const role of rolesToNotify) {
             const roleId = {
               admin: process.env.ADMIN_ID,
@@ -3484,36 +3778,325 @@ io.on("connection", async (socket) => {
               driver: orderFound?.agentId,
               customer: orderFound?.customerId?._id,
             }[role];
+
             if (roleId) {
               notifyPromises.push(
                 sendNotification(
                   roleId,
                   eventName,
-                  { fcm: { customerId: orderFound.customerId?._id, orderId: taskFound.orderId, agentName: agentFound.fullName } },
-                  role.charAt(0).toUpperCase() + role.slice(1)
+                  {
+                    fcm: {
+                      customerId:
+                        orderFound.customerId?._id,
+                      orderId: taskFound.orderId,
+                      agentName: agentFound.fullName,
+                    },
+                  },
+                  role.charAt(0).toUpperCase() +
+                  role.slice(1)
                 )
               );
             }
           }
+
           await Promise.all(notifyPromises);
 
-          const socketPayload = { orderId: taskFound.orderId, orderDetailStepper: stepperDetail };
-          sendSocketData(process.env.ADMIN_ID, eventName, socketPayload);
-          if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, socketPayload);
+          const socketPayload = {
+            orderId: taskFound.orderId,
+            orderDetailStepper: stepperDetail,
+          };
+
+          sendSocketData(
+            process.env.ADMIN_ID,
+            eventName,
+            socketPayload
+          );
+
+          if (orderFound?.customerId?._id) {
+            sendSocketData(
+              orderFound.customerId._id,
+              eventName,
+              socketPayload
+            );
+          }
+
           sendSocketData(agentId, "reachedDeliveryLocation", {
             data: "Delivery completed",
             success: true,
           });
         }
       } catch (err) {
-        console.error("[reachedDeliveryLocation] Error:", err.message);
+        console.error(
+          "[reachedDeliveryLocation] Error:",
+          err.message
+        );
+
         return socket.emit("error", {
-          message: `Error in reachedDeliveryLocation: ${err.message || err}`,
+          message: `Error in reachedDeliveryLocation: ${err.message || err
+            }`,
           success: false,
         });
       }
     }
   );
+
+  // socket.on(
+  //   "reachedDeliveryLocation",
+  //   async ({ taskId, agentId, location, deliveryIndex, batchOrder }) => {
+  //     try {
+  //       const agentLocation =
+  //         location && location.length === 2
+  //           ? location
+  //           : getUserLocationFromSocket(agentId);
+
+  //       if (!agentLocation || agentLocation.length !== 2) {
+  //         return socket.emit("error", {
+  //           message: "Invalid location",
+  //           success: false,
+  //         });
+  //       }
+
+  //       if (batchOrder) {
+  //         // ---------- BatchOrder flow ----------
+  //         const batchOrderDoc = await BatchOrder.findById(taskId);
+  //         if (!batchOrderDoc) {
+  //           return socket.emit("error", { message: "BatchOrder not found", success: false });
+  //         }
+
+  //         const dropIndex = Number(deliveryIndex);
+  //         const ddLen = batchOrderDoc.dropDetails?.length || 0;
+  //         if (Number.isNaN(dropIndex) || dropIndex < 0 || dropIndex >= ddLen) {
+  //           return socket.emit("error", { message: "Invalid drop index (batch)", success: false });
+  //         }
+
+  //         const drop = batchOrderDoc.dropDetails[dropIndex];
+  //         if (!drop?.drops) {
+  //           return socket.emit("error", { message: "Drop detail not found", success: false });
+  //         }
+
+  //         if (drop.drops.status === "Completed") {
+  //           // Use sendSocketData so it always does a fresh socketId lookup
+  //           sendSocketData(agentId, "reachedDeliveryLocation", {
+  //             data: "Delivery completed (BatchOrder)",
+  //             success: true,
+  //           });
+  //           return;
+  //         }
+
+  //         // Distance check for delivery location (fixed tolerance: 0.5 km)
+  //         const dropLocation = drop.drops.location;
+  //         if (dropLocation && dropLocation.length === 2) {
+  //           const distance = turf.distance(
+  //             turf.point([dropLocation[1], dropLocation[0]]),
+  //             turf.point([agentLocation[1], agentLocation[0]]),
+  //             { units: "kilometers" }
+  //           );
+  //           if (distance >= 0.5) {
+  //             return socket.emit("error", {
+  //               message: "Agent is far from delivery point",
+  //               success: false,
+  //             });
+  //           }
+  //         }
+
+  //         drop.drops.status = "Completed";
+  //         drop.drops.completedTime = new Date();
+  //         batchOrderDoc.markModified(`dropDetails.${dropIndex}.drops`);
+
+  //         const [agentFound, orderFound] = await Promise.all([
+  //           Agent.findById(agentId),
+  //           Order.findById(drop.orderId).populate("customerId", "customerDetails.geofenceId"),
+  //         ]);
+
+  //         const stepperDetail = {
+  //           by: agentFound?.fullName || "Unknown",
+  //           userId: agentId,
+  //           date: new Date(),
+  //           location: agentLocation,
+  //         };
+
+  //         const saveOps = [batchOrderDoc.save()];
+  //         if (orderFound) {
+  //           orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
+  //           orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
+  //           orderFound.deliveryTime = new Date();
+
+  //           // ADD: Calculate pick-to-delivery distance for batch order
+  //           const delivStartLoc = orderFound.orderDetailStepper?.deliveryStarted?.location;
+  //           if (delivStartLoc?.length === 2 && agentLocation?.length === 2) {
+  //             const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //               delivStartLoc,
+  //               agentLocation
+  //             );
+  //             if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+  //             const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
+  //             orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+  //               (startToPick + distanceInKM).toFixed(2)
+  //             );
+  //           }
+
+  //           saveOps.push(orderFound.save());
+  //         }
+  //         await Promise.all(saveOps);
+
+  //         const eventName = "reachedDeliveryLocation";
+  //         const { rolesToNotify } = await findRolesToNotify(eventName);
+
+  //         const notifyPromises = [];
+  //         for (const role of rolesToNotify) {
+  //           const roleId = {
+  //             admin: process.env.ADMIN_ID,
+  //             merchant: orderFound?.merchantId,
+  //             driver: orderFound?.agentId,
+  //             customer: orderFound?.customerId?._id,
+  //           }[role];
+  //           if (roleId) {
+  //             notifyPromises.push(
+  //               sendNotification(
+  //                 roleId,
+  //                 eventName,
+  //                 { fcm: { customerId: orderFound?.customerId?._id, orderId: drop.orderId, agentName: agentFound?.fullName } },
+  //                 role.charAt(0).toUpperCase() + role.slice(1)
+  //               )
+  //             );
+  //           }
+  //         }
+  //         await Promise.all(notifyPromises);
+
+  //         const emitPayload = { orderId: drop.orderId, orderDetailStepper: stepperDetail };
+  //         sendSocketData(process.env.ADMIN_ID, eventName, emitPayload);
+  //         if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, emitPayload);
+  //         sendSocketData(agentId, "reachedDeliveryLocation", {
+  //           data: "Delivery completed (BatchOrder)",
+  //           success: true,
+  //         });
+  //       } else {
+  //         // ---------- Task flow ----------
+  //         const [agentFound, taskFound] = await Promise.all([
+  //           Agent.findById(agentId),
+  //           Task.findOne({ _id: taskId, agentId }),
+  //         ]);
+
+  //         if (!agentFound) {
+  //           return socket.emit("error", { message: "Agent not found", success: false });
+  //         }
+  //         if (!taskFound) {
+  //           return socket.emit("error", { message: "Task not found", success: false });
+  //         }
+
+  //         const deliveryDetail = taskFound.pickupDropDetails?.[0]?.drops?.[deliveryIndex];
+  //         if (!deliveryDetail) {
+  //           return socket.emit("error", { message: "Delivery detail not found", success: false });
+  //         }
+
+  //         if (deliveryDetail.status === "Completed") {
+  //           sendSocketData(agentId, "reachedDeliveryLocation", {
+  //             data: "Delivery completed",
+  //             success: true,
+  //           });
+  //           return;
+  //         }
+
+  //         // Distance check for delivery location
+  //         const dropLocation = deliveryDetail.location;
+  //         if (dropLocation && dropLocation.length === 2) {
+  //           const distance = turf.distance(
+  //             turf.point([dropLocation[1], dropLocation[0]]),
+  //             turf.point([agentLocation[1], agentLocation[0]]),
+  //             { units: "kilometers" }
+  //           );
+  //           if (distance >= 0.5) {
+  //             return socket.emit("error", {
+  //               message: "Agent is far from delivery point",
+  //               success: false,
+  //             });
+  //           }
+  //         }
+
+  //         const orderFound = await Order.findById(taskFound.orderId).populate(
+  //           "customerId",
+  //           "customerDetails.geofenceId"
+  //         );
+  //         if (!orderFound) {
+  //           return socket.emit("error", { message: "Order not found", success: false });
+  //         }
+
+  //         deliveryDetail.status = "Completed";
+  //         deliveryDetail.completedTime = new Date();
+  //         taskFound.markModified(`pickupDropDetails.0.drops.${deliveryIndex}`);
+
+  //         const stepperDetail = {
+  //           by: agentFound.fullName,
+  //           userId: agentId,
+  //           date: new Date(),
+  //           location: agentLocation,
+  //         };
+  //         orderFound.orderDetailStepper = orderFound.orderDetailStepper || {};
+  //         orderFound.orderDetailStepper.reachedDeliveryLocation = stepperDetail;
+  //         orderFound.deliveryTime = new Date();
+
+  //         // Calculate pick-to-delivery distance (agent's actual travel from merchant to customer)
+  //         const deliveryStartedLocation = orderFound.orderDetailStepper?.deliveryStarted?.location;
+  //         if (deliveryStartedLocation?.length === 2 && agentLocation?.length === 2) {
+  //           const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //             deliveryStartedLocation,  // where agent was when they left the merchant
+  //             agentLocation             // where agent is now (at customer)
+  //           );
+  //           if (!orderFound.detailAddedByAgent) orderFound.detailAddedByAgent = {};
+  //           const startToPick = orderFound.detailAddedByAgent.startToPickDistance || 0;
+  //           orderFound.detailAddedByAgent.distanceCoveredByAgent = Number(
+  //             (startToPick + distanceInKM).toFixed(2)
+  //           );
+  //         }
+
+  //         const allDone = taskFound.pickupDropDetails?.[0]?.drops?.every(
+  //           (d) => d.status === "Completed"
+  //         );
+  //         if (allDone) taskFound.taskStatus = "Completed";
+
+  //         await Promise.all([orderFound.save(), taskFound.save()]);
+
+  //         const eventName = "reachedDeliveryLocation";
+  //         const { rolesToNotify } = await findRolesToNotify(eventName);
+
+  //         const notifyPromises = [];
+  //         for (const role of rolesToNotify) {
+  //           const roleId = {
+  //             admin: process.env.ADMIN_ID,
+  //             merchant: orderFound?.merchantId,
+  //             driver: orderFound?.agentId,
+  //             customer: orderFound?.customerId?._id,
+  //           }[role];
+  //           if (roleId) {
+  //             notifyPromises.push(
+  //               sendNotification(
+  //                 roleId,
+  //                 eventName,
+  //                 { fcm: { customerId: orderFound.customerId?._id, orderId: taskFound.orderId, agentName: agentFound.fullName } },
+  //                 role.charAt(0).toUpperCase() + role.slice(1)
+  //               )
+  //             );
+  //           }
+  //         }
+  //         await Promise.all(notifyPromises);
+
+  //         const socketPayload = { orderId: taskFound.orderId, orderDetailStepper: stepperDetail };
+  //         sendSocketData(process.env.ADMIN_ID, eventName, socketPayload);
+  //         if (orderFound?.customerId?._id) sendSocketData(orderFound.customerId._id, eventName, socketPayload);
+  //         sendSocketData(agentId, "reachedDeliveryLocation", {
+  //           data: "Delivery completed",
+  //           success: true,
+  //         });
+  //       }
+  //     } catch (err) {
+  //       console.error("[reachedDeliveryLocation] Error:", err.message);
+  //       return socket.emit("error", {
+  //         message: `Error in reachedDeliveryLocation: ${err.message || err}`,
+  //         success: false,
+  //       });
+  //     }
+  //   }
+  // );
 
   // socket.on(
   //   "agentDeliveryStarted",

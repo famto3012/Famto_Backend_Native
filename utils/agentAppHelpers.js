@@ -673,13 +673,13 @@ const updateBillOfCustomOrderInDelivery = async (
     // =========================
 
     const reachedPickupAt =
-      task?.pickupDetail?.completedTime;
+      task.pickupDropDetails[0].pickups[0].completedTime;
 
-    const deliveryStartAt =
-      task?.deliveryDetail?.startTime;
+
+    const deliveryStartAt = task.pickupDropDetails[0].drops[0].startTime;
 
     const pickupStartAt =
-      task?.pickupDetail?.startTime;
+      task.pickupDropDetails[0].pickups[0].startTime;
 
     if (
       !reachedPickupAt ||
@@ -771,7 +771,7 @@ const updateBillOfCustomOrderInDelivery = async (
       Math.floor(
         (new Date(deliveryStartAt) -
           new Date(reachedPickupAt)) /
-          60000
+        60000
       )
     );
 
@@ -912,9 +912,8 @@ const updateBillOfCustomOrderInDelivery = async (
     );
 
     return socket.emit("error", {
-      message: `Error updating custom order bill: ${
-        err?.message || err
-      }`,
+      message: `Error updating custom order bill: ${err?.message || err
+        }`,
       success: false,
     });
   }
