@@ -1,15 +1,15 @@
-const axios = require("axios");
-
-const INTERAKT_API_URL = "https://api.interakt.ai/v1/public/message/";
+const { sendMetaMessage } = require("./whatsappApi");
 
 /**
- * Send a WhatsApp template message via Interakt.
+ * Send a WhatsApp template message via Meta Cloud API.
+ * Drop-in replacement for the old Interakt helper — same function signature.
  *
- * @param {string} phoneNumber  - E.164 format without leading '+', e.g. "919876543210"
- * @param {string} templateName - Template name registered in Interakt / Meta
- * @param {string} languageCode - Template language code (default: "en")
- * @param {Array}  bodyParams   - Array of strings for {{1}}, {{2}}, … body variables
- * @param {string} [countryCode] - Country code without '+' (default: "91")
+ * @param {string} phoneNumber   - E.164 format without leading '+', e.g. "919876543210"
+ * @param {string} templateName  - Template name registered in Meta Business Manager
+ * @param {Array}  bodyParams    - Array of strings for {{1}}, {{2}}, … body variables
+ * @param {string} languageCode  - Template language code (default: "en")
+ * @param {string} [countryCode] - Ignored (kept for backward compat)
+ * @param {string} [headerImageUrl] - Optional header image URL
  */
 const sendInteraktMessage = async (
   phoneNumber,
@@ -19,49 +19,64 @@ const sendInteraktMessage = async (
   countryCode = "91",
   headerImageUrl = null
 ) => {
-  if (!process.env.INTERAKT_API_KEY) {
-    console.log("[Interakt] INTERAKT_API_KEY is not set – skipping message.");
+  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.log("[WhatsApp] Credentials not set – skipping message.");
     return;
   }
 
-  // Strip any leading '+' or country code duplicates; keep only the local number
+  // Strip any leading '+'; Meta expects plain digits e.g. "919876543210"
   const cleanPhone = String(phoneNumber).replace(/^\+/, "");
 
+  // Build template components
+  const components = [];
+
+  // Header component (image)
+  if (headerImageUrl) {
+    components.push({
+      type: "header",
+      parameters: [
+        {
+          type: "image",
+          image: { link: headerImageUrl },
+        },
+      ],
+    });
+  }
+
+  // Body component (text variables)
+  if (bodyParams.length > 0) {
+    components.push({
+      type: "body",
+      parameters: bodyParams.map((value) => ({
+        type: "text",
+        text: String(value),
+      })),
+    });
+  }
+
   const payload = {
-    countryCode: `+${countryCode}`,
-    phoneNumber: cleanPhone,
-    callbackData: "famto_whatsapp",
-    type: "Template",
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanPhone,
+    type: "template",
     template: {
       name: templateName,
-      languageCode,
-      ...(headerImageUrl && {
-        headerValues: [headerImageUrl],
-      }),
-      ...(bodyParams.length > 0 && {
-        bodyValues: bodyParams,
-      }),
+      language: { code: languageCode },
+      ...(components.length > 0 && { components }),
     },
   };
 
   try {
-    // INTERAKT_API_KEY in .env is already base64-encoded ("rawKey:" → base64)
-    // Use it directly — do NOT re-encode
-    const response = await axios.post(INTERAKT_API_URL, payload, {
-      headers: {
-        Authorization: `Basic ${process.env.INTERAKT_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await sendMetaMessage(payload);
     console.log(
-      `[Interakt] Message sent to ${cleanPhone} (template: ${templateName}):`,
-      response.data
+      `[WhatsApp] Template sent to ${cleanPhone} (${templateName}):`,
+      response.messages?.[0]?.id || "ok"
     );
-    return response.data;
+    return response;
   } catch (err) {
     console.error(
-      `[Interakt] Failed to send message to ${cleanPhone}:`,
-      err?.response?.data || err.message
+      `[WhatsApp] Failed to send template to ${cleanPhone}:`,
+      err?.response?.data?.error?.message || err.message
     );
     // Non-fatal – do not propagate so the main flow is not broken
   }
@@ -91,7 +106,6 @@ const sendWelcomeMessage = async (phoneNumber, name = "") => {
 const sendCartReminderMessage = async (phoneNumber, merchantName, productList) => {
   const templateName =
     process.env.INTERAKT_CART_REMINDER_TEMPLATE || "cart_reminder";
-  // Template body: "Don't miss your products from {{1}} with {{2}}"
   const bodyParams = [merchantName, productList];
   await sendInteraktMessage(phoneNumber, templateName, bodyParams);
 };
