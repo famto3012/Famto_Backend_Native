@@ -45,16 +45,20 @@ const createCampaign = async (req, res, next) => {
     const { name, templateId, recipients, templateParams, scheduledAt } =
       req.body;
 
-    if (!name || !templateId || !recipients?.length) {
+      console.log("Body",req.body);
+
+    if (!name || !templateId) {
       return next(
         appError("Name, templateId, and recipients are required", 400)
       );
     }
-
+    console.log(templateId);
     const template = await WhatsappTemplate.findById(templateId);
     if (!template) {
       return next(appError("Template not found", 404));
     }
+
+    console.log(template);
 
     if (template.status !== "APPROVED") {
       return next(appError("Template must be APPROVED to use in campaigns", 400));
@@ -73,6 +77,7 @@ const createCampaign = async (req, res, next) => {
 
     res.status(201).json({ success: true, data: formatCampaign(campaign) });
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message, 500));
   }
 };

@@ -21,8 +21,12 @@ const {
 
 const {
   getContacts,
+  getContactTags,
   syncContacts,
+  syncFromFamtoCustomers,
   updateContact,
+  downloadSampleCsv,
+  importContactsCsv,
 } = require("../../controllers/whatsapp/contactController");
 
 const {
@@ -41,7 +45,6 @@ const {
 
 const {
   getWallet,
-  rechargeWallet,
   getBusinessProfile,
   updateBusinessProfile,
   verifyPhoneNumber,
@@ -96,7 +99,17 @@ whatsappRoute.post(
 
 // ─── Contacts ────────────────────────────────────────────
 whatsappRoute.get("/contacts", isAuthenticated, isAdmin, getContacts);
+whatsappRoute.get("/contacts/tags", isAuthenticated, isAdmin, getContactTags);
 whatsappRoute.post("/contacts/sync", isAuthenticated, isAdmin, syncContacts);
+whatsappRoute.post("/contacts/sync-famto", isAuthenticated, isAdmin, syncFromFamtoCustomers);
+whatsappRoute.get("/contacts/sample-csv", isAuthenticated, isAdmin, downloadSampleCsv);
+whatsappRoute.post(
+  "/contacts/import-csv",
+  isAuthenticated,
+  isAdmin,
+  upload.single("csv"),
+  importContactsCsv
+);
 whatsappRoute.patch(
   "/contacts/:contactId",
   isAuthenticated,
@@ -136,7 +149,6 @@ whatsappRoute.get("/analytics", isAuthenticated, isAdmin, getAnalytics);
 
 // ─── Billing & Profile ──────────────────────────────────
 whatsappRoute.get("/wallet", isAuthenticated, isAdmin, getWallet);
-whatsappRoute.post("/wallet/recharge", isAuthenticated, isAdmin, rechargeWallet);
 whatsappRoute.get(
   "/business-profile",
   isAuthenticated,

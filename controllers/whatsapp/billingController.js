@@ -1,89 +1,157 @@
-const WhatsappWallet = require("../../models/WhatsappWallet");
 const WhatsappBusinessProfile = require("../../models/WhatsappBusinessProfile");
 const appError = require("../../utils/appError");
 const {
   fetchBusinessProfile,
   updateMetaBusinessProfile,
+  fetchConversationAnalytics,
+  fetchAccountInfo,
   getWhatsappConfig,
 } = require("../../utils/whatsappApi");
 const axios = require("axios");
 
-// ─── Wallet ──────────────────────────────────────────────
-
-const getOrCreateWallet = async () => {
-  let wallet = await WhatsappWallet.findOne();
-  if (!wallet) {
-    wallet = await WhatsappWallet.create({ balance: 0 });
-  }
-  return wallet;
+// ─── Meta Conversation Pricing (INR per conversation, as of 2024) ───
+const PRICING_INR = {
+  marketing: 0.882,
+  utility: 0.15,
+  authentication: 0.15,
+  service: 0.0,
 };
+
+// ─── Wallet — Real Meta Billing Data ────────────────────
 
 const getWallet = async (req, res, next) => {
   try {
-    const wallet = await getOrCreateWallet();
+    const now = new Date();
 
-    const transactions = wallet.rechargeHistory
-      .slice(-20)
-      .reverse()
-      .map((t) => ({
-        id: t._id,
-        type: "credit",
-        amount: t.amount,
-        status: t.status || "success",
-        reference: t.notes || t.transactionId || "Recharge",
-        createdAt: t.createdAt || t._id.getTimestamp(),
+    // Current month range
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStartTs = Math.floor(monthStart.getTime() / 1000);
+    const nowTs = Math.floor(now.getTime() / 1000);
+
+    // Fetch real data from Meta
+    let analyticsData = {};
+    let accountInfo = {};
+
+    try {
+      [analyticsData, accountInfo] = await Promise.all([
+        fetchConversationAnalytics(monthStartTs, nowTs),
+        fetchAccountInfo(),
+      ]);
+    } catch (metaErr) {
+      console.error(
+        "[WhatsApp Billing] Meta API error:",
+        metaErr?.response?.data?.error?.message || metaErr.message
+      );
+      // Return empty data if Meta API fails — don't block the page
+    }
+
+    // Parse conversation analytics from Meta response
+    const dataPoints = analyticsData?.data_points || [];
+    const categoryTotals = {
+      marketing: { conversations: 0, cost: 0 },
+      utility: { conversations: 0, cost: 0 },
+      authentication: { conversations: 0, cost: 0 },
+      service: { conversations: 0, cost: 0 },
+    };
+
+    // Build daily spend for transaction history
+    const dailySpend = {};
+
+    for (const point of dataPoints) {
+      const category = (point.conversation_category || "").toLowerCase();
+      const count = point.conversation || 0;
+      const cost = point.cost || 0;
+      const date = point.start
+        ? new Date(point.start * 1000).toISOString().split("T")[0]
+        : null;
+
+      if (categoryTotals[category]) {
+        categoryTotals[category].conversations += count;
+        categoryTotals[category].cost += cost;
+      }
+
+      if (date && count > 0) {
+        if (!dailySpend[date]) {
+          dailySpend[date] = { date, conversations: 0, cost: 0 };
+        }
+        dailySpend[date].conversations += count;
+        dailySpend[date].cost += cost;
+      }
+    }
+
+    const totalConversations = Object.values(categoryTotals).reduce(
+      (sum, c) => sum + c.conversations,
+      0
+    );
+    const totalCost = Object.values(categoryTotals).reduce(
+      (sum, c) => sum + c.cost,
+      0
+    );
+
+    // Convert cost from Meta (USD cents) to INR if needed
+    const currency = accountInfo?.currency || "INR";
+
+    // Build pricing breakdown for frontend
+    const pricing = [
+      {
+        category: "Marketing",
+        rate: PRICING_INR.marketing,
+        conversations: categoryTotals.marketing.conversations,
+        spend: categoryTotals.marketing.cost,
+      },
+      {
+        category: "Utility",
+        rate: PRICING_INR.utility,
+        conversations: categoryTotals.utility.conversations,
+        spend: categoryTotals.utility.cost,
+      },
+      {
+        category: "Authentication",
+        rate: PRICING_INR.authentication,
+        conversations: categoryTotals.authentication.conversations,
+        spend: categoryTotals.authentication.cost,
+      },
+      {
+        category: "Service",
+        rate: PRICING_INR.service,
+        conversations: categoryTotals.service.conversations,
+        spend: categoryTotals.service.cost,
+      },
+    ];
+
+    // Build transaction list from daily spend
+    const transactions = Object.values(dailySpend)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 30)
+      .map((day, i) => ({
+        id: `meta-${day.date}`,
+        type: "debit",
+        amount: day.cost,
+        status: "success",
+        reference: `${day.conversations} conversations on ${day.date}`,
+        createdAt: new Date(day.date).toISOString(),
       }));
 
     res.status(200).json({
       success: true,
       data: {
-        balance: wallet.balance,
-        currency: wallet.currency,
-        totalSpent: wallet.totalSpent || 0,
-        lowBalanceThreshold: 5000,
-        monthlySpend: wallet.totalSpent || 0,
-        lastRechargedAt: wallet.lastRechargedAt,
-        pricing: [
-          { category: "Marketing", rate: 0.88, conversations: 0, spend: 0 },
-          { category: "Utility", rate: 0.18, conversations: 0, spend: 0 },
-          { category: "Service", rate: 0, conversations: 0, spend: 0 },
-        ],
+        balance: null,
+        currency,
+        totalSpent: totalCost,
+        lowBalanceThreshold: null,
+        monthlySpend: totalCost,
+        totalConversations,
+        billingPeriod: {
+          start: monthStart.toISOString(),
+          end: now.toISOString(),
+        },
+        account: {
+          name: accountInfo?.name || "",
+          reviewStatus: accountInfo?.account_review_status || "",
+          timezone: accountInfo?.timezone_id || "",
+        },
+        pricing,
         transactions,
-      },
-    });
-  } catch (err) {
-    next(appError(err.message, 500));
-  }
-};
-
-const rechargeWallet = async (req, res, next) => {
-  try {
-    const { amount, paymentMethod, transactionId, notes } = req.body;
-
-    if (!amount || amount <= 0) {
-      return next(appError("Valid amount is required", 400));
-    }
-
-    const wallet = await getOrCreateWallet();
-
-    wallet.rechargeHistory.push({
-      amount,
-      paymentMethod: paymentMethod || "manual",
-      transactionId: transactionId || `TXN_${Date.now()}`,
-      status: "completed",
-      notes,
-    });
-
-    wallet.balance += amount;
-    wallet.lastRechargedAt = new Date();
-    await wallet.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Wallet recharged successfully",
-      data: {
-        balance: wallet.balance,
-        currency: wallet.currency,
       },
     });
   } catch (err) {
@@ -186,7 +254,6 @@ const verifyPhoneNumber = async (req, res, next) => {
 
 module.exports = {
   getWallet,
-  rechargeWallet,
   getBusinessProfile,
   updateBusinessProfile,
   verifyPhoneNumber,

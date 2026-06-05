@@ -572,3 +572,17 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`Server is running`);
 });
+
+// ─── Prevent unhandled rejections from crashing the process ──
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[UnhandledRejection] at:", promise, "reason:", reason?.message || reason);
+  // Do NOT exit — log and continue. The cron will retry on next tick.
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[UncaughtException]:", err.message);
+  // Only exit on truly unrecoverable errors (not network timeouts)
+  if (err.code !== "ECONNRESET" && err.code !== "ENOTFOUND" && err.code !== "ETIMEDOUT") {
+    process.exit(1);
+  }
+});

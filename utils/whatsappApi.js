@@ -91,6 +91,33 @@ const updateMetaTemplate = async (templateId, templateData) => {
   return response.data;
 };
 
+const fetchConversationAnalytics = async (startTimestamp, endTimestamp) => {
+  const { token, apiVersion, businessAccountId } = getWhatsappConfig();
+  const params = new URLSearchParams({
+    start: startTimestamp.toString(),
+    end: endTimestamp.toString(),
+    granularity: "DAILY",
+    phone_numbers: "[]",
+    conversation_types: '["REGULAR"]',
+    dimensions: '["CONVERSATION_CATEGORY","CONVERSATION_TYPE","COUNTRY","PHONE"]',
+  });
+
+  const response = await axios.get(
+    `https://graph.facebook.com/${apiVersion}/${businessAccountId}?fields=analytics.${params.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data?.analytics || {};
+};
+
+const fetchAccountInfo = async () => {
+  const { token, apiVersion, businessAccountId } = getWhatsappConfig();
+  const response = await axios.get(
+    `https://graph.facebook.com/${apiVersion}/${businessAccountId}?fields=currency,name,timezone_id,message_template_namespace,account_review_status`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data || {};
+};
+
 module.exports = {
   getWhatsappConfig,
   sendMetaMessage,
@@ -101,4 +128,6 @@ module.exports = {
   fetchMetaTemplates,
   createMetaTemplate,
   updateMetaTemplate,
+  fetchConversationAnalytics,
+  fetchAccountInfo,
 };
