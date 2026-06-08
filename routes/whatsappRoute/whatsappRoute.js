@@ -16,13 +16,19 @@ const {
   getMessages,
   sendMessage,
   sendTemplateMessage,
+  getNotes,
   addNote,
+  deleteNote,
 } = require("../../controllers/whatsapp/inboxController");
 
 const {
   getContacts,
   syncContacts,
   updateContact,
+  getContactTags,
+  syncFromFamtoCustomers,
+  downloadSampleCsv,
+  importContactsCsv,
 } = require("../../controllers/whatsapp/contactController");
 
 const {
@@ -30,6 +36,7 @@ const {
   createCampaign,
   sendCampaign,
   getCampaignEvents,
+  getAudiencePreview,
 } = require("../../controllers/whatsapp/campaignController");
 
 const {
@@ -87,16 +94,39 @@ whatsappRoute.post(
   isAdmin,
   sendTemplateMessage
 );
+whatsappRoute.get(
+  "/conversations/:conversationId/notes",
+  isAuthenticated,
+  isAdmin,
+  getNotes
+);
 whatsappRoute.post(
   "/conversations/:conversationId/notes",
   isAuthenticated,
   isAdmin,
   addNote
 );
+whatsappRoute.delete(
+  "/conversations/:conversationId/notes/:noteId",
+  isAuthenticated,
+  isAdmin,
+  deleteNote
+);
 
 // ─── Contacts ────────────────────────────────────────────
 whatsappRoute.get("/contacts", isAuthenticated, isAdmin, getContacts);
+// Specific routes BEFORE parameterised :contactId
+whatsappRoute.get("/contacts/tags", isAuthenticated, isAdmin, getContactTags);
 whatsappRoute.post("/contacts/sync", isAuthenticated, isAdmin, syncContacts);
+whatsappRoute.post("/contacts/sync-famto", isAuthenticated, isAdmin, syncFromFamtoCustomers);
+whatsappRoute.get("/contacts/sample-csv", isAuthenticated, isAdmin, downloadSampleCsv);
+whatsappRoute.post(
+  "/contacts/import-csv",
+  isAuthenticated,
+  isAdmin,
+  upload.single("csv"),
+  importContactsCsv
+);
 whatsappRoute.patch(
   "/contacts/:contactId",
   isAuthenticated,
@@ -105,6 +135,7 @@ whatsappRoute.patch(
 );
 
 // ─── Campaigns ───────────────────────────────────────────
+whatsappRoute.get("/campaigns/audience-preview", isAuthenticated, isAdmin, getAudiencePreview);
 whatsappRoute.get("/campaigns", isAuthenticated, isAdmin, getCampaigns);
 whatsappRoute.post("/campaigns", isAuthenticated, isAdmin, createCampaign);
 whatsappRoute.post(

@@ -557,6 +557,37 @@ cron.schedule(
   }
 );
 
+// ─── WhatsApp Scheduled Campaign Processor (every minute) ───────────────────
+const { processCampaignSend } = require("./controllers/whatsapp/campaignController");
+const WhatsappCampaign = require("./models/WhatsappCampaign");
+
+cron.schedule("* * * * *", async () => {
+  try {
+    const now = new Date();
+    const dueCampaigns = await WhatsappCampaign.find({
+      status: "scheduled",
+      scheduledAt: { $lte: now },
+    });
+
+    if (!dueCampaigns.length) return;
+
+    console.log(`[CampaignCron] ${dueCampaigns.length} scheduled campaign(s) due`);
+
+    for (const campaign of dueCampaigns) {
+      // Mark as sending immediately to prevent double-fire
+      campaign.status = "sending";
+      campaign.sentAt = now;
+      await campaign.save();
+
+      processCampaignSend(campaign, null).catch((err) =>
+        console.error(`[CampaignCron] Campaign ${campaign._id} failed:`, err.message)
+      );
+    }
+  } catch (err) {
+    console.error("[CampaignCron] Error:", err.message);
+  }
+});
+
 // Global errors
 app.use(globalErrorHandler);
 

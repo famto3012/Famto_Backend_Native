@@ -30,6 +30,10 @@ const whatsappCampaignSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    audience: {
+      type: String,
+      default: "Custom",
+    },
     recipients: {
       type: [String],
       required: true,
@@ -40,7 +44,7 @@ const whatsappCampaignSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "sending", "completed", "failed", "partial"],
+      enum: ["draft", "scheduled", "sending", "completed", "failed", "partial"],
       default: "draft",
       index: true,
     },

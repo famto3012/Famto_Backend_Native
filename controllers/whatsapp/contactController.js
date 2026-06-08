@@ -1,6 +1,9 @@
 const WhatsappContact = require("../../models/WhatsappContact");
 const WhatsappConversation = require("../../models/WhatsappConversation");
+const Customer = require("../../models/Customer");
 const appError = require("../../utils/appError");
+const csvParser = require("csv-parser");
+const stream = require("stream");
 
 const getContacts = async (req, res, next) => {
   try {
@@ -8,7 +11,8 @@ const getContacts = async (req, res, next) => {
 
     const filter = {};
 
-    if (tag) filter.tags = { $in: tag.split(",") };
+    // Fix: "all" means no tag filter
+    if (tag && tag !== "all") filter.tags = { $in: tag.split(",") };
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -117,8 +121,155 @@ const updateContact = async (req, res, next) => {
   }
 };
 
+// ─── New Functions ────────────────────────────────────────
+
+const getContactTags = async (req, res, next) => {
+  try {
+    const tags = await WhatsappContact.aggregate([
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $project: { _id: 0, id: "$_id", label: "$_id", count: 1 } },
+    ]);
+    res.status(200).json({ success: true, data: tags });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
+const syncFromFamtoCustomers = async (req, res, next) => {
+  try {
+    const customers = await Customer.find({ isBlocked: false })
+      .select("_id fullName phoneNumber")
+      .lean();
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const cust of customers) {
+      const phone = String(cust.phoneNumber || "").replace(/\D/g, "");
+      if (!phone) {
+        skipped++;
+        continue;
+      }
+      const waId = phone.startsWith("91") ? phone : `91${phone}`;
+
+      const result = await WhatsappContact.findOneAndUpdate(
+        { waId },
+        {
+          $setOnInsert: {
+            waId,
+            phone: `+${waId}`,
+            tags: ["famto-customer"],
+          },
+          $set: {
+            name: cust.fullName || "",
+            customFields: { famtoId: cust._id.toString() },
+          },
+        },
+        { upsert: true, new: true, rawResult: true }
+      );
+
+      result.lastErrorObject?.updatedExisting ? updated++ : created++;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Sync done. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`,
+      data: { created, updated, skipped },
+    });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
+const downloadSampleCsv = (req, res) => {
+  const content = [
+    "name,phone,email,tags",
+    'John Doe,919876543210,john@example.com,"vip,new"',
+    "Jane Smith,919812345678,,regular",
+    "Ravi Kumar,917890123456,ravi@example.com,famto-customer",
+  ].join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    'attachment; filename="whatsapp_contacts_sample.csv"'
+  );
+  res.send(content);
+};
+
+const importContactsCsv = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return next(appError("No CSV file uploaded", 400));
+    }
+
+    const rows = [];
+    await new Promise((resolve, reject) => {
+      const readable = new stream.PassThrough();
+      readable.end(req.file.buffer);
+      readable
+        .pipe(csvParser())
+        .on("data", (row) => rows.push(row))
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    let created = 0;
+    let updated = 0;
+    const errors = [];
+
+    for (const row of rows) {
+      try {
+        const phone = String(row.phone || row.Phone || "").replace(/\D/g, "");
+        if (!phone) {
+          errors.push(`Row skipped: missing phone (name: ${row.name || row.Name || "unknown"})`);
+          continue;
+        }
+
+        const waId = phone.startsWith("91") ? phone : `91${phone}`;
+        const tags = (row.tags || row.Tags || "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+        const result = await WhatsappContact.findOneAndUpdate(
+          { waId },
+          {
+            $setOnInsert: { waId, phone: `+${waId}` },
+            $set: {
+              name: row.name || row.Name || "",
+              email: row.email || row.Email || "",
+              ...(tags.length ? { tags } : {}),
+            },
+          },
+          { upsert: true, new: true, rawResult: true }
+        );
+
+        result.lastErrorObject?.updatedExisting ? updated++ : created++;
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Import done. Created: ${created}, Updated: ${updated}`,
+      data: { created, updated, errors },
+    });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
 module.exports = {
   getContacts,
   syncContacts,
   updateContact,
+  getContactTags,
+  syncFromFamtoCustomers,
+  downloadSampleCsv,
+  importContactsCsv,
 };

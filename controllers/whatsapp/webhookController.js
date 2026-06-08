@@ -13,6 +13,7 @@ const {
 const {
   uploadFileToFirebaseForWhatsapp,
 } = require("../../utils/imageOperation");
+const { formatMessage } = require("../../utils/whatsappFormatters");
 
 const verifyWebhook = (req, res) => {
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "token";
@@ -245,12 +246,8 @@ const handleIncomingMessage = async (event, msg) => {
 
   const savedMessage = await WhatsappMessage.create(messageData);
 
-  // Broadcast to all admins and managers
-  await broadcastToStaff("whatsapp:message", {
-    ...savedMessage.toObject(),
-    conversationWaId: waId,
-    conversationName: contactName || waId,
-  });
+  // Broadcast to all admins and managers with properly formatted message
+  await broadcastToStaff("whatsapp:message", formatMessage(savedMessage));
 };
 
 // ─── Status Update Handler ───────────────────────────────
