@@ -1437,8 +1437,7 @@ const updateMerchantDetailsController = async (req, res, next) => {
     }
 
     let newLocation = [];
-
-    // Frontend sends location as [longitude, latitude]
+    // Frontend sends location as [latitude, longitude]
     if (
       merchantDetail?.location &&
       Array.isArray(merchantDetail.location) &&
@@ -1460,12 +1459,16 @@ const updateMerchantDetailsController = async (req, res, next) => {
       );
     };
 
+    let locationImage =
+      merchantFound?.merchantDetail?.locationImage || "";
+
     // Only regenerate location image if coordinates actually changed
     if (newLocation.length === 2 && !arraysAreEqual(newLocation, existingCoords)) {
       const [lng, lat] = newLocation;
       const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
 
       try {
+        console.log(url);
         const response = await axios.get(url, { responseType: "arraybuffer" });
         const uniqueName = uuidv4();
         const fileName = path.join(__dirname, `../../../${uniqueName}-location.jpeg`);
@@ -1484,10 +1487,10 @@ const updateMerchantDetailsController = async (req, res, next) => {
       }
     }
 
-    merchantDetail.locationImage = locationImage;
-
-    // Remove raw location field before saving — not in schema anymore
-    delete merchantDetail.location;
+    if (merchantDetail) {
+      merchantDetail.locationImage = locationImage;
+      delete merchantDetail.location;
+    }
 
     const details = {
       ...merchantDetail,
