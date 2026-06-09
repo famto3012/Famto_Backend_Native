@@ -2011,11 +2011,11 @@ const downloadCSVByMerchantController = async (req, res, next) => {
       .lean();
 
     let formattedResponse = [];
-
+  
     allOrders?.forEach((order) => {
       const itemNames = order.items
-        .map((item) => `${item.itemName} (x${item.quantity})`)
-        .join(", ");
+        ?.map((item) => `${item.itemName} (x${item.quantity})`)
+        .join(", ") || "-";
       formattedResponse.push({
         orderId: order._id,
         status: order?.status || "-",
@@ -2043,8 +2043,8 @@ const downloadCSVByMerchantController = async (req, res, next) => {
         distanceInKM: order?.orderDetail?.distance || "-",
         cancellationReason: order?.cancellationReason || "-",
         cancellationDescription: order?.cancellationDescription || "-",
-        merchantEarnings: order?.merchantEarnings || "-",
-        famtoEarnings: order?.famtoEarnings || "-",
+        merchantEarnings: order?.commissionDetail?.merchantEarnings || "-",
+        famtoEarnings: order?.commissionDetail?.famtoEarnings || "-",
         deliveryCharge: order?.billDetail?.deliveryCharge || "-",
         taxAmount: order?.billDetail?.taxAmount || "-",
         discountedAmount: order?.billDetail?.discountedAmount || "-",
@@ -2117,6 +2117,7 @@ const downloadCSVByMerchantController = async (req, res, next) => {
         });
       }
     });
+    
   } catch (err) {
     next(appError(err.message));
   }
