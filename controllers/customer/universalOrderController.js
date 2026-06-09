@@ -18,6 +18,7 @@ const SubscriptionLog = require("../../models/SubscriptionLog");
 const BusinessCategory = require("../../models/BusinessCategory");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
+const WebhookEvent = require("../../models/WebhookEvent");
 
 const {
   sortMerchantsBySponsorship,
@@ -3164,15 +3165,21 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       return next(appError("Payment verification failed", 400));
     }
 
-    await TemporaryOrder.findOneAndUpdate(
+    const tempOrder = await TemporaryOrder.findOneAndUpdate(
       {
         razorpayOrderId: razorpay_order_id,
+        paymentStatus: "PENDING_PAYMENT",
       },
       {
         paymentStatus: "PAYMENT_COMPLETED",
         paymentId: razorpay_payment_id,
-      }
+      },
+      { new: true }
     );
+
+    if (!tempOrder) {
+      return next(appError("Order not found or already processed", 404));
+    }
 
     return res.status(200).json({
       success: true,
@@ -3204,6 +3211,16 @@ const razorpayWebhookController = async (req, res) => {
 
     const payload = JSON.parse(req.body);
     const event = payload.event;
+    const eventId = payload.payload?.payment?.entity?.id;
+
+    if (eventId) {
+      const existing = await WebhookEvent.findOne({ eventId });
+      if (existing) {
+        console.log(`Webhook: duplicate event ${eventId}, skipping`);
+        return res.status(200).json({ success: true });
+      }
+      await WebhookEvent.create({ eventId, eventType: event, processed: true, payload });
+    }
 
     if (event === "payment.captured") {
       const payment = payload.payload.payment.entity;
@@ -3217,7 +3234,7 @@ const razorpayWebhookController = async (req, res) => {
       );
 
       if (tempOrder) {
-        console.log(`✅ Webhook: payment marked COMPLETED for ${razorpayOrderId}`);
+        console.log(`Webhook: payment marked COMPLETED for ${razorpayOrderId}`);
       } else {
         console.log(`Webhook: temp order not found or already completed for ${razorpayOrderId}`);
       }
@@ -3228,11 +3245,11 @@ const razorpayWebhookController = async (req, res) => {
       const razorpayOrderId = payment.order_id;
 
       await TemporaryOrder.findOneAndUpdate(
-        { razorpayOrderId, paymentStatus: "Pending" },
+        { razorpayOrderId, paymentStatus: "PENDING_PAYMENT" },
         { paymentStatus: "PAYMENT_FAILED" }
       );
 
-      console.log(`❌ Webhook: payment FAILED for ${razorpayOrderId}`);
+      console.log(`Webhook: payment FAILED for ${razorpayOrderId}`);
     }
 
     res.status(200).json({ success: true });
@@ -3253,7 +3270,7 @@ const markPaymentFailedController = async (req, res, next) => {
     }
 
     const tempOrder = await TemporaryOrder.findOneAndUpdate(
-      { razorpayOrderId, customerId, paymentStatus: "Pending" },
+      { razorpayOrderId, customerId, paymentStatus: "PENDING_PAYMENT" },
       { paymentStatus: "PAYMENT_FAILED" },
       { new: true }
     );
@@ -3282,7 +3299,7 @@ const retryPaymentController = async (req, res, next) => {
       customerId,
       paymentMode: "Online-payment",
       paymentStatus: "PAYMENT_FAILED",
-      processingStatus: "pending",
+      processingStatus: "PENDING",
     });
 
     if (!tempOrder) {
@@ -3725,8 +3742,10 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
 
+    // Only cancel if cron hasn't picked it up yet
     const orderFound = await TemporaryOrder.findOne({
       orderId: mongoose.Types.ObjectId.createFromHexString(orderId),
+      processingStatus: "PENDING",
     });
 
     if (!orderFound) {

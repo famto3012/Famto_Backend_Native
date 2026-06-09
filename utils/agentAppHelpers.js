@@ -104,12 +104,27 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           //   totalEarning += agentPricing.baseFare;
           // }
 
-          const pricePerOrder =
-            agentPricing.baseFare / agentPricing.minOrderNumber;
-          const calculatedEarning = pricePerOrder * appDetail.orders;
+          const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
 
-          totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+          // Incentive calculation based on splitIncentive toggle
+          if (agentPricing.splitIncentive !== false) {
+            // Split mode: proportional per order, capped at baseFare
+            const pricePerOrder =
+              agentPricing.baseFare / agentPricing.minOrderNumber;
+            const calculatedEarning = pricePerOrder * appDetail.orders;
 
+            totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+          } else {
+            // Non-split mode: full baseFare only when both criteria met
+            if (
+              appDetail.orders >= agentPricing.minOrderNumber &&
+              appDetail.loginDuration >= minLoginMillis
+            ) {
+              totalEarning += agentPricing.baseFare;
+            }
+          }
+
+          // Extra orders beyond minimum (same for both modes)
           if (appDetail.orders > agentPricing.minOrderNumber) {
             const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
             const earningForExtraOrders =
@@ -118,7 +133,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
             totalEarning += earningForExtraOrders;
           }
 
-          const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
+          // Extra login hours beyond minimum (same for both modes)
           const extraMillis = appDetail.loginDuration - minLoginMillis;
 
           if (extraMillis > 0) {
@@ -504,17 +519,13 @@ const updateAgentDetails = async (
 
   console.log("👉 Agent appDetail after push:", agent.appDetail);
 
-  const currentDay = moment.tz(new Date(), "Asia/Kolkata");
-  const startOfDay = currentDay.startOf("day").toDate();
-  const endOfDay = currentDay.endOf("day").toDate();
-
-  const agentTasks = await Task.find({
+  const remainingTasks = await Task.countDocuments({
     taskStatus: "Assigned",
     agentId: agent._id,
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({ createdAt: 1 });
+    orderId: { $ne: order._id },
+  });
 
-  agent.status = agentTasks.length > 0 ? "Busy" : "Free";
+  agent.status = remainingTasks > 0 ? "Busy" : "Free";
 
   console.log("👉 Agent status set to:", agent.status);
 
@@ -563,18 +574,15 @@ const updateAgentDetailsForBatch = async (agent, batchOrders) => {
 
   console.log("👉 Agent appDetail after batch update:", agent.appDetail);
 
-  // Check agent status
-  const currentDay = moment.tz(new Date(), "Asia/Kolkata");
-  const startOfDay = currentDay.startOf("day").toDate();
-  const endOfDay = currentDay.endOf("day").toDate();
-
-  const agentTasks = await Task.find({
+  // Check agent status — exclude current batch's orders
+  const batchOrderIds = batchOrders.map((o) => o._id);
+  const remainingTasks = await Task.countDocuments({
     taskStatus: "Assigned",
     agentId: agent._id,
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({ createdAt: 1 });
+    orderId: { $nin: batchOrderIds },
+  });
 
-  agent.status = agentTasks.length > 0 ? "Busy" : "Free";
+  agent.status = remainingTasks > 0 ? "Busy" : "Free";
 
   console.log("👉 Agent status set to:", agent.status);
 

@@ -322,15 +322,73 @@ cron.schedule("*/5 * * * * *", async () => {
       }
 
       try {
-        await processOrderService(tempOrder);
-
-        // await TemporaryOrder.deleteOne({
-        //   _id: tempOrder._id,
-        // });
+        const createdOrder = await processOrderService(tempOrder);
 
         console.log(
           `✅ Order created successfully for ${tempOrder._id}`
         );
+
+        // Send notifications for the newly created order
+        try {
+          const isScheduled = tempOrder.deliveryOption === "Scheduled";
+          const populatedOrder = isScheduled
+            ? await ScheduledOrder.findById(createdOrder._id).populate("merchantId")
+            : await Order.findById(createdOrder._id).populate("merchantId");
+
+          const eventName = "newOrderCreated";
+          const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+          const notificationData = {
+            fcm: {
+              orderId: createdOrder._id,
+              customerId: createdOrder.customerId,
+            },
+          };
+
+          const socketData = {
+            ...data,
+            orderId: createdOrder._id,
+            billDetail: createdOrder.billDetail,
+            _id: createdOrder._id,
+            orderStatus: createdOrder.status,
+            merchantName:
+              populatedOrder?.merchantId?.merchantDetail?.merchantName || "-",
+            customerName:
+              populatedOrder?.drops?.[0]?.address?.fullName || "-",
+            deliveryMode: createdOrder?.deliveryMode,
+            orderDate: formatDate(createdOrder.createdAt),
+            orderTime: formatTime(createdOrder.createdAt),
+            deliveryDate: createdOrder?.deliveryTime
+              ? formatDate(createdOrder.deliveryTime)
+              : "-",
+            deliveryTime: createdOrder?.deliveryTime
+              ? formatTime(createdOrder.deliveryTime)
+              : "-",
+            paymentMethod: createdOrder.paymentMode,
+            deliveryOption: createdOrder.deliveryOption,
+            amount: createdOrder.billDetail?.grandTotal,
+          };
+
+          const userIds = {
+            admin: process.env.ADMIN_ID,
+            merchant: populatedOrder?.merchantId?._id,
+            agent: createdOrder?.agentId,
+            customer: createdOrder?.customerId,
+          };
+
+          await sendSocketDataAndNotification({
+            rolesToNotify,
+            userIds,
+            eventName,
+            notificationData,
+            socketData,
+          });
+        } catch (notifErr) {
+          console.error(
+            `⚠️ Order created but notification failed for ${tempOrder._id}:`,
+            notifErr.message
+          );
+        }
       } catch (err) {
         const retryCount =
           (tempOrder.retryCount || 0) + 1;

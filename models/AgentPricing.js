@@ -46,6 +46,10 @@ const agentPricingSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    splitIncentive: {
+      type: Boolean,
+      default: true,
+    },
     status: {
       type: Boolean,
       default: true,

@@ -2359,12 +2359,18 @@ const createInvoiceController = async (req, res, next) => {
       );
     } else {
       // ✅ Normal CustomerCart flow
+      // Normalize items: map variantId → variantTypeId for CustomerCart schema
+      const normalizedItems = (items || []).map((item) => ({
+        ...item,
+        variantTypeId: item.variantTypeId || item.variantId || null,
+      }));
+
       customerCart = await CustomerCart.findOneAndUpdate(
         { customerId: customer._id },
         {
           customerId: customer._id,
           merchantId,
-          items,
+          items: normalizedItems,
           cartDetail: {
             pickupLocation,
             pickupAddress,

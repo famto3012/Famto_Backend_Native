@@ -2207,7 +2207,7 @@ const getMerchantPayoutController = async (req, res, next) => {
     }
 
     if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
-      filterCriteria["isSettled"] = paymentStatus;
+      filterCriteria["isSettled"] = paymentStatus === "true";
     }
 
     // Set start and end date boundaries, adjusting for timezone offset
@@ -2346,7 +2346,10 @@ const confirmMerchantPayout = async (req, res, next) => {
   try {
     const { payoutId, merchantId } = req.params;
 
-    const paymentDetailFound = await MerchantPayout.findById(payoutId);
+    const paymentDetailFound = await MerchantPayout.findOne({
+      _id: payoutId,
+      merchantId,
+    });
 
     if (!paymentDetailFound)
       return next(appError("Payment detail not found", 404));
@@ -2398,7 +2401,7 @@ const downloadPayoutCSVController = async (req, res, next) => {
 
     // Set start and end date boundaries, adjusting for timezone offset
     if (paymentStatus && paymentStatus.toLowerCase() !== "all") {
-      filterCriteria["isSettled"] = paymentStatus;
+      filterCriteria["isSettled"] = paymentStatus === "true";
     }
 
     // Set start and end date boundaries, adjusting for timezone offset

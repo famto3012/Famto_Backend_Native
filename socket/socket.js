@@ -813,20 +813,44 @@ const handleAgentNotificationLogs = async () => {
         // Check if status is "Pending" and exceeds the threshold
         if (status === "Pending") {
           setTimeout(async () => {
-            const log = await AgentNotificationLogs.findById(_id);
-            if (log && log.status === "Pending") {
+            try {
+              const log = await AgentNotificationLogs.findById(_id);
+
+              // Only act if still Pending — if it was already
+              // Accepted/Cancelled/Completed by another flow, skip.
+              if (!log || log.status !== "Pending") return;
+
+              // Check if the order was already accepted by another agent
+              const orderIds = log.orderId || [];
+              if (orderIds.length > 0) {
+                const acceptedLog = await AgentNotificationLogs.findOne({
+                  orderId: { $in: orderIds },
+                  status: "Accepted",
+                });
+                if (acceptedLog) {
+                  // Order was accepted — just cancel this notification, don't penalize
+                  log.status = "Cancelled";
+                  await log.save();
+                  return;
+                }
+              }
+
               const agent = await Agent.findById(log.agentId);
 
-              // Update status to "Rejected"
               log.status = "Rejected";
 
-              agent.appDetail.cancelledOrders += 1;
-              agent.appDetail.pendingOrders = Math.max(
-                0,
-                agent.appDetail.pendingOrders - 1
-              );
-
-              await Promise.all([log.save(), agent.save()]);
+              if (agent) {
+                agent.appDetail.cancelledOrders += 1;
+                agent.appDetail.pendingOrders = Math.max(
+                  0,
+                  agent.appDetail.pendingOrders - 1
+                );
+                await Promise.all([log.save(), agent.save()]);
+              } else {
+                await log.save();
+              }
+            } catch (err) {
+              console.error("Error in notification expiry timer:", err.message);
             }
           }, STATUS_UPDATE_THRESHOLD);
         }
@@ -1299,16 +1323,44 @@ io.on("connection", async (socket) => {
           );
 
           // =====================================
-          // CHECK IF ALL TASKS ARE UNASSIGNED
+          // ATOMIC LOCK — claim all unassigned tasks in one operation
           // =====================================
 
-          const unassignedTasksCount =
-            await Task.countDocuments({
+          const lockResult = await Task.updateMany(
+            {
               _id: { $in: taskIds },
               taskStatus: "Unassigned",
-            });
+            },
+            {
+              agentId,
+              taskStatus: "Assigned",
+              "pickupDropDetails.$[].pickups.$[].status":
+                "Accepted",
+              "pickupDropDetails.$[].drops.$[].status":
+                "Accepted",
+            }
+          );
 
-          if (unassignedTasksCount !== taskIds.length) {
+          if (lockResult.modifiedCount !== taskIds.length) {
+            // Rollback any that were partially claimed
+            if (lockResult.modifiedCount > 0) {
+              await Task.updateMany(
+                {
+                  _id: { $in: taskIds },
+                  agentId,
+                  taskStatus: "Assigned",
+                },
+                {
+                  $unset: { agentId: "" },
+                  taskStatus: "Unassigned",
+                  "pickupDropDetails.$[].pickups.$[].status":
+                    "Pending",
+                  "pickupDropDetails.$[].drops.$[].status":
+                    "Pending",
+                }
+              );
+            }
+
             return socket.emit("orderAlreadyAccepted", {
               message:
                 "This batch order has already been accepted by another agent",
@@ -1317,29 +1369,17 @@ io.on("connection", async (socket) => {
           }
 
           // =====================================
-          // ASSIGN ALL TASKS
+          // CANCEL OTHER AGENTS' NOTIFICATIONS IMMEDIATELY
           // =====================================
 
-          const tasks = await Task.find({
-            _id: { $in: taskIds },
-          });
-
-          for (const taskItem of tasks) {
-            taskItem.agentId = agentId;
-            taskItem.taskStatus = "Assigned";
-
-            taskItem.pickupDropDetails?.forEach((pd) => {
-              pd.pickups?.forEach((pickup) => {
-                pickup.status = "Accepted";
-              });
-
-              pd.drops?.forEach((drop) => {
-                drop.status = "Accepted";
-              });
-            });
-
-            await taskItem.save();
-          }
+          await AgentNotificationLogs.updateMany(
+            {
+              orderId: { $in: [orderId] },
+              agentId: { $ne: agentId },
+              status: "Pending",
+            },
+            { status: "Cancelled" }
+          );
 
           // =====================================
           // UPDATE CURRENT AGENT NOTIFICATION
@@ -1354,25 +1394,21 @@ io.on("connection", async (socket) => {
           // =====================================
 
           if (batchOrderDoc?.dropDetails?.length) {
-            for (const e of batchOrderDoc.dropDetails) {
-              console.log(
-                "batchOrderDoc.dropDetails",
-                e
-              );
+            const orderIds = batchOrderDoc.dropDetails.map(
+              (e) => e.orderId
+            );
 
-              await Order.findByIdAndUpdate(
-                e.orderId,
-                {
-                  agentId,
-                  agentAcceptedAt: new Date(),
-                  "orderDetailStepper.assigned":
-                    stepperDetail,
-                  "detailAddedByAgent.distanceCoveredByAgent":
-                    null,
-                },
-                { new: true }
-              );
-            }
+            await Order.updateMany(
+              { _id: { $in: orderIds } },
+              {
+                agentId,
+                agentAcceptedAt: new Date(),
+                "orderDetailStepper.assigned":
+                  stepperDetail,
+                "detailAddedByAgent.distanceCoveredByAgent":
+                  null,
+              }
+            );
 
             // =====================================
             // UPDATE BATCH ORDER
@@ -1396,6 +1432,21 @@ io.on("connection", async (socket) => {
         // =========================
 
         else {
+          // =====================================
+          // ORDER-LEVEL GUARD
+          // =====================================
+
+          if (order.agentId) {
+            return socket.emit(
+              "orderAlreadyAccepted",
+              {
+                message:
+                  "This order has already been accepted by another agent",
+                success: false,
+              }
+            );
+          }
+
           // =====================================
           // ATOMIC LOCK
           // =====================================
@@ -1429,6 +1480,19 @@ io.on("connection", async (socket) => {
           }
 
           // =====================================
+          // CANCEL OTHER AGENTS' NOTIFICATIONS IMMEDIATELY
+          // =====================================
+
+          await AgentNotificationLogs.updateMany(
+            {
+              orderId: { $in: [orderId] },
+              agentId: { $ne: agentId },
+              status: "Pending",
+            },
+            { status: "Cancelled" }
+          );
+
+          // =====================================
           // UPDATE CURRENT AGENT NOTIFICATION
           // =====================================
 
@@ -1455,21 +1519,6 @@ io.on("connection", async (socket) => {
         }
 
         // =========================
-        // CANCEL OTHER NOTIFICATIONS
-        // =========================
-
-        await AgentNotificationLogs.updateMany(
-          {
-            orderId: { $in: [orderId] },
-            agentId: { $ne: agentId },
-            status: "Pending",
-          },
-          {
-            status: "Cancelled",
-          }
-        );
-
-        // =========================
         // REDUCE OTHER AGENT PENDING COUNT
         // =========================
 
@@ -1479,9 +1528,7 @@ io.on("connection", async (socket) => {
             {
               orderId: { $in: [orderId] },
               agentId: { $ne: agentId },
-              status: {
-                $in: ["Cancelled", "Pending"],
-              },
+              status: "Cancelled",
             }
           );
 
@@ -3470,6 +3517,23 @@ io.on("connection", async (socket) => {
             saveOps.push(orderFound.save());
           }
 
+          // Check if all batch drops are done
+          const allBatchDone = batchOrderDoc.dropDetails.every(
+            (d) => d.drops?.status === "Completed"
+          );
+
+          if (allBatchDone && agentFound) {
+            const otherActiveTasks = await Task.countDocuments({
+              taskStatus: "Assigned",
+              agentId,
+            });
+
+            if (otherActiveTasks === 0) {
+              agentFound.status = "Free";
+            }
+            saveOps.push(agentFound.save());
+          }
+
           await Promise.all(saveOps);
 
           const eventName = "reachedDeliveryLocation";
@@ -3696,10 +3760,22 @@ io.on("connection", async (socket) => {
             taskFound.taskStatus = "Completed";
           }
 
-          await Promise.all([
-            orderFound.save(),
-            taskFound.save(),
-          ]);
+          const saveOps = [orderFound.save(), taskFound.save()];
+
+          if (allDone) {
+            const otherActiveTasks = await Task.countDocuments({
+              taskStatus: "Assigned",
+              agentId,
+              _id: { $ne: taskFound._id },
+            });
+
+            if (otherActiveTasks === 0) {
+              agentFound.status = "Free";
+            }
+            saveOps.push(agentFound.save());
+          }
+
+          await Promise.all(saveOps);
 
           const eventName = "reachedDeliveryLocation";
 

@@ -14,6 +14,7 @@ const {
 } = require("../../../utils/imageOperation");
 
 const Agent = require("../../../models/Agent");
+const Task = require("../../../models/Task");
 const AccountLogs = require("../../../models/AccountLogs");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
@@ -464,7 +465,12 @@ const changeAgentStatusController = async (req, res, next) => {
         return;
       }
 
-      agentFound.status = "Free";
+      const activeTasks = await Task.countDocuments({
+        taskStatus: "Assigned",
+        agentId: agentFound._id,
+      });
+
+      agentFound.status = activeTasks > 0 ? "Busy" : "Free";
 
       const data = { status: "Online" };
 

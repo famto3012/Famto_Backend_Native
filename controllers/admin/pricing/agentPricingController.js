@@ -28,6 +28,7 @@ const addAgentPricingController = async (req, res, next) => {
       minOrderNumber,
       fareAfterMinLoginHours,
       fareAfterMinOrderNumber,
+      splitIncentive,
       geofenceId,
       type,
     } = req.body;
@@ -58,6 +59,7 @@ const addAgentPricingController = async (req, res, next) => {
       minOrderNumber,
       fareAfterMinLoginHours,
       fareAfterMinOrderNumber,
+      splitIncentive: splitIncentive !== undefined ? splitIncentive : true,
       geofenceId,
       type,
     });
@@ -127,6 +129,7 @@ const editAgentPricingController = async (req, res, next) => {
     minOrderNumber,
     fareAfterMinLoginHours,
     fareAfterMinOrderNumber,
+    splitIncentive,
     geofenceId,
     type,
   } = req.body;
@@ -179,6 +182,7 @@ const editAgentPricingController = async (req, res, next) => {
         minOrderNumber,
         fareAfterMinLoginHours,
         fareAfterMinOrderNumber,
+        splitIncentive: splitIncentive !== undefined ? splitIncentive : true,
         geofenceId,
         type,
       },

@@ -684,7 +684,7 @@ const getOrderDetailByAdminController = async (req, res, next) => {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.pickups[0]?.address?.fullName ||
+          orderFound.drops[0]?.address?.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
@@ -2138,6 +2138,12 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     console.log("Bill detail:", billDetail);
 
+    // Normalize items: admin may send variantId but CustomerCart schema expects variantTypeId
+    const normalizedItems = (items || []).map((item) => ({
+      ...item,
+      variantTypeId: item.variantTypeId || item.variantId || null,
+    }));
+
     const cart = await saveCustomerCart(
       deliveryMode,
       deliveryOption,
@@ -2151,7 +2157,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       scheduledDetails,
       billDetail,
       vehicleType,
-      items,
+      normalizedItems,
       instructionToMerchant,
       instructionToDeliveryAgent,
       instructionInPickup,
@@ -3041,22 +3047,16 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       grandTotal: calculatedSalary,
     };
 
-    const currentDay = moment.tz(new Date(), "Asia/Kolkata");
-    const startOfDay = currentDay.startOf("day").toDate();
-    const endOfDay = currentDay.endOf("day").toDate();
-
     task.taskStatus = "Completed";
 
     await task.save();
 
-    const agentTasks = await Task.find({
+    const remainingTasks = await Task.countDocuments({
       taskStatus: "Assigned",
       agentId: agentFound._id,
-      orderId: { $ne: orderId },
-    }).lean();
+    });
 
-    console.log("Agent tasks", agentTasks);
-    agentFound.status = agentTasks.length > 0 ? "Busy" : "Free";
+    agentFound.status = remainingTasks > 0 ? "Busy" : "Free";
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalSurge += calculatedSurge;
     agentFound.appDetail.totalDistance += totalOrderDistance;
@@ -3131,11 +3131,9 @@ const markOrderAsCancelled = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
-    const [order, task, notification, notificationCount] = await Promise.all([
+    const [order, task] = await Promise.all([
       Order.findById(orderId),
       Task.findOne({ orderId }),
-      AgentNotificationLogs.findOne({ orderId, status: "Accepted" }).lean(),
-      AgentNotificationLogs.find({ status: "Accepted" }).lean(),
     ]);
 
     if (!order) return next(appError("Order not found", 404));
@@ -3144,14 +3142,12 @@ const markOrderAsCancelled = async (req, res, next) => {
     order.status = "Cancelled";
     task.taskStatus = "Cancelled";
     task.pickupDropDetails.forEach((detail) => {
-      // Update all pickups
       detail.pickups.forEach((pickup) => {
         pickup.status = "Cancelled";
-        pickup.startTime = pickup.startTime || new Date(); // keep old if already set
+        pickup.startTime = pickup.startTime || new Date();
         pickup.completedTime = new Date();
       });
 
-      // Update all drops
       detail.drops.forEach((drop) => {
         drop.status = "Cancelled";
         drop.startTime = drop.startTime || new Date();
@@ -3162,6 +3158,10 @@ const markOrderAsCancelled = async (req, res, next) => {
     const promises = [
       order.save(),
       task.save(),
+      AgentNotificationLogs.updateMany(
+        { orderId: { $in: [orderId] } },
+        { status: "Cancelled" }
+      ),
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
@@ -3169,24 +3169,22 @@ const markOrderAsCancelled = async (req, res, next) => {
       }),
     ];
 
-    if (order?.agentId && notificationCount.length === 1) {
-      promises.push(
-        Agent.findByIdAndUpdate(
-          order.agentId,
-          { status: "Free" },
-          { new: true },
-        ),
-      );
-    }
+    if (order?.agentId) {
+      const otherActiveTasks = await Task.countDocuments({
+        taskStatus: "Assigned",
+        agentId: order.agentId,
+        orderId: { $ne: orderId },
+      });
 
-    if (notification) {
-      promises.push(
-        AgentNotificationLogs.findOneAndUpdate(
-          { orderId },
-          { status: "Cancelled" },
-          { new: true },
-        ),
-      );
+      if (otherActiveTasks === 0) {
+        promises.push(
+          Agent.findByIdAndUpdate(
+            order.agentId,
+            { status: "Free" },
+            { new: true }
+          )
+        );
+      }
     }
 
     await Promise.all(promises);
@@ -3329,7 +3327,6 @@ const reassignAgentController = async (req, res, next) => {
     if (oldAgentId) {
       const oldAgent = await Agent.findById(oldAgentId);
       if (oldAgent) {
-        // Check if old agent has any OTHER active tasks
         const otherActiveTasks = await Task.countDocuments({
           agentId: oldAgentId,
           taskStatus: "Assigned",
@@ -3342,29 +3339,26 @@ const reassignAgentController = async (req, res, next) => {
 
         await oldAgent.save();
 
-        // Notify old agent that order was removed
         sendSocketData(oldAgentId.toString(), "orderRemoved", {
           orderId,
           message: "Order has been reassigned to another agent",
         });
       }
+
+      // Cancel old agent's notification log
+      await AgentNotificationLogs.updateMany(
+        { orderId: { $in: [orderId] }, agentId: oldAgentId, status: { $in: ["Pending", "Accepted"] } },
+        { status: "Cancelled" }
+      );
     }
 
-    // ── Update order ──────────────────────────────────────────
-    const stepperDetail = {
-      by: newAgent.fullName,
-      userId: newAgentId,
-      date: new Date(),
-      location: getUserLocationFromSocket(newAgentId) || newAgent.location,
-    };
-
-    order.agentId = newAgentId;
+    // ── Reset order (agent must accept first) ─────────────────
+    order.agentId = null;
     order.orderDetail = order.orderDetail || {};
-    order.orderDetail.agentAcceptedAt = new Date();
+    order.orderDetail.agentAcceptedAt = null;
     order.orderDetailStepper = order.orderDetailStepper || {};
-    order.orderDetailStepper.assigned = stepperDetail;
+    order.orderDetailStepper.assigned = null;
 
-    // Reset old agent's distance data
     order.detailAddedByAgent = {
       startToPickDistance: null,
       distanceCoveredByAgent: null,
@@ -3375,20 +3369,19 @@ const reassignAgentController = async (req, res, next) => {
       shopUpdates: [],
     };
 
-    // ── Update task ───────────────────────────────────────────
-    task.agentId = newAgentId;
-    task.taskStatus = "Assigned";
+    // ── Reset task to Unassigned ──────────────────────────────
+    task.agentId = null;
+    task.taskStatus = "Unassigned";
 
-    // Reset pickup/drop statuses for new agent
     if (task.pickupDropDetails?.length) {
       for (const detail of task.pickupDropDetails) {
         for (const pickup of detail.pickups || []) {
-          pickup.status = "Accepted";
+          pickup.status = "Pending";
           pickup.startTime = null;
           pickup.completedTime = null;
         }
         for (const drop of detail.drops || []) {
-          drop.status = "Accepted";
+          drop.status = "Pending";
           drop.startTime = null;
           drop.completedTime = null;
         }
@@ -3396,8 +3389,7 @@ const reassignAgentController = async (req, res, next) => {
       task.markModified("pickupDropDetails");
     }
 
-    // ── Update new agent ──────────────────────────────────────
-    newAgent.status = "Busy";
+    // ── Update new agent pending count ────────────────────────
     if (!newAgent.appDetail) {
       newAgent.appDetail = {
         totalEarning: 0,
@@ -3409,8 +3401,45 @@ const reassignAgentController = async (req, res, next) => {
         loginDuration: 0,
       };
     }
+    newAgent.appDetail.pendingOrders = (newAgent.appDetail.pendingOrders || 0) + 1;
 
     await Promise.all([order.save(), task.save(), newAgent.save()]);
+
+    // ── Create notification log for the new agent ─────────────
+    const pickupDetail = order.pickups?.[0]?.address
+      ? {
+          name: order.pickups[0].address.fullName,
+          address: {
+            fullName: order.pickups[0].address.fullName,
+            phoneNumber: order.pickups[0].address.phoneNumber,
+            flat: order.pickups[0].address.flat,
+            area: order.pickups[0].address.area,
+            landmark: order.pickups[0].address.landmark,
+          },
+        }
+      : {};
+
+    const deliveryDetail = Array.isArray(order.drops)
+      ? order.drops.map((drop) => ({
+          name: drop?.address?.fullName,
+          address: {
+            fullName: drop?.address?.fullName,
+            phoneNumber: drop?.address?.phoneNumber,
+            flat: drop?.address?.flat,
+            area: drop?.address?.area,
+            landmark: drop?.address?.landmark,
+          },
+        }))
+      : [];
+
+    await AgentNotificationLogs.create({
+      agentId: newAgentId,
+      orderId: [orderId],
+      pickupDetail,
+      deliveryDetail,
+      orderType: order.deliveryMode || "On-demand",
+      expiresIn: autoAllocation?.expireTime || 60,
+    });
 
     // ── Notify new agent and roles ────────────────────────────
     const eventName = "newOrder";

@@ -8,6 +8,7 @@ const CustomerWalletTransaction = require("../models/CustomerWalletTransaction")
 const PromoCode = require("../models/PromoCode");
 const ActivityLog = require("../models/ActivityLog");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
+const PickAndCustomCart = require("../models/PickAndCustomCart");
 
 const processOrderService = async (tempOrder) => {
   const session = await mongoose.startSession();
@@ -68,12 +69,21 @@ const processOrderService = async (tempOrder) => {
 
     const finalOrder = createdOrder[0];
 
-    await CustomerCart.deleteOne(
-      {
-        customerId: tempOrder.customerId,
-      },
-      { session }
-    );
+    // Use the correct cart model based on delivery mode
+    if (
+      tempOrder.deliveryMode === "Pick and Drop" ||
+      tempOrder.deliveryMode === "Custom Order"
+    ) {
+      await PickAndCustomCart.deleteOne(
+        { customerId: tempOrder.customerId },
+        { session }
+      );
+    } else {
+      await CustomerCart.deleteOne(
+        { customerId: tempOrder.customerId },
+        { session }
+      );
+    }
 
     if (tempOrder.billDetail?.promoCodeUsed) {
       await PromoCode.findOneAndUpdate(

@@ -624,142 +624,18 @@ const confirmCustomOrderController = async (req, res, next) => {
 
     await Promise.all([
       customer.save(),
-      CustomerTransaction.create({
-        customerId,
-        madeOn: new Date(),
-        transactionType: "Order Created",
-        transactionAmount: orderAmount,
-        type: "Debit",
-      }),
       PickAndCustomCart.deleteOne({ customerId }),
-      PromoCode.findOneAndUpdate(
-        { promoCode: tempOrder.billDetail.promoCodeUsed },
-        { $inc: { noOfUserUsed: 1 } }
-      ),
     ]);
 
     // Return countdown timer to client
+    // NOTE: Cron worker (index.js) creates the final Order after expiresAt
+    // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
     res.status(200).json({
       success: true,
       orderId,
       createdAt: tempOrder.createdAt,
       deliveryMode: tempOrder.deliveryMode,
     });
-
-    // After 60 seconds, create the order if it is not cancelled
-    setTimeout(async () => {
-      const storedOrderData = await TemporaryOrder.findOne({ orderId });
-
-      if (storedOrderData) {
-        const newOrder = await Order.create({
-          customerId: storedOrderData.customerId,
-
-          deliveryMode: storedOrderData.deliveryMode,
-          deliveryOption: storedOrderData.deliveryOption,
-
-          pickups: storedOrderData.pickups,
-          drops: storedOrderData.drops,
-
-          billDetail: storedOrderData.billDetail,
-          distance: storedOrderData.distance,
-
-          deliveryTime: storedOrderData.deliveryTime,
-          startDate: storedOrderData.startDate,
-          endDate: storedOrderData.endDate,
-          time: storedOrderData.time,
-          numOfDays: storedOrderData.numOfDays,
-
-          totalAmount: storedOrderData.totalAmount,
-
-          paymentMode: storedOrderData.paymentMode,
-          paymentStatus:
-            tempOrder.paymentStatus === "PAYMENT_COMPLETED"
-              ? "Completed"
-              : "Pending",
-
-          purchasedItems: storedOrderData.purchasedItems || [],
-          orderDetailStepper: {
-            created: {
-              by: "Customer",
-              userId: req.userAuth,
-              date: new Date(),
-              location: storedOrderData?.drops[0]?.deliveryLocation || [],
-            },
-          },
-        });
-
-        if (!newOrder) {
-          return next(appError("Error in creating order"));
-        }
-
-        // Remove the temporary order data from the database
-        await Promise.all([
-          TemporaryOrder.deleteOne({ orderId }),
-          ActivityLog.create({
-            userId: req.userAuth,
-            userType: req.userRole,
-            description: `Custom Order (#${newOrder._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-              } )`,
-          }),
-        ]);
-
-        const eventName = "newOrderCreated";
-
-        // Fetch notification settings to determine roles
-        const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-        const notificationData = {
-          fcm: {
-            orderId: newOrder._id,
-            customerId: newOrder.customerId,
-          },
-        };
-
-        const socketData = {
-          ...data,
-
-          orderId: newOrder._id,
-          billDetail: newOrder.billDetail,
-
-          //? Data for displaying detail in all orders table
-          _id: newOrder._id,
-          orderStatus: newOrder.status,
-          merchantName: "-",
-          customerName:
-            newOrder?.drops[0]?.address?.fullName ||
-            newOrder?.customerId?.fullName ||
-            "-",
-          deliveryMode: newOrder?.deliveryMode,
-          orderDate: formatDate(newOrder.createdAt),
-          orderTime: formatTime(newOrder.createdAt),
-          deliveryDate: newOrder?.deliveryTime
-            ? formatDate(newOrder?.deliveryTime)
-            : "-",
-          deliveryTime: newOrder?.deliveryTime
-            ? formatTime(newOrder.deliveryTime)
-            : "-",
-          paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.deliveryOption,
-          amount: newOrder.billDetail.grandTotal,
-        };
-
-        const userIds = {
-          admin: process.env.ADMIN_ID,
-          merchant: newOrder?.merchantId?._id,
-          agent: newOrder?.agentId,
-          customer: newOrder?.customerId,
-        };
-
-        await sendSocketDataAndNotification({
-          rolesToNotify,
-          userIds,
-          eventName,
-          notificationData,
-          socketData,
-        });
-      }
-    }, 60000);
   } catch (err) {
     console.log(err.message);
     next(appError(err.message));
@@ -770,7 +646,11 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
 
-    const orderFound = await TemporaryOrder.findOne({ orderId });
+    // Only cancel if cron hasn't picked it up yet
+    const orderFound = await TemporaryOrder.findOne({
+      orderId,
+      processingStatus: "PENDING",
+    });
     if (!orderFound) {
       res.status(200).json({
         success: false,
@@ -812,13 +692,7 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
       return;
     } else if (orderFound.paymentMode === "Cash-on-delivery") {
       // Remove the temporary order data from the database
-      await Promise.all([
-        TemporaryOrder.deleteOne({ orderId }),
-        PromoCode.findOneAndUpdate(
-          { promoCode: orderFound.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: -1 } }
-        ),
-      ]);
+      await TemporaryOrder.deleteOne({ orderId });
 
       res.status(200).json({ success: true, message: "Order cancelled" });
 

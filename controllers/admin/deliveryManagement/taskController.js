@@ -60,6 +60,14 @@ const assignAgentToTaskController = async (req, res, next) => {
       return next(appError("Task not found", 404));
     }
 
+    if (task.taskStatus === "Assigned") {
+      return next(appError("Task is already assigned to an agent", 400));
+    }
+
+    if (task.taskStatus === "Completed" || task.taskStatus === "Cancelled") {
+      return next(appError(`Cannot assign a ${task.taskStatus} task`, 400));
+    }
+
     const [order, agent, autoAllocation] = await Promise.all([
       Order.findById(task.orderId),
       Agent.findById(agentId),

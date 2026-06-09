@@ -1772,142 +1772,20 @@ const confirmPickAndDropController = async (req, res, next) => {
       await Promise.all([
         customer.save(),
         PickAndCustomCart.deleteOne({ customerId }),
-        CustomerTransaction.create(customerTransaction),
         CustomerWalletTransaction.create({ ...walletTransaction, orderId }),
-        PromoCode.findOneAndUpdate(
-          { promoCode: tempOrder.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: 1 } }
-        ),
       ]);
 
+      // Return countdown timer to client
+      // NOTE: Cron worker (index.js) creates the final Order after expiresAt
+      // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
       res.status(200).json({
         success: true,
         orderId,
         createdAt: tempOrder.createdAt,
       });
-
-      setTimeout(async () => {
-        const storedOrderData = await TemporaryOrder.findOne({ orderId });
-
-        if (storedOrderData) {
-          const newOrder = await Order.create({
-            customerId: storedOrderData.customerId,
-
-            deliveryMode: storedOrderData.deliveryMode,
-            deliveryOption: storedOrderData.deliveryOption,
-
-            pickups: storedOrderData.pickups,
-            drops: storedOrderData.drops,
-
-            billDetail: storedOrderData.billDetail,
-            distance: storedOrderData.distance,
-
-            deliveryTime: storedOrderData.deliveryTime,
-            startDate: storedOrderData.startDate,
-            endDate: storedOrderData.endDate,
-            time: storedOrderData.time,
-            numOfDays: storedOrderData.numOfDays,
-
-            totalAmount: storedOrderData.totalAmount,
-            paymentMode: storedOrderData.paymentMode,
-            paymentStatus:
-            tempOrder.paymentStatus === "PAYMENT_COMPLETED"
-              ? "Completed"
-              : "Pending",
-            paymentId: storedOrderData.paymentId,
-            orderDetailStepper: {
-              created: {
-                by: "Customer",
-                userId: req.userAuth,
-                date: new Date(),
-                location: storedOrderData?.drops[0]?.deliveryLocation || [],
-              },
-            },
-          });
-
-          if (!newOrder) return next(appError("Error in creating order"));
-
-          const oldOrderId = orderId;
-
-          // Remove the temporary order data from the database
-          await Promise.all([
-            TemporaryOrder.deleteOne({ orderId }),
-            customer.save(),
-            CustomerWalletTransaction.findOneAndUpdate(
-              { orderId: oldOrderId },
-              { $set: { orderId: newOrder._id } },
-              { new: true }
-            ),
-            ActivityLog.create({
-              userId: req.userAuth,
-              userType: req.userRole,
-              description: `Pick & Drop Order (#${newOrder._id
-                }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-                } )`,
-            }),
-          ]);
-
-          //? Notify the USER and ADMIN about successful order creation
-          const eventName = "newOrderCreated";
-
-          // Fetch notification settings to determine roles
-          const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-          const notificationData = {
-            fcm: {
-              orderId: newOrder._id,
-              customerId: newOrder.customerId,
-            },
-          };
-
-          const socketData = {
-            ...data,
-
-            orderId: newOrder._id,
-            billDetail: newOrder.billDetail,
-
-            //? Data for displaying detail in all orders table
-            _id: newOrder._id,
-            orderStatus: newOrder.status,
-            merchantName: "-",
-            customerName:
-              newOrder?.drops[0]?.address?.fullName ||
-              newOrder?.customerId?.fullName ||
-              "-",
-            deliveryMode: newOrder?.deliveryMode,
-            orderDate: formatDate(newOrder.createdAt),
-            orderTime: formatTime(newOrder.createdAt),
-            deliveryDate: newOrder?.deliveryTime
-              ? formatDate(newOrder?.deliveryTime)
-              : "-",
-            deliveryTime: newOrder?.deliveryTime
-              ? formatTime(newOrder.deliveryTime)
-              : "-",
-            paymentMethod: newOrder.paymentMode,
-            deliveryOption: newOrder.deliveryOption,
-            amount: newOrder.billDetail.grandTotal,
-          };
-
-          const userIds = {
-            admin: process.env.ADMIN_ID,
-            merchant: newOrder?.merchantId?._id,
-            agent: newOrder?.agentId,
-            customer: newOrder?.customerId,
-          };
-
-          await sendSocketDataAndNotification({
-            rolesToNotify,
-            userIds,
-            eventName,
-            notificationData,
-            socketData,
-          });
-        }
-      }, 60000);
     } else if (paymentMode === "Online-payment") {
-      const { success, orderId, error } = await createRazorpayOrderId(
-        orderAmount
-      );
+      const { success, orderId: razorpayOrderId, error } =
+        await createRazorpayOrderId(orderAmount);
 
       if (!success) {
         return next(
@@ -1915,7 +1793,56 @@ const confirmPickAndDropController = async (req, res, next) => {
         );
       }
 
-      res.status(200).json({ success: true, orderId, amount: orderAmount });
+      const orderId = new mongoose.Types.ObjectId();
+
+      let orderBill = {
+        deliveryChargePerDay: cart.billDetail.deliveryChargePerDay,
+        deliveryCharge:
+          cart.billDetail.discountedDeliveryCharge ||
+          cart.billDetail.originalDeliveryCharge,
+        discountedAmount: cart.billDetail.discountedAmount,
+        promoCodeUsed: cart.billDetail.promoCodeUsed,
+        grandTotal:
+          cart.billDetail.discountedGrandTotal ||
+          cart.billDetail.originalGrandTotal,
+        addedTip: cart.billDetail.addedTip,
+        vehicleType: cart.billDetail.vehicleType,
+        surgePrice: cart.billDetail.surgePrice,
+      };
+
+      const deliveryTime = new Date();
+      deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
+
+      // Create temp order NOW so webhook/reconciliation can find it
+      // if the customer closes the app after paying
+      await TemporaryOrder.create({
+        orderId,
+        razorpayOrderId,
+        customerId,
+        deliveryMode: "Pick and Drop",
+        deliveryOption: cart.deliveryOption,
+        pickups: cart.pickups,
+        drops: cart.drops,
+        billDetail: orderBill,
+        distance: cart.distance,
+        deliveryTime,
+        startDate: cart.startDate,
+        endDate: cart.endDate,
+        time: cart.time,
+        numOfDays: cart.numOfDays,
+        totalAmount: orderAmount,
+        paymentMode: "Online-payment",
+        paymentStatus: "PENDING_PAYMENT",
+        processingStatus: "PENDING",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+
+      res.status(200).json({
+        success: true,
+        orderId,
+        razorpayOrderId,
+        amount: orderAmount,
+      });
     }
   } catch (err) {
     next(appError(err.message));
@@ -1926,6 +1853,11 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
   try {
     const { paymentDetails } = req.body;
     const customerId = req.userAuth;
+
+    const isPaymentValid = await verifyPayment(paymentDetails);
+    if (!isPaymentValid) {
+      return next(appError("Invalid payment", 400));
+    }
 
     const customer = await Customer.findById(customerId);
     if (!customer) {
@@ -1941,13 +1873,6 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       return next(appError("Cart not found", 404));
     }
 
-    console.log("Payment Details", paymentDetails);
-
-    const isPaymentValid = await verifyPayment(paymentDetails);
-    if (!isPaymentValid) {
-      return next(appError("Invalid payment", 400));
-    }
-
     const orderAmount =
       cart.billDetail.discountedGrandTotal ||
       cart.billDetail.originalGrandTotal;
@@ -1959,7 +1884,6 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         cart.billDetail.originalDeliveryCharge,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       discountedAmount: cart.billDetail.discountedAmount,
-
       surgePrice: cart.billDetail.surgePrice,
       grandTotal:
         cart.billDetail.discountedGrandTotal ||
@@ -1967,22 +1891,9 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       addedTip: cart.billDetail.addedTip,
     };
 
-    const deliveryTime = new Date();
-    deliveryTime.setMinutes(deliveryTime.getMinutes() + 61);
-
-    let customerTransaction = {
-      customerId,
-      madeOn: new Date(),
-      transactionType: "Pick and Drop Order",
-      transactionAmount: orderAmount,
-      type: "Debit",
-    };
-
-
-    let newOrder;
     if (cart.deliveryOption === "Scheduled") {
-      // Create scheduled Pick and Drop
-      newOrder = await ScheduledPickAndCustom.create({
+      // Create scheduled Pick and Drop directly
+      const newOrder = await ScheduledPickAndCustom.create({
         customerId,
         items: cart.items,
         orderDetail: cart.cartDetail,
@@ -1999,7 +1910,13 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       await Promise.all([
         PickAndCustomCart.deleteOne({ customerId }),
         customer.save(),
-        CustomerTransaction.create(customerTransaction),
+        CustomerTransaction.create({
+          customerId,
+          madeOn: new Date(),
+          transactionType: "Pick and Drop Order",
+          transactionAmount: orderAmount,
+          type: "Debit",
+        }),
         ActivityLog.create({
           userId: req.userAuth,
           userType: req.userRole,
@@ -2011,11 +1928,14 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
           { promoCode: newOrder.billDetail.promoCodeUsed },
           { $inc: { noOfUserUsed: 1 } }
         ),
+        // Remove the temp order created at confirm step
+        TemporaryOrder.deleteOne({
+          razorpayOrderId: paymentDetails.razorpay_order_id,
+        }),
       ]);
 
       const eventName = "newOrderCreated";
 
-      // Fetch notification settings to determine roles
       const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
       const notificationData = {
@@ -2030,16 +1950,13 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
 
         orderId: newOrder._id,
         billDetail: newOrder.billDetail,
-        orderDetailStepper: newOrder.orderDetailStepper.created,
 
-        //? Data for displaying detail in all orders table
         _id: newOrder._id,
         orderStatus: newOrder.status,
         merchantName:
           newOrder?.merchantId?.merchantDetail?.merchantName || "-",
         customerName:
-          newOrder?.drops[0]?.deliveryAddress
-            ?.fullName ||
+          newOrder?.drops?.[0]?.deliveryAddress?.fullName ||
           newOrder?.customerId?.fullName ||
           "-",
         deliveryMode: newOrder?.deliveryMode,
@@ -2055,36 +1972,6 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
         deliveryOption: newOrder.deliveryOption,
         amount: newOrder.billDetail.grandTotal,
       };
-
-
-      // const socketData = {
-      //   ...data,
-
-      //   orderId: newOrder._id,
-      //   orderDetail: newOrder.orderDetail,
-      //   billDetail: newOrder.billDetail,
-
-      //   //? Data for displaying detail in all orders table
-      //   _id: newOrder._id,
-      //   orderStatus: newOrder.status,
-      //   merchantName: newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-      //   customerName:
-      //     newOrder?.deliveryAddress?.fullName ||
-      //     newOrder?.customerId?.fullName ||
-      //     "-",
-      //   deliveryMode: newOrder?.deliveryMode,
-      //   orderDate: formatDate(newOrder.createdAt),
-      //   orderTime: formatTime(newOrder.createdAt),
-      //   deliveryDate: newOrder?.deliveryTime
-      //     ? formatDate(newOrder.deliveryTime)
-      //     : "-",
-      //   deliveryTime: newOrder?.deliveryTime
-      //     ? formatTime(newOrder.deliveryTime)
-      //     : "-",
-      //   paymentMethod: newOrder.paymentMode,
-      //   deliveryOption: newOrder.deliveryOption,
-      //   amount: newOrder.billDetail.grandTotal,
-      // };
 
       const userIds = {
         admin: process.env.ADMIN_ID,
@@ -2110,172 +1997,34 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
       return;
     }
 
-    // Generate a unique order ID
-    const orderId = new mongoose.Types.ObjectId();
+    // On-demand: Update the existing temp order (created at confirm step)
+    const tempOrder = await TemporaryOrder.findOneAndUpdate(
+      {
+        razorpayOrderId: paymentDetails.razorpay_order_id,
+        paymentStatus: "PENDING_PAYMENT",
+      },
+      {
+        paymentStatus: "PAYMENT_COMPLETED",
+        paymentId: paymentDetails.razorpay_payment_id,
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      },
+      { new: true }
+    );
 
-    // Store order details temporarily in the database
-    const tempOrder = await TemporaryOrder.create({
-      orderId,
-      customerId,
-
-      deliveryMode: "Pick and Drop",
-      deliveryOption: cart.deliveryOption,
-
-      pickups: cart.pickups,
-      drops: cart.drops,
-
-      billDetail: orderBill,
-      distance: cart.distance,
-
-      deliveryTime,
-      startDate: cart.startDate,
-      endDate: cart.endDate,
-      time: cart.time,
-      numOfDays: cart.numOfDays,
-
-      totalAmount:
-        cart?.billDetail?.discountedGrandTotal ||
-        cart?.billDetail?.originalGrandTotal ||
-        0,
-      paymentMode: "Online-payment",
-      paymentStatus: "PAYMENT_COMPLETED",
-      paymentId: paymentDetails.razorpay_payment_id,
-    });
+    if (!tempOrder) {
+      return next(appError("Order not found or already processed", 404));
+    }
 
     await Promise.all([
       PickAndCustomCart.deleteOne({ customerId }),
       customer.save(),
-      CustomerTransaction.create(customerTransaction),
-      PromoCode.findOneAndUpdate(
-        { promoCode: tempOrder.billDetail.promoCodeUsed },
-        { $inc: { noOfUserUsed: 1 } }
-      ),
     ]);
 
-    if (!tempOrder) {
-      return next(appError("Error in creating temporary order"));
-    }
-
-    // Return countdown timer to client
     res.status(200).json({
       success: true,
-      orderId,
+      orderId: tempOrder.orderId,
       createdAt: tempOrder.createdAt,
     });
-
-    setTimeout(async () => {
-      const storedOrderData = await TemporaryOrder.findOne({ orderId });
-
-      if (storedOrderData) {
-        const newOrder = await Order.create({
-          customerId: storedOrderData.customerId,
-
-          deliveryMode: storedOrderData.deliveryMode,
-          deliveryOption: storedOrderData.deliveryOption,
-
-          pickups: storedOrderData.pickups,
-          drops: storedOrderData.drops,
-
-          billDetail: storedOrderData.billDetail,
-          distance: storedOrderData.distance,
-
-          deliveryTime: storedOrderData.deliveryTime,
-          startDate: storedOrderData.startDate,
-          endDate: storedOrderData.endDate,
-          time: storedOrderData.time,
-          numOfDays: storedOrderData.numOfDays,
-
-          // totalAmount: storedData.totalAmount,
-          paymentMode: storedOrderData.paymentMode,
-          paymentStatus: storedOrderData.paymentStatus,
-          paymentId: storedOrderData.paymentId,
-          orderDetailStepper: {
-            created: {
-              by: "Customer",
-              userId: req.userAuth,
-              date: new Date(),
-              location: storedOrderData?.drops[0]?.deliveryLocation || [],
-            },
-          },
-        });
-
-        if (!newOrder) {
-          return next(appError("Error in creating order"));
-        }
-
-        // Remove the temporary order data from the database
-        await Promise.all([
-          TemporaryOrder.deleteOne({ orderId }),
-          ActivityLog.create({
-            userId: req.userAuth,
-            userType: req.userRole,
-            description: `Pick & Drop Order (#${newOrder._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-              } )`,
-          }),
-        ]);
-
-        const eventName = "newOrderCreated";
-
-        // Fetch notification settings to determine roles
-        const { rolesToNotify, data } = await findRolesToNotify(eventName);
-
-        const notificationData = {
-          fcm: {
-            orderId: newOrder._id,
-            customerId: newOrder.customerId,
-          },
-        };
-
-        const socketData = {
-          ...data,
-
-          orderId: newOrder._id,
-          billDetail: newOrder.billDetail,
-
-          //? Data for displaying detail in all orders table
-          _id: newOrder._id,
-          orderStatus: newOrder.status,
-          merchantName:
-            newOrder?.merchantId?.merchantDetail?.merchantName || "-",
-          customerName:
-            newOrder?.drops[0]?.address?.fullName ||
-            newOrder?.customerId?.fullName ||
-            "-",
-          deliveryMode: newOrder?.deliveryMode,
-          orderDate: formatDate(newOrder.createdAt),
-          orderTime: formatTime(newOrder.createdAt),
-          deliveryDate: newOrder?.deliveryTime
-            ? formatDate(newOrder.deliveryTime)
-            : "-",
-          deliveryTime: newOrder?.deliveryTime
-            ? formatTime(newOrder.deliveryTime)
-            : "-",
-          paymentMethod: newOrder.paymentMode,
-          deliveryOption: newOrder.deliveryOption,
-          amount: newOrder.billDetail.grandTotal,
-        };
-
-        console.log("Merchant", socketData);
-
-        const userIds = {
-          admin: process.env.ADMIN_ID,
-          merchant: newOrder?.merchantId?._id,
-          agent: newOrder?.agentId,
-          customer: newOrder?.customerId,
-        };
-
-        console.log(userIds);
-
-        await sendSocketDataAndNotification({
-          rolesToNotify,
-          userIds,
-          eventName,
-          notificationData,
-          socketData,
-        });
-      }
-    }, 60000);
   } catch (err) {
     next(appError(err.message));
   }
@@ -2285,7 +2034,11 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
 
-    const orderFound = await TemporaryOrder.findOne({ orderId });
+    // Atomically grab the order only if the cron hasn't picked it up yet
+    const orderFound = await TemporaryOrder.findOne({
+      orderId,
+      processingStatus: "PENDING",
+    });
 
     if (!orderFound) {
       res.status(200).json({
@@ -2312,7 +2065,7 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
     if (orderFound.paymentMode === "Famto-cash") {
       const orderAmount = orderFound.billDetail.grandTotal;
 
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
         updatedTransactionDetail.transactionAmount = orderAmount;
       }
@@ -2341,12 +2094,12 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
 
       let refundAmount;
 
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         refundAmount = orderFound.billDetail.grandTotal;
         updatedTransactionDetail.transactionAmount = refundAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         refundAmount =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         updatedTransactionDetail.transactionAmount = refundAmount;
       }
 
@@ -2360,10 +2113,6 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
         TemporaryOrder.deleteOne({ orderId }),
         customerFound.save(),
         CustomerTransaction.create(updatedTransactionDetail),
-        PromoCode.findOneAndUpdate(
-          { promoCode: orderFound.billDetail.promoCodeUsed },
-          { $inc: { noOfUserUsed: -1 } }
-        ),
       ]);
 
       res.status(200).json({

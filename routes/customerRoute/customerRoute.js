@@ -122,6 +122,7 @@ const isLooselyAuthenticated = require("../../middlewares/isLooselyAuthenticated
 const {
   globalSearchController,
 } = require("../../controllers/customer/globalSearchController");
+const { redeemLoyaltyPointController } = require("../../controllers/admin/loyaltyPoint/loyaltyPointController");
 
 const customerRoute = express.Router();
 
@@ -432,6 +433,12 @@ customerRoute.get(
   "/get-wallet-and-loyalty",
   isAuthenticated,
   getWalletAndLoyaltyController
+);
+
+customerRoute.post(
+  "/redeem-loyalty-points",
+  isAuthenticated,
+  redeemLoyaltyPointController
 );
 
 customerRoute.get("/get-cart", isAuthenticated, getCustomerCartController);

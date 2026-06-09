@@ -787,7 +787,12 @@ const toggleOnlineController = async (req, res, next) => {
         return;
       }
 
-      currentAgent.status = "Free";
+      const activeTasks = await Task.countDocuments({
+        taskStatus: "Assigned",
+        agentId: currentAgent._id,
+      });
+
+      currentAgent.status = activeTasks > 0 ? "Busy" : "Free";
 
       const data = {
         status: "Online",
@@ -929,8 +934,22 @@ const getCurrentDayAppDetailController = async (req, res, next) => {
       agentFound.workStructure.salaryStructureId
     );
 
-    const pricePerOrder = agentPricing.baseFare / agentPricing.minOrderNumber;
-    const incentives = (agentFound?.appDetail?.orders || 0) * pricePerOrder;
+    const orders = agentFound?.appDetail?.orders || 0;
+    let incentives = 0;
+
+    if (agentPricing.splitIncentive !== false) {
+      // Split mode: proportional per order, capped at baseFare
+      const pricePerOrder = agentPricing.baseFare / agentPricing.minOrderNumber;
+      incentives = Math.min(orders * pricePerOrder, agentPricing.baseFare);
+    } else {
+      // Non-split mode: full baseFare only when both criteria met
+      const loginDuration = agentFound?.appDetail?.loginDuration || 0;
+      const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
+
+      if (orders >= agentPricing.minOrderNumber && loginDuration >= minLoginMillis) {
+        incentives = agentPricing.baseFare;
+      }
+    }
 
     const formattedResponse = {
       totalEarning: agentFound?.appDetail?.totalEarning || 0,
@@ -2049,10 +2068,10 @@ const completeOrderController = async (req, res, next) => {
       batchOrderId,
     });
 
-    const [agentFound, orderFound] = await Promise.all([
+    const [agentFound, orderFound, taskFound] = await Promise.all([
       Agent.findById(agentId),
       Order.findById(orderId),
-      // BatchOrder.findById(batchOrderId),
+      Task.findOne({ orderId }),
     ]);
 
     let batchOrderFound = null;
@@ -2069,6 +2088,27 @@ const completeOrderController = async (req, res, next) => {
 
     if (!agentFound) return next(appError("Agent not found", 404));
     if (!orderFound) return next(appError("Order not found", 404));
+
+    // Mark task completed so remaining-task queries exclude it
+    if (taskFound && taskFound.taskStatus !== "Completed") {
+      taskFound.taskStatus = "Completed";
+      taskFound.pickupDropDetails?.forEach((detail) => {
+        detail.pickups?.forEach((p) => {
+          if (p.status !== "Completed") {
+            p.status = "Completed";
+            p.completedTime = p.completedTime || new Date();
+          }
+        });
+        detail.drops?.forEach((d) => {
+          if (d.status !== "Completed") {
+            d.status = "Completed";
+            d.completedTime = d.completedTime || new Date();
+          }
+        });
+      });
+      taskFound.markModified("pickupDropDetails");
+      await taskFound.save();
+    }
 
     if (orderFound.status === "Completed")
       return next(appError("Order already completed", 400));
