@@ -738,6 +738,7 @@ const completeReferralDetail = async (newCustomer, code) => {
       const referrerFound = await ReferralCode.findOne({ referralCode: code });
 
       if (referrerFound) {
+        newCustomer.customerDetails.referralCode = code;
         newCustomer.referralDetail = {
           referrerUserId: referrerFound.customerId,
           referralType: referralType,
