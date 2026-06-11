@@ -949,7 +949,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
         },
       },
 
-      // STEP 5: Priority merchant boost
+      // STEP 5: Priority merchant boost + sponsored boost
       {
         $addFields: {
           priorityMerchant: {
@@ -959,13 +959,39 @@ const filterAndSearchMerchantController = async (req, res, next) => {
               0,
             ],
           },
+          isSponsored: {
+            $cond: [
+              {
+                $gt: [
+                  {
+                    $size: {
+                      $filter: {
+                        input: { $ifNull: ["$sponsorshipDetail", []] },
+                        as: "s",
+                        cond: {
+                          $and: [
+                            { $eq: ["$$s.sponsorshipStatus", true] },
+                            { $gte: ["$$s.endDate", new Date()] },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+              1,
+              0,
+            ],
+          },
         },
       },
 
-      // STEP 6: Sort — priority first, then open, then nearest
+      // STEP 6: Sort — priority first, then sponsored, then open, then nearest
       {
         $sort: {
           priorityMerchant: -1,
+          isSponsored: -1,
           status: -1,
           distance: 1,
         },
@@ -989,6 +1015,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
           displayAddress: "$merchantDetail.displayAddress",
           preOrderStatus: "$merchantDetail.preOrderStatus",
           availability: "$merchantDetail.availability",
+          isSponsored: 1,
         },
       },
     ];
@@ -1018,6 +1045,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       preOrderStatus: m.preOrderStatus,
       distance: m.distance,
       availability: m.availability,
+      isSponsored: m.isSponsored === 1,
     }));
 
     res.status(200).json(response);
