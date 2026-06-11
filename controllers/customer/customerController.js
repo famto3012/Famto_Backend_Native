@@ -52,7 +52,6 @@ const { sendNotification, sendSocketData } = require("../../socket/socket");
 const Task = require("../../models/Task");
 const { sendWelcomeMessage } = require("../../utils/interaktHelper");
 
-
 //For OTP Services -- SMS Provider 2factor.in
 
 const sendOtp = async (req, res) => {
@@ -60,20 +59,18 @@ const sendOtp = async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/${phoneNumber}/AUTOGEN`
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/${phoneNumber}/AUTOGEN`,
     );
 
     res.json({
       success: true,
       sessionId: response.data.Details, // IMPORTANT
-      message: "OTP sent successfully"
+      message: "OTP sent successfully",
     });
   } catch (error) {
-
-    
     res.status(500).json({
       success: false,
-      message: "Failed to send OTP"
+      message: "Failed to send OTP",
     });
   }
 };
@@ -83,7 +80,7 @@ const verifyOtp = async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/VERIFY3/${phoneNumber}/${otp}`
+      `https://2factor.in/API/V1/1bf242fc-fb8b-11f0-a6b2-0200cd936042/SMS/VERIFY3/${phoneNumber}/${otp}`,
     );
 
     console.log(response.data.Details);
@@ -94,7 +91,9 @@ const verifyOtp = async (req, res) => {
 
     res.status(500).json({ success: false, message: "Invalid OTP" });
   } catch (error) {
-    res.status(500).json({ success: false, message: "OTP verification failed" });
+    res
+      .status(500)
+      .json({ success: false, message: "OTP verification failed" });
   }
 };
 
@@ -117,6 +116,15 @@ const registerAndLoginController = async (req, res, next) => {
 
     // Check if customer exists; if not, create a new one
     let customer = await Customer.findOne({ phoneNumber });
+
+    // Existing customer trying to use referral code
+    if (customer && referralCode) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You are already a registered customer",
+      });
+    }
 
     const isNewCustomer = !customer;
     if (!customer) {
@@ -157,37 +165,33 @@ const registerAndLoginController = async (req, res, next) => {
           process.env.ADMIN_ID,
           "newCustomer",
           eventData,
-          "Customer"
+          "Customer",
         );
         sendSocketData(process.env.ADMIN_ID, "newCustomer", eventData);
       }
 
       // Send welcome WhatsApp message via Interakt (non-blocking)
-      sendWelcomeMessage(
-        phoneNumber,
-        customer?.fullName || ""
-      ).catch((err) =>
-        console.error("[Interakt] Welcome message error:", err.message
-      ))
+      sendWelcomeMessage(phoneNumber, customer?.fullName || "").catch((err) =>
+        console.error("[Interakt] Welcome message error:", err.message),
+      );
     }
 
     const refreshToken = generateToken(
       customer?._id,
       customer?.role,
       customer?.fullName ? customer?.fullName : "",
-      "30d"
+      "30d",
     );
     const token = generateToken(
       customer?.id,
       customer?.role,
       customer?.fullName ? customer?.fullName : "",
-      "2hr"
+      "2hr",
     );
 
     customer.refreshToken = refreshToken;
 
     await customer.save();
-
 
     console.log("Authenticated");
     res.status(200).json({
@@ -248,7 +252,7 @@ const verifyCustomerAddressLocation = async (req, res, next) => {
 const getCustomerProfileController = async (req, res, next) => {
   try {
     const currentCustomer = await Customer.findById(req.userAuth).select(
-      "fullName phoneNumber email customerDetails.customerImageURL"
+      "fullName phoneNumber email customerDetails.customerImageURL",
     );
 
     if (!currentCustomer) return next(appError("Customer not found", 404));
@@ -327,7 +331,7 @@ const updateCustomerProfileController = async (req, res, next) => {
           ...(fullName && { name: fullName }),
           ...(normalizedEmail && { email: normalizedEmail }),
         },
-        { new: true }
+        { new: true },
       );
     }
 
@@ -376,7 +380,7 @@ const updateCustomerAddressController = async (req, res, next) => {
           break;
         case "other":
           customerDetails.otherAddress = customerDetails.otherAddress.filter(
-            (addr) => addr.id.toString() !== id?.toString()
+            (addr) => addr.id.toString() !== id?.toString(),
           );
           break;
       }
@@ -411,7 +415,7 @@ const updateCustomerAddressController = async (req, res, next) => {
       case "other":
         if (id) {
           const index = customerDetails.otherAddress.findIndex(
-            (addr) => addr.id.toString() === id.toString()
+            (addr) => addr.id.toString() === id.toString(),
           );
           if (index !== -1) {
             customerDetails.otherAddress[index] = address;
@@ -673,7 +677,7 @@ const getFavoriteMerchantsController = async (req, res, next) => {
           businessCategoryName: merchant?.businessCategoryId?.title,
           redirectable: redirectable, // Add redirectable field based on conditions
         };
-      }
+      },
     );
 
     res.status(200).json({
@@ -775,7 +779,7 @@ const getFavoriteProductsController = async (req, res, next) => {
           isFavorite: true,
           redirectable: redirectable, // Add redirectable field based on conditions
         };
-      }
+      },
     );
 
     res.status(200).json(formattedResponse);
@@ -834,7 +838,7 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
     const [universalOrders, pickAndCustomOrders] = await Promise.all([
       ScheduledOrder.find({ customerId }).populate(
         "merchantId",
-        "merchantDetail.merchantName merchantDetail.displayAddress cartDetail"
+        "merchantDetail.merchantName merchantDetail.displayAddress cartDetail",
       ),
       scheduledPickAndCustom.find({ customerId }),
     ]);
@@ -842,10 +846,10 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
     console.log("Initalizing all orders");
 
     const allOrders = [...universalOrders, ...pickAndCustomOrders].sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
-    console.log("All Orders",allOrders);
+    console.log("All Orders", allOrders);
 
     const formattedResponse = allOrders?.map((order) => ({
       orderId: order._id,
@@ -860,7 +864,7 @@ const getAllScheduledOrdersOfCustomer = async (req, res, next) => {
       orderStatus: order?.status,
     }));
 
-    console.log("Formatted Response",formattedResponse);
+    console.log("Formatted Response", formattedResponse);
 
     res.status(200).json({ data: formattedResponse });
   } catch (err) {
@@ -881,7 +885,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status deliveryMode pickups drops purchasedItems"
+        "agentId merchantId orderDetail billDetail orderDetailStepper detailAddedByAgent paymentStatus createdAt items paymentMode status deliveryMode pickups drops purchasedItems",
       );
 
     if (!orderFound) return next(appError("Order not found", 404));
@@ -895,14 +899,14 @@ const getSingleOrderDetailController = async (req, res, next) => {
       if (
         task &&
         !["Started", "Completed", "Cancelled"].includes(
-          task?.deliveryDetail?.deliveryStatus
+          task?.deliveryDetail?.deliveryStatus,
         )
       ) {
         showBill = true;
       }
     }
 
-    console.log("Order Response",orderFound);
+    console.log("Order Response", orderFound);
 
     // Construct the response object
     const formattedResponse = {
@@ -921,10 +925,10 @@ const getSingleOrderDetailController = async (req, res, next) => {
       // pickUpAddress:
       //   orderFound?.pickups?.[0]?.address?.flat ||
       //   orderFound?.orderDetail?.area ||
-      //   null,  
-    pickUpAddress: orderFound?.pickups?.[0]?.address || null,
-    deliveryAddress: orderFound?.drops?.[0]?.address || null,
-    // deliveryAddress:
+      //   null,
+      pickUpAddress: orderFound?.pickups?.[0]?.address || null,
+      deliveryAddress: orderFound?.drops?.[0]?.address || null,
+      // deliveryAddress:
       //   orderFound?.drops?.[0]?.address?.flat ||
       //   orderFound?.drops?.[0]?.address?.area ||
       //   null,
@@ -1110,7 +1114,7 @@ const getCustomerSubscriptionDetailController = async (req, res, next) => {
     // Fetch both all subscription plans and the current customer subscription in one step
     const [allSubscriptionPlans, customer] = await Promise.all([
       CustomerSubscription.find().select(
-        "title name amount duration taxId renewalReminder noOfOrder description"
+        "title name amount duration taxId renewalReminder noOfOrder description",
       ),
       Customer.findById(currentCustomer)
         .select("customerDetails.pricing")
@@ -1143,7 +1147,7 @@ const getCustomerSubscriptionDetailController = async (req, res, next) => {
     if (currentSubscription) {
       const { planId, endDate } = currentSubscription;
       const daysLeft = Math.ceil(
-        (new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24)
+        (new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24),
       );
 
       formattedCurrentSubscriptionPlan = {
@@ -1226,7 +1230,7 @@ const getWalletAndLoyaltyController = async (req, res, next) => {
     const currentCustomer = req.userAuth;
 
     const customerFound = await Customer.findById(currentCustomer).select(
-      "customerDetails.walletBalance customerDetails.loyaltyPointLeftForRedemption"
+      "customerDetails.walletBalance customerDetails.loyaltyPointLeftForRedemption",
     );
 
     const customerData = {
@@ -1252,7 +1256,8 @@ const getCustomerCartController = async (req, res, next) => {
     })
       .populate({
         path: "items.productId",
-        select: "productName productImageURL description variants businessCategoryId",
+        select:
+          "productName productImageURL description variants businessCategoryId",
       })
       .exec();
 
@@ -1297,7 +1302,8 @@ const getCustomerCartController = async (req, res, next) => {
         cartId: populatedCartWithVariantNames?._id || null,
         customerId: populatedCartWithVariantNames?.customerId || null,
         merchantId: populatedCartWithVariantNames?.merchantId || null,
-        businessCategoryId: populatedCartWithVariantNames?.businessCategoryId || null,
+        businessCategoryId:
+          populatedCartWithVariantNames?.businessCategoryId || null,
         items: populatedCartWithVariantNames?.items || [],
         deliveryOption:
           populatedCartWithVariantNames?.cartDetail?.deliveryOption || null,
@@ -1313,7 +1319,7 @@ const getCustomerCartController = async (req, res, next) => {
 const getSplashScreenImageController = async (req, res, next) => {
   try {
     const splashScreenImage = await CustomerAppCustomization.findOne({}).select(
-      "splashScreenUrl"
+      "splashScreenUrl",
     );
 
     res.status(200).json({
@@ -1334,20 +1340,20 @@ const getCustomerAppBannerController = async (req, res, next) => {
 
     if (customerId) {
       const customer = await Customer.findById(customerId).select(
-        "customerDetails.geofenceId"
+        "customerDetails.geofenceId",
       );
 
       matchCriteria.geofenceId = customer?.customerDetails?.geofenceId;
     }
 
     const allBanners = await AppBanner.find(matchCriteria).select(
-      "name imageUrl businessCategoryId merchantId"
+      "name imageUrl businessCategoryId merchantId",
     );
 
     const formattedResponse = await Promise.all(
       allBanners.map(async (banner) => {
         const merchant = await Merchant.findById(banner.merchantId).select(
-          "merchantDetail.merchantName"
+          "merchantDetail.merchantName",
         );
 
         return {
@@ -1357,7 +1363,7 @@ const getCustomerAppBannerController = async (req, res, next) => {
           merchantId: banner.merchantId,
           merchantName: merchant?.merchantDetail?.merchantName || "",
         };
-      })
+      }),
     );
 
     res.status(200).json({ message: "Banner", data: formattedResponse });
@@ -1370,7 +1376,7 @@ const getCustomerAppBannerController = async (req, res, next) => {
 const getPickAndDropBannersController = async (req, res, next) => {
   try {
     const allBanners = await PickAndDropBanner.find({ status: true }).select(
-      "title description imageUrl"
+      "title description imageUrl",
     );
 
     const formattedResponse = allBanners.map((banner) => {
@@ -1391,7 +1397,7 @@ const getPickAndDropBannersController = async (req, res, next) => {
 const getCustomOrderBannersController = async (req, res, next) => {
   try {
     const allBanners = await CustomOrderBanner.find({ status: true }).select(
-      "title description imageUrl"
+      "title description imageUrl",
     );
 
     const formattedResponse = allBanners?.map((banner) => {
@@ -1511,7 +1517,7 @@ const getSelectedOngoingOrderDetailController = async (req, res, next) => {
       .populate("agentId")
       .populate("merchantId")
       .select(
-        "agentId merchantId deliveryTime pickups drops billDetail orderDetailStepper detailAddedByAgent paymentStatus"
+        "agentId merchantId deliveryTime pickups drops billDetail orderDetailStepper detailAddedByAgent paymentStatus",
       );
 
     const formattedResponse = {
@@ -1672,17 +1678,17 @@ const removeAppliedPromoCode = async (req, res, next) => {
       cart.cartDetail.deliveryOption === "Scheduled"
         ? calculateScheduledCartValue(cart, promoCodeFound)
         : deliveryMode === "Take Away" || deliveryMode === "Home Delivery"
-        ? itemTotal
-        : originalDeliveryCharge;
+          ? itemTotal
+          : originalDeliveryCharge;
 
     const promoCodeDiscount = calculatePromoCodeDiscount(
       promoCodeFound,
-      totalCartPrice
+      totalCartPrice,
     );
 
     const updatedCart = deductPromoCodeDiscount(
       cart,
-      Number(promoCodeDiscount.toFixed(2))
+      Number(promoCodeDiscount.toFixed(2)),
     );
 
     await cart.save();
@@ -1746,7 +1752,7 @@ const applyPromoCode = async (req, res, next) => {
       ["Take Away", "Home Delivery"].includes(deliveryMode)
     ) {
       return next(
-        appError("Promo code is not applicable for this merchant", 400)
+        appError("Promo code is not applicable for this merchant", 400),
       );
     }
 
@@ -1765,7 +1771,7 @@ const applyPromoCode = async (req, res, next) => {
 
     if (totalCartPrice < minOrderAmount) {
       return next(
-        appError(`Minimum order amount should be ${minOrderAmount}`, 400)
+        appError(`Minimum order amount should be ${minOrderAmount}`, 400),
       );
     }
 
@@ -1780,18 +1786,18 @@ const applyPromoCode = async (req, res, next) => {
 
     const promoDiscount = calculatePromoCodeDiscount(
       promoCodeFound,
-      totalCartPrice
+      totalCartPrice,
     );
 
     const totalDiscount = Number(
-      (promoDiscount + discountedAmount - promoCodeDiscount).toFixed(2)
+      (promoDiscount + discountedAmount - promoCodeDiscount).toFixed(2),
     );
 
     // Apply discount
     const updatedCart = applyPromoCodeDiscount(
       cart,
       promoCodeFound,
-      totalDiscount
+      totalDiscount,
     );
 
     await updatedCart.save();
@@ -1923,7 +1929,7 @@ const searchProductAndMerchantController = async (req, res) => {
       .lean();
 
     const availableMerchantIds = availableMerchants.map(
-      (merchant) => merchant._id
+      (merchant) => merchant._id,
     );
 
     const productFilter = {
@@ -1938,7 +1944,7 @@ const searchProductAndMerchantController = async (req, res) => {
     // Fetch merchants and populate business categories
     const merchants = await Merchant.find(merchantFilter)
       .select(
-        "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers merchantDetail.businessCategoryId"
+        "_id merchantDetail.merchantName merchantDetail.displayAddress merchantDetail.merchantImageURL merchantDetail.ratingByCustomers merchantDetail.businessCategoryId",
       )
       .populate({ path: "merchantDetail.businessCategoryId", select: "title" }) // Fetch category name
       .lean();
@@ -1952,7 +1958,7 @@ const searchProductAndMerchantController = async (req, res) => {
         ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : 0;
 
       const businessCategories = Array.isArray(
-        merchant.merchantDetail.businessCategoryId
+        merchant.merchantDetail.businessCategoryId,
       )
         ? merchant.merchantDetail.businessCategoryId
         : [merchant.merchantDetail.businessCategoryId];
@@ -2052,7 +2058,7 @@ const searchProductAndMerchantController = async (req, res) => {
     const startIndex = (pageNumber - 1) * pageSize;
     const paginatedResults = combinedResults.slice(
       startIndex,
-      startIndex + pageSize
+      startIndex + pageSize,
     );
     const hasNextPage = startIndex + pageSize < combinedResults?.length;
 
@@ -2082,7 +2088,7 @@ const deleteCustomerAccount = async (req, res, next) => {
           fullName: null,
           email: null,
         },
-      }
+      },
     );
 
     if (result.modifiedCount === 0)
@@ -2112,7 +2118,9 @@ const reOrderController = async (req, res, next) => {
       .lean();
 
     if (!originalOrder) {
-      return next(appError("Order not found or not eligible for re-order", 404));
+      return next(
+        appError("Order not found or not eligible for re-order", 404),
+      );
     }
 
     // Re-order only supports Home Delivery and Take Away
@@ -2120,8 +2128,8 @@ const reOrderController = async (req, res, next) => {
       return next(
         appError(
           "Re-order is only available for Home Delivery and Take Away orders",
-          400
-        )
+          400,
+        ),
       );
     }
 
@@ -2197,7 +2205,10 @@ const reOrderController = async (req, res, next) => {
 
     if (!cartItems.length) {
       return next(
-        appError("None of the items from the original order are available", 400)
+        appError(
+          "None of the items from the original order are available",
+          400,
+        ),
       );
     }
 
@@ -2216,14 +2227,13 @@ const reOrderController = async (req, res, next) => {
           billDetail: null,
         },
       },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
 
     res.status(200).json({
-      message:
-        unavailableItems.length
-          ? `${cartItems.length} item(s) added to cart. ${unavailableItems.length} item(s) unavailable.`
-          : "All items added to cart successfully",
+      message: unavailableItems.length
+        ? `${cartItems.length} item(s) added to cart. ${unavailableItems.length} item(s) unavailable.`
+        : "All items added to cart successfully",
       cartId: cart._id,
       merchantId: originalOrder.merchantId,
       deliveryMode: originalOrder.deliveryMode,
