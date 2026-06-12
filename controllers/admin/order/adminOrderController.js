@@ -63,6 +63,9 @@ const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
+const {
+  sendOrderTrackingMessage,
+} = require("../../../utils/whatsappApi");
 
 const {
   sendNotification,
@@ -478,6 +481,29 @@ const confirmOrderByAdminController = async (req, res, next) => {
       notificationData,
       socketData,
     });
+
+    // Send order tracking WhatsApp message (non-blocking)
+    const customer = await Customer.findById(orderFound.customerId)
+      .select("phoneNumber fullName")
+      .lean();
+
+    if (customer?.phoneNumber) {
+      const customerName =
+        orderFound.drops?.[0]?.address?.fullName ||
+        customer.fullName ||
+        "Customer";
+      const merchantName =
+        orderFound.merchantId?.merchantDetail?.merchantName ||
+        "your store";
+
+      sendOrderTrackingMessage(
+        customer.phoneNumber,
+        customerName,
+        merchantName
+      ).catch((err) =>
+        console.error("[WhatsApp] Order tracking message error:", err.message)
+      );
+    }
   } catch (err) {
     next(appError(err.message));
   }

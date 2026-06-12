@@ -50,7 +50,8 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 
 const { sendNotification, sendSocketData } = require("../../socket/socket");
 const Task = require("../../models/Task");
-const { sendWelcomeMessage } = require("../../utils/interaktHelper");
+const { sendWelcomeMessage } = require("../../utils/whatsappApi");
+
 
 //For OTP Services -- SMS Provider 2factor.in
 
@@ -170,9 +171,12 @@ const registerAndLoginController = async (req, res, next) => {
         sendSocketData(process.env.ADMIN_ID, "newCustomer", eventData);
       }
 
-      // Send welcome WhatsApp message via Interakt (non-blocking)
-      sendWelcomeMessage(phoneNumber, customer?.fullName || "").catch((err) =>
-        console.error("[Interakt] Welcome message error:", err.message),
+      // Send welcome WhatsApp message (non-blocking)
+      sendWelcomeMessage(
+        phoneNumber,
+        customer?.fullName || ""
+      ).catch((err) =>
+        console.error("[WhatsApp] Welcome message error:", err.message)
       );
     }
 

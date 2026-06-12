@@ -229,6 +229,10 @@ const purchasedItemsSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    variantTypeName: {
+      type: String,
+      default: null,
+    },
     quantity: {
       type: Number,
       required: true,

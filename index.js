@@ -9,7 +9,7 @@ const CustomerCart = require("./models/CustomerCart");
 const Customer = require("./models/Customer");
 const Merchant = require("./models/Merchant");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
-const { sendCartReminderMessage } = require("./utils/interaktHelper");
+const { sendCartReminderMessage } = require("./utils/whatsappApi");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
 const authRoute = require("./routes/adminRoute/authRoute");
@@ -573,25 +573,34 @@ cron.schedule(
 
           if (!customer?.phoneNumber) continue;
 
+          const customerName =
+            cart.cartDetail?.deliveryAddress?.fullName ||
+            customer?.fullName ||
+            "Customer";
+
           const merchantName =
             cart.merchantId?.merchantName || "your favourite store";
 
-          const productNames = (cart.items || [])
+          const productItems = (cart.items || [])
             .map(
               (item) =>
                 item.productId?.productName ||
                 item.itemName ||
-                "item"
+                null
             )
-            .filter(Boolean)
-            .join(", ");
+            .filter(Boolean);
 
-          if (!productNames) continue;
+          if (productItems.length === 0) continue;
+
+          const productList = productItems
+            .map((name, i) => `${i + 1}. ${name}`)
+            .join("\n");
 
           await sendCartReminderMessage(
             customer.phoneNumber,
+            customerName,
             merchantName,
-            productNames
+            productList
           );
         } catch (innerErr) {
           console.error(

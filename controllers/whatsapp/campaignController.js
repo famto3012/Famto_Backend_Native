@@ -3,8 +3,16 @@ const WhatsappTemplate = require("../../models/WhatsappTemplate");
 const WhatsappContact = require("../../models/WhatsappContact");
 const appError = require("../../utils/appError");
 
+const BUILTIN_AUDIENCES = [
+  "All opted-in customers",
+  "VIP customers",
+  "Inactive customers",
+  "Delayed orders",
+  "CSV import segment",
+];
+
 // Resolve an audience string to an array of waIds from the contacts collection
-const resolveAudience = async (audience) => {
+const resolveAudience = async (audience, maxRecipients) => {
   let filter = {};
 
   switch (audience) {
@@ -15,7 +23,6 @@ const resolveAudience = async (audience) => {
       filter = { tags: { $in: ["vip", "VIP"] } };
       break;
     case "Inactive customers":
-      // contacted more than 30 days ago or never
       filter = {
         $or: [
           { lastContactedAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
@@ -30,11 +37,15 @@ const resolveAudience = async (audience) => {
       filter = { tags: { $in: ["csv-import", "imported"] } };
       break;
     default:
-      // treat as a tag name if nothing matched
       filter = { tags: { $in: [audience] } };
   }
 
-  const contacts = await WhatsappContact.find(filter).select("waId").lean();
+  let query = WhatsappContact.find(filter).select("waId").lean();
+  if (maxRecipients && maxRecipients > 0) {
+    query = query.limit(parseInt(maxRecipients));
+  }
+
+  const contacts = await query;
   return contacts.map((c) => c.waId).filter(Boolean);
 };
 const { sendMetaMessage } = require("../../utils/whatsappApi");
@@ -78,7 +89,7 @@ const getCampaigns = async (req, res, next) => {
 
 const createCampaign = async (req, res, next) => {
   try {
-    const { name, templateId, audience, recipients, templateParams, scheduledAt, sendNow } = req.body;
+    const { name, templateId, audience, recipients, templateParams, scheduledAt, sendNow, maxRecipients } = req.body;
 
     if (!name || !templateId) {
       return next(appError("Campaign name and template are required", 400));
@@ -93,7 +104,10 @@ const createCampaign = async (req, res, next) => {
     // Resolve recipients
     let resolvedRecipients = recipients;
     if (!resolvedRecipients?.length && audience) {
-      resolvedRecipients = await resolveAudience(audience);
+      resolvedRecipients = await resolveAudience(audience, maxRecipients);
+    }
+    if (resolvedRecipients?.length && maxRecipients > 0) {
+      resolvedRecipients = resolvedRecipients.slice(0, parseInt(maxRecipients));
     }
     if (!resolvedRecipients?.length) {
       return next(appError(`No contacts found for audience "${audience || "unknown"}". Add contacts first.`, 400));
@@ -253,14 +267,47 @@ const getCampaignEvents = async (req, res, next) => {
   }
 };
 
-// GET /campaigns/audience-preview?audience=VIP+customers
+// GET /campaigns/audience-preview?audience=VIP+customers&maxRecipients=100
 const getAudiencePreview = async (req, res, next) => {
   try {
-    const { audience = "All opted-in customers" } = req.query;
-    const waIds = await resolveAudience(audience);
+    const { audience = "All opted-in customers", maxRecipients } = req.query;
+    const waIds = await resolveAudience(audience, maxRecipients);
     res.status(200).json({
       success: true,
-      data: { audience, count: waIds.length },
+      data: { audience, count: waIds.length, limited: !!maxRecipients },
+    });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
+// GET /campaigns/audience-options — returns built-in segments + all custom tags
+const getAudienceOptions = async (req, res, next) => {
+  try {
+    const builtIn = [];
+    for (const label of BUILTIN_AUDIENCES) {
+      const count = (await resolveAudience(label)).length;
+      builtIn.push({ label, type: "built-in", count });
+    }
+
+    const tagAgg = await WhatsappContact.aggregate([
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    const builtInTags = new Set([
+      "vip", "VIP", "delayed", "Delayed", "order-issue", "Order Issue",
+      "csv-import", "imported", "famto-customer",
+    ]);
+
+    const customTags = tagAgg
+      .filter((t) => !builtInTags.has(t._id))
+      .map((t) => ({ label: t._id, type: "tag", count: t.count }));
+
+    res.status(200).json({
+      success: true,
+      data: [...builtIn, ...customTags],
     });
   } catch (err) {
     next(appError(err.message, 500));
@@ -273,5 +320,6 @@ module.exports = {
   sendCampaign,
   getCampaignEvents,
   getAudiencePreview,
-  processCampaignSend,   // exported for cron use
+  getAudienceOptions,
+  processCampaignSend,
 };

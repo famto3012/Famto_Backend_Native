@@ -336,12 +336,23 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       scheduledOrder.purchasedItems
     );
 
+    const mappedDrops = (scheduledOrder.drops || []).map((d) => {
+      const dropObj = d.toObject ? d.toObject() : { ...d };
+      return {
+        location: dropObj.location,
+        address: dropObj.address,
+        instructionInDrop: dropObj.instructionInPickup || null,
+        voiceInstructionInDrop: dropObj.voiceInstructionInPickup || null,
+        items: dropObj.items,
+      };
+    });
+
     let options = {
       customerId: scheduledOrder.customerId,
       merchantId: scheduledOrder.merchantId,
       scheduledOrderId: scheduledOrder._id,
       pickups: scheduledOrder.pickups,
-      drops: scheduledOrder.drops,
+      drops: mappedDrops,
       billDetail: {
         ...scheduledOrder.billDetail.toObject?.() ?? scheduledOrder.billDetail,
         addedTip: calculatedTip,
@@ -400,26 +411,24 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
       ...data,
 
       orderId: newOrder._id,
-      orderDetail: newOrder.orderDetail,
       billDetail: newOrder.billDetail,
       orderDetailStepper: stepperData,
 
       //? Data for displaying detail in all orders table
       _id: newOrder._id,
       orderStatus: newOrder.status,
-      merchantName: newOrder.merchantId.merchantDetail.merchantName || "-",
+      merchantName: newOrder.merchantId?.merchantDetail?.merchantName || "-",
       customerName:
-        newOrder?.orderDetail?.deliveryAddress?.fullName ||
-        newOrder?.customerId?.fullName ||
+        newOrder?.drops?.[0]?.address?.fullName ||
         "-",
-      deliveryMode: newOrder?.orderDetail?.deliveryMode,
+      deliveryMode: newOrder?.deliveryMode,
       orderDate: formatDate(newOrder.createdAt),
       orderTime: formatTime(newOrder.createdAt),
       deliveryDate: newOrder?.deliveryTime
-        ? formatDate(newOrder.orderDetail.deliveryTime)
+        ? formatDate(newOrder.deliveryTime)
         : "-",
       deliveryTime: newOrder?.deliveryTime
-        ? formatTime(newOrder.orderDetail.deliveryTime)
+        ? formatTime(newOrder.deliveryTime)
         : "-",
       paymentMethod: newOrder.paymentMode,
       deliveryOption: newOrder.deliveryOption,
@@ -451,14 +460,20 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
     const customer = await Customer.findById(scheduledOrder.customerId);
 
     if (!customer) {
-      throw new Error("Customer not found", 404);
+      throw new Error("Customer not found");
     }
+
+    const numOfDays = Math.max(
+      1,
+      Math.ceil(
+        (new Date(scheduledOrder.endDate) - new Date(scheduledOrder.startDate)) /
+          (1000 * 60 * 60 * 24)
+      )
+    );
 
     let calculatedTip = 0;
     if (scheduledOrder?.billDetail?.addedTip > 0) {
-      calculatedTip =
-        scheduledOrder.billDetail.addedTip /
-        scheduledOrder.orderDetail.numOfDays;
+      calculatedTip = scheduledOrder.billDetail.addedTip / numOfDays;
     }
 
     const deliveryTime = convertToIST(new Date());
@@ -469,22 +484,33 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       date: new Date(),
     };
 
+    const mappedDrops = (scheduledOrder.drops || []).map((d) => {
+      const dropObj = d.toObject ? d.toObject() : { ...d };
+      return {
+        location: dropObj.location,
+        address: dropObj.address,
+        instructionInDrop: dropObj.instructionInPickup || null,
+        voiceInstructionInDrop: dropObj.voiceInstructionInPickup || null,
+        items: dropObj.items,
+      };
+    });
+
     const newOrder = await Order.create({
       customerId: scheduledOrder.customerId,
-      items: scheduledOrder.items,
-      orderDetail: {
-        ...scheduledOrder.orderDetail,
-        deliveryTime,
-      },
+      merchantId: scheduledOrder.merchantId || null,
+      pickups: scheduledOrder.pickups,
+      drops: mappedDrops,
       billDetail: {
-        ...scheduledOrder.billDetail,
+        ...(scheduledOrder.billDetail.toObject?.() ?? scheduledOrder.billDetail),
         addedTip: calculatedTip,
       },
+      distance: scheduledOrder.distance || 0,
       totalAmount: scheduledOrder.totalAmount,
       paymentMode: scheduledOrder.paymentMode,
       paymentStatus: scheduledOrder.paymentStatus,
       deliveryMode: scheduledOrder.deliveryMode,
       deliveryOption: scheduledOrder.deliveryOption,
+      deliveryTime: deliveryTime,
       status: "Pending",
       "orderDetailStepper.created": stepperData,
     });
@@ -520,7 +546,6 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       ...data,
 
       orderId: newOrder._id,
-      orderDetail: newOrder.orderDetail,
       billDetail: newOrder.billDetail,
       orderDetailStepper: stepperData,
 
@@ -529,8 +554,7 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       orderStatus: newOrder.status,
       merchantName: "-",
       customerName:
-        newOrder?.deliveryAddress?.fullName ||
-        newOrder?.customerId?.fullName ||
+        newOrder?.drops?.[0]?.address?.fullName ||
         "-",
       deliveryMode: newOrder?.deliveryMode,
       orderDate: formatDate(newOrder.createdAt),
@@ -553,7 +577,6 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       customer: newOrder?.customerId,
     };
 
-    // Send notifications to each role dynamically
     await sendSocketDataAndNotification({
       rolesToNotify,
       userIds,
@@ -562,7 +585,10 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
       socketData,
     });
   } catch (err) {
-    next(appError(err.message));
+    console.error(
+      "Error creating order from scheduled pick & drop:",
+      err.message
+    );
   }
 };
 
@@ -783,7 +809,7 @@ const filterProductIdAndQuantity = async (items) => {
           : null;
         const variantTypeIdStr = rawVariantId?.toString() ?? null;
 
-        let price, costPrice;
+        let price, costPrice, variantTypeName = null;
 
         if (variantTypeIdStr) {
           const variantType = (product.variants || [])
@@ -792,6 +818,7 @@ const filterProductIdAndQuantity = async (items) => {
 
           price = variantType?.price ?? product?.price ?? 0;
           costPrice = variantType?.costPrice ?? product?.costPrice ?? 0;
+          variantTypeName = variantType?.typeName || null;
         } else {
           price = product?.price ?? 0;
           costPrice = product?.costPrice ?? 0;
@@ -801,6 +828,7 @@ const filterProductIdAndQuantity = async (items) => {
           productId,
           productName: product?.productName || "",
           variantId: rawVariantId || null,
+          variantTypeName,
           price,
           costPrice,
           quantity: item?.quantity,

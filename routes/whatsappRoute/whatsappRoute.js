@@ -37,6 +37,7 @@ const {
   sendCampaign,
   getCampaignEvents,
   getAudiencePreview,
+  getAudienceOptions,
 } = require("../../controllers/whatsapp/campaignController");
 
 const {
@@ -135,6 +136,7 @@ whatsappRoute.patch(
 );
 
 // ─── Campaigns ───────────────────────────────────────────
+whatsappRoute.get("/campaigns/audience-options", isAuthenticated, isAdmin, getAudienceOptions);
 whatsappRoute.get("/campaigns/audience-preview", isAuthenticated, isAdmin, getAudiencePreview);
 whatsappRoute.get("/campaigns", isAuthenticated, isAdmin, getCampaigns);
 whatsappRoute.post("/campaigns", isAuthenticated, isAdmin, createCampaign);

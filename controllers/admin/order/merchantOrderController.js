@@ -53,6 +53,9 @@ const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
 const { geoLocation } = require("../../../utils/getGeoLocation");
+const {
+  sendOrderTrackingMessage,
+} = require("../../../utils/whatsappApi");
 
 const { findRolesToNotify } = require("../../../socket/socket");
 const { default: mongoose } = require("mongoose");
@@ -1086,6 +1089,32 @@ const confirmOrderController = async (req, res, next) => {
         notificationData,
         socketData,
       });
+
+      // Send order tracking WhatsApp message (non-blocking)
+      const customer = await Customer.findById(orderFound.customerId)
+        .select("phoneNumber fullName")
+        .lean();
+
+      if (customer?.phoneNumber) {
+        const customerName =
+          orderFound.drops?.[0]?.address?.fullName ||
+          customer.fullName ||
+          "Customer";
+        const merchantName =
+          orderFound.merchantId?.merchantDetail?.merchantName ||
+          "your store";
+
+        sendOrderTrackingMessage(
+          customer.phoneNumber,
+          customerName,
+          merchantName
+        ).catch((err) =>
+          console.error(
+            "[WhatsApp] Order tracking message error:",
+            err.message
+          )
+        );
+      }
     } else {
       return next(appError("Access Denied", 400));
     }
@@ -1140,11 +1169,11 @@ const rejectOrderController = async (req, res, next) => {
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;
 
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         const orderAmountPerDay =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         customerFound.customerDetails.walletBalance += orderAmountPerDay;
       }
 
@@ -1168,12 +1197,12 @@ const rejectOrderController = async (req, res, next) => {
 
       if (paymentId) {
         let refundAmount;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        if (orderFound.deliveryOption === "On-demand") {
           refundAmount = orderFound.billDetail.grandTotal;
           updatedTransactionDetail.transactionAmount = refundAmount;
-        } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+        } else if (orderFound.deliveryOption === "Scheduled") {
           refundAmount =
-            orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+            orderFound.billDetail.grandTotal / orderFound.numOfDays;
           updatedTransactionDetail.transactionAmount = refundAmount;
         }
 

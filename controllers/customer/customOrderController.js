@@ -105,7 +105,7 @@ const getCustomOrderItems = async (req, res, next) => {
 
     if (!cart) return next(appError("Cart not found", 404));
 
-    const formattedResponse = cart?.drops[0]?.items?.map((item) => ({
+    const formattedResponse = cart?.pickups[0]?.items?.map((item) => ({
       itemId: item.itemId,
       itemName: item.itemName,
       unit: item.unit,
