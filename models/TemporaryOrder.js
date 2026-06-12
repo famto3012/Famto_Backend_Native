@@ -141,6 +141,7 @@ const temporaryOrderSchema = new mongoose.Schema(
     idempotencyKey: {
       type: String,
       unique: true,
+      sparse: true,
     },
     pickups: Array,
     drops: Array,
