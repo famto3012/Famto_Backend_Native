@@ -161,16 +161,8 @@ const sendTemplateMessage = async (
 const sendWelcomeMessage = async (phoneNumber, name = "") => {
   const templateName =
     process.env.WHATSAPP_WELCOME_TEMPLATE || "customer_welcome";
-  const headerImageUrl =
-    process.env.WHATSAPP_WELCOME_HEADER_IMAGE || null;
   const bodyParams = name ? [name] : [];
-  await sendTemplateMessage(
-    phoneNumber,
-    templateName,
-    bodyParams,
-    "en",
-    headerImageUrl
-  );
+  await sendTemplateMessage(phoneNumber, templateName, bodyParams, "en");
 };
 
 const sendCartReminderMessage = async (
