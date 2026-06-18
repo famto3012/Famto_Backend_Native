@@ -93,6 +93,8 @@ const updateMetaTemplate = async (templateId, templateData) => {
 
 // ── Template message helpers ──
 
+const WhatsappTemplate = require("../models/WhatsappTemplate");
+
 const sendTemplateMessage = async (
   phoneNumber,
   templateName,
@@ -105,7 +107,8 @@ const sendTemplateMessage = async (
     return;
   }
 
-  const cleanPhone = String(phoneNumber).replace(/^\+/, "");
+  let cleanPhone = String(phoneNumber).replace(/^\+/, "");
+  if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
   const components = [];
 
@@ -122,11 +125,19 @@ const sendTemplateMessage = async (
   }
 
   if (bodyParams.length > 0) {
+    // Look up param names from the synced template for named-parameter support
+    const template = await WhatsappTemplate.findOne({ name: templateName }).select("components").lean();
+    const bodyComp = (template?.components || []).find((c) => c.type === "BODY");
+    const paramNames = (bodyComp?.text?.match(/\{\{([^}]+)\}\}/g) || []).map(
+      (m) => m.replace(/\{\{|\}\}/g, "").trim()
+    );
+
     components.push({
       type: "body",
-      parameters: bodyParams.map((value) => ({
+      parameters: bodyParams.map((value, i) => ({
         type: "text",
         text: String(value),
+        ...(paramNames[i] && { parameter_name: paramNames[i] }),
       })),
     });
   }
@@ -144,6 +155,7 @@ const sendTemplateMessage = async (
   };
 
   try {
+    console.log(`[WhatsApp] Sending template payload:`, JSON.stringify(payload));
     const response = await sendMetaMessage(payload);
     console.log(
       `[WhatsApp] Template sent to ${cleanPhone} (${templateName}):`,
@@ -151,6 +163,7 @@ const sendTemplateMessage = async (
     );
     return response;
   } catch (err) {
+    console.error(`[WhatsApp] Full error:`, JSON.stringify(err.response?.data));
     console.error(
       `[WhatsApp] Failed to send template to ${cleanPhone}:`,
       err?.response?.data?.error?.message || err.message
@@ -158,11 +171,18 @@ const sendTemplateMessage = async (
   }
 };
 
+const getTemplateLanguage = async (templateName) => {
+  const template = await WhatsappTemplate.findOne({ name: templateName }).select("language").lean();
+  return template?.language || "en";
+};
+
 const sendWelcomeMessage = async (phoneNumber, name = "") => {
   const templateName =
     process.env.WHATSAPP_WELCOME_TEMPLATE || "customer_welcome";
+  const lang = await getTemplateLanguage(templateName);
   const bodyParams = name ? [name] : [];
-  await sendTemplateMessage(phoneNumber, templateName, bodyParams, "en");
+  const headerImage = process.env.WHATSAPP_WELCOME_HEADER_IMAGE || null;
+  await sendTemplateMessage(phoneNumber, templateName, bodyParams, lang, headerImage);
 };
 
 const sendCartReminderMessage = async (
@@ -173,11 +193,13 @@ const sendCartReminderMessage = async (
 ) => {
   const templateName =
     process.env.WHATSAPP_CART_REMINDER_TEMPLATE || "cart_reminder";
+  const lang = await getTemplateLanguage(templateName);
+  const headerImage = process.env.WHATSAPP_CART_REMINDER_HEADER_IMAGE || null;
   await sendTemplateMessage(phoneNumber, templateName, [
     customerName,
     merchantName,
     productList,
-  ]);
+  ], lang, headerImage);
 };
 
 const sendOrderTrackingMessage = async (
@@ -187,10 +209,12 @@ const sendOrderTrackingMessage = async (
 ) => {
   const templateName =
     process.env.WHATSAPP_ORDER_TRACKING_TEMPLATE || "order_tracking";
+  const lang = await getTemplateLanguage(templateName);
+  const headerImage = process.env.WHATSAPP_ORDER_TRACKING_HEADER_IMAGE || null;
   await sendTemplateMessage(phoneNumber, templateName, [
     customerName,
     merchantName,
-  ]);
+  ], lang, headerImage);
 };
 
 module.exports = {

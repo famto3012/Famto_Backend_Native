@@ -101,6 +101,18 @@ const createCampaign = async (req, res, next) => {
       return next(appError("Template must be APPROVED to use in campaigns", 400));
     }
 
+    // Check if template body has parameters that need values
+    const bodyComp = (template.components || []).find((c) => c.type === "BODY");
+    const paramCount = (bodyComp?.text?.match(/\{\{[^}]+\}\}/g) || []).length;
+    if (paramCount > 0 && (!templateParams || templateParams.length === 0)) {
+      return next(
+        appError(
+          `Template "${template.name}" requires ${paramCount} body parameter(s). Provide templateParams in the request.`,
+          400
+        )
+      );
+    }
+
     // Resolve recipients
     let resolvedRecipients = recipients;
     if (!resolvedRecipients?.length && audience) {
@@ -183,9 +195,27 @@ const sendCampaign = async (req, res, next) => {
   }
 };
 
+const buildComponentsFromTemplate = (template) => {
+  return [];
+};
+
 const processCampaignSend = async (campaign, userId) => {
   const template = await WhatsappTemplate.findById(campaign.templateId);
   if (!template) return;
+
+  // Build components from template definition when campaign has no explicit templateParams
+  let sendComponents = campaign.templateParams?.length > 0
+    ? campaign.templateParams
+    : buildComponentsFromTemplate(template);
+
+  console.log("[Campaign] Template:", JSON.stringify({
+    name: template.name,
+    language: template.language,
+    status: template.status,
+    category: template.category,
+  }));
+  console.log("[Campaign] Recipients count:", campaign.recipients.length);
+  console.log("[Campaign] sendComponents:", JSON.stringify(sendComponents));
 
   let sentCount = 0;
   let failedCount = 0;
@@ -200,12 +230,15 @@ const processCampaignSend = async (campaign, userId) => {
         template: {
           name: template.name,
           language: { code: template.language || "en_US" },
-          components: campaign.templateParams,
+          ...(sendComponents.length > 0 && {
+            components: sendComponents,
+          }),
         },
       };
 
       const metaResponse = await sendMetaMessage(payload);
       const metaMessageId = metaResponse.messages?.[0]?.id;
+      console.log(`[Campaign] Success for ${waId}:`, metaMessageId);
 
       campaign.events.push({
         waId,
@@ -215,8 +248,11 @@ const processCampaignSend = async (campaign, userId) => {
       });
       sentCount++;
     } catch (err) {
+      const fullError = err.response?.data || err.message;
       const reason =
         err.response?.data?.error?.message || err.message;
+      console.error(`[Campaign] Failed to send to ${waId}:`, JSON.stringify(fullError));
+      console.error(`[Campaign] Status:`, err.response?.status, `Code:`, err.response?.data?.error?.code, `Subcode:`, err.response?.data?.error?.error_subcode);
 
       campaign.events.push({
         waId,
