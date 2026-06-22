@@ -181,6 +181,7 @@ const temporaryOrderSchema = new mongoose.Schema(
         "PROCESSING",
         "ORDER_CREATED",
         "FAILED",
+        "CANCELLED",
       ],
       default: "PENDING",
       index: true,

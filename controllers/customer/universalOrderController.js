@@ -12,6 +12,7 @@ const Merchant = require("../../models/Merchant");
 const PromoCode = require("../../models/PromoCode");
 const ActivityLog = require("../../models/ActivityLog");
 const CustomerCart = require("../../models/CustomerCart");
+const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const SubscriptionLog = require("../../models/SubscriptionLog");
@@ -1153,8 +1154,18 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     const { merchantId, businessCategoryId } = req.params;
     const { query } = req.query;
 
+    const categoryFilter = { merchantId };
+
+    if (
+      businessCategoryId &&
+      businessCategoryId !== "null" &&
+      businessCategoryId !== "undefined"
+    ) {
+      categoryFilter.businessCategoryId = businessCategoryId;
+    }
+
     // Find all categories belonging to the merchant with the given business category
-    const categories = await Category.find({ merchantId, businessCategoryId });
+    const categories = await Category.find(categoryFilter);
 
     // Extract all category ids to search products within all these categories
     const categoryIds = categories.map((category) => category._id.toString());
@@ -3188,6 +3199,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
       return next(appError("Payment verification failed", 400));
     }
 
+    // Try to mark as completed (might already be done by webhook)
     const tempOrder = await TemporaryOrder.findOneAndUpdate(
       {
         razorpayOrderId: razorpay_order_id,
@@ -3201,12 +3213,45 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     );
 
     if (!tempOrder) {
-      return next(appError("Order not found or already processed", 404));
+      // Webhook may have already marked it — check if it exists at all
+      const existing = await TemporaryOrder.findOne({
+        razorpayOrderId: razorpay_order_id,
+      }).lean();
+
+      if (existing && existing.paymentStatus === "PAYMENT_COMPLETED") {
+        return res.status(200).json({
+          success: true,
+          message: "Payment already verified",
+          orderId: existing.orderId,
+        });
+      }
+
+      // Check if order was already created
+      if (existing && existing.processingStatus === "ORDER_CREATED") {
+        return res.status(200).json({
+          success: true,
+          message: "Order already created",
+          orderId: existing.orderId,
+        });
+      }
+
+      return next(appError("Order not found or payment failed", 404));
+    }
+
+    // Clear the cart now that payment is confirmed
+    if (
+      tempOrder.deliveryMode === "Pick and Drop" ||
+      tempOrder.deliveryMode === "Custom Order"
+    ) {
+      await PickAndCustomCart.deleteOne({ customerId: tempOrder.customerId });
+    } else {
+      await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
     }
 
     return res.status(200).json({
       success: true,
       message: "Payment verified successfully",
+      orderId: tempOrder.orderId,
     });
   } catch (err) {
     console.log("VERIFY PAYMENT ERROR:", err);
@@ -3258,6 +3303,20 @@ const razorpayWebhookController = async (req, res) => {
 
       if (tempOrder) {
         console.log(`Webhook: payment marked COMPLETED for ${razorpayOrderId}`);
+
+        // Clear cart now that payment is confirmed
+        try {
+          if (
+            tempOrder.deliveryMode === "Pick and Drop" ||
+            tempOrder.deliveryMode === "Custom Order"
+          ) {
+            await PickAndCustomCart.deleteOne({ customerId: tempOrder.customerId });
+          } else {
+            await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
+          }
+        } catch (cartErr) {
+          console.log(`Webhook: cart clear failed for ${razorpayOrderId}:`, cartErr.message);
+        }
       } else {
         console.log(`Webhook: temp order not found or already completed for ${razorpayOrderId}`);
       }
@@ -3345,6 +3404,9 @@ const retryPaymentController = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
+      orderId: tempOrder.orderId,
+      razorpayOrderId: newRazorpayOrderId,
+      amount: tempOrder.totalAmount,
     });
   } catch (err) {
     next(appError(err.message));
@@ -3765,11 +3827,15 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
 
-    // Only cancel if cron hasn't picked it up yet
-    const orderFound = await TemporaryOrder.findOne({
-      orderId: mongoose.Types.ObjectId.createFromHexString(orderId),
-      processingStatus: "PENDING",
-    });
+    // Atomically grab the order only if cron hasn't picked it up yet
+    const orderFound = await TemporaryOrder.findOneAndUpdate(
+      {
+        orderId: mongoose.Types.ObjectId.createFromHexString(orderId),
+        processingStatus: "PENDING",
+      },
+      { processingStatus: "CANCELLED" },
+      { new: true }
+    );
 
     if (!orderFound) {
       res.status(200).json({

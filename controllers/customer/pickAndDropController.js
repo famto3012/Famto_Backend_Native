@@ -2012,7 +2012,26 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
     );
 
     if (!tempOrder) {
-      return next(appError("Order not found or already processed", 404));
+      // Webhook may have already marked it — check if it exists
+      const existing = await TemporaryOrder.findOne({
+        razorpayOrderId: paymentDetails.razorpay_order_id,
+      }).lean();
+
+      if (existing && (existing.paymentStatus === "PAYMENT_COMPLETED" || existing.processingStatus === "ORDER_CREATED")) {
+        await Promise.all([
+          PickAndCustomCart.deleteOne({ customerId }),
+          customer.save(),
+        ]);
+
+        return res.status(200).json({
+          success: true,
+          orderId: existing.orderId,
+          createdAt: existing.createdAt,
+          message: "Payment already verified",
+        });
+      }
+
+      return next(appError("Order not found or payment failed", 404));
     }
 
     await Promise.all([
@@ -2035,10 +2054,11 @@ const cancelPickBeforeOrderCreationController = async (req, res, next) => {
     const { orderId } = req.body;
 
     // Atomically grab the order only if the cron hasn't picked it up yet
-    const orderFound = await TemporaryOrder.findOne({
-      orderId,
-      processingStatus: "PENDING",
-    });
+    const orderFound = await TemporaryOrder.findOneAndUpdate(
+      { orderId, processingStatus: "PENDING" },
+      { processingStatus: "CANCELLED" },
+      { new: true }
+    );
 
     if (!orderFound) {
       res.status(200).json({

@@ -9,6 +9,7 @@ const PromoCode = require("../models/PromoCode");
 const ActivityLog = require("../models/ActivityLog");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
 const PickAndCustomCart = require("../models/PickAndCustomCart");
+const DatabaseCounter = require("../models/DatabaseCounter");
 
 const processOrderService = async (tempOrder) => {
   const session = await mongoose.startSession();
@@ -52,6 +53,21 @@ const processOrderService = async (tempOrder) => {
         },
       },
     };
+
+    // Generate order ID inside the transaction to prevent counter drift on abort
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = `0${now.getMonth() + 1}`.slice(-2);
+    const counterType = isScheduled ? "ScheduledOrder" : "Order";
+    const prefix = isScheduled ? "SO" : "O";
+
+    const counter = await DatabaseCounter.findOneAndUpdate(
+      { type: counterType, year: parseInt(year), month: parseInt(month) },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true, session }
+    );
+
+    orderPayload._id = `${prefix}${year}${month}${counter.count}`;
 
     let createdOrder;
 

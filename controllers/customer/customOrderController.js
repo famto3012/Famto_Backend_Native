@@ -646,11 +646,13 @@ const cancelCustomBeforeOrderCreationController = async (req, res, next) => {
   try {
     const { orderId } = req.body;
 
-    // Only cancel if cron hasn't picked it up yet
-    const orderFound = await TemporaryOrder.findOne({
-      orderId,
-      processingStatus: "PENDING",
-    });
+    // Atomically grab the order only if cron hasn't picked it up yet
+    const orderFound = await TemporaryOrder.findOneAndUpdate(
+      { orderId, processingStatus: "PENDING" },
+      { processingStatus: "CANCELLED" },
+      { new: true }
+    );
+
     if (!orderFound) {
       res.status(200).json({
         success: false,

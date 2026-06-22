@@ -9,6 +9,7 @@ const CustomerCart = require("./models/CustomerCart");
 const Customer = require("./models/Customer");
 const Merchant = require("./models/Merchant");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
+const { logError } = require("./utils/errorLogger");
 const { sendCartReminderMessage } = require("./utils/whatsappApi");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
@@ -406,6 +407,14 @@ cron.schedule("*/5 * * * * *", async () => {
           console.error(
             `💀 Order permanently failed ${tempOrder._id}`
           );
+
+          logError(err.message, {
+            source: "OrderProcessorCron",
+            stack: err.stack,
+            orderId: tempOrder._id,
+            razorpayOrderId: tempOrder.razorpayOrderId,
+            retryCount,
+          });
         } else {
           await TemporaryOrder.findByIdAndUpdate(
             tempOrder._id,
@@ -419,6 +428,13 @@ cron.schedule("*/5 * * * * *", async () => {
           console.error(
             `⚠️ Retry ${retryCount} for ${tempOrder._id}`
           );
+
+          logError(err.message, {
+            source: "OrderProcessorCron-Retry",
+            stack: err.stack,
+            orderId: tempOrder._id,
+            retryCount,
+          });
         }
       }
     }
@@ -489,6 +505,12 @@ cron.schedule("*/5 * * * *", async () => {
           `[Reconciliation] Error checking ${tempOrder.razorpayOrderId}:`,
           err.message
         );
+
+        logError(err.message, {
+          source: "ReconciliationCron",
+          stack: err.stack,
+          razorpayOrderId: tempOrder.razorpayOrderId,
+        });
       }
     }
 
@@ -508,9 +530,26 @@ cron.schedule("*/5 * * * *", async () => {
       );
     }
 
-    // ── Dead-letter items (failed processingStatus with maxRetries reached) ──
+    // ── Retry failed orders one more time ──
+    const failedOrders = await TemporaryOrder.find({
+      processingStatus: "FAILED",
+      paymentStatus: "PAYMENT_COMPLETED",
+      retryCount: { $lt: 10 },
+    });
+
+    for (const failedOrder of failedOrders) {
+      console.log(
+        `[Reconciliation] 🔄 Retrying failed order ${failedOrder._id} (retry ${failedOrder.retryCount})`
+      );
+      await TemporaryOrder.findByIdAndUpdate(failedOrder._id, {
+        processingStatus: "PENDING",
+      });
+    }
+
+    // ── Dead-letter items (truly exhausted retries) ──
     const deadLetters = await TemporaryOrder.find({
       processingStatus: "FAILED",
+      retryCount: { $gte: 10 },
     }).lean();
 
     if (deadLetters.length) {

@@ -326,7 +326,7 @@ orderSchema.index({ deliveryTime: 1, status: 1, delayAlertSent: 1 });
 orderSchema.index({ scheduledOrderId: 1 });
 
 orderSchema.pre("save", async function (next) {
-  if (this.isNew) {
+  if (this.isNew && !this._id) {
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = `0${now.getMonth() + 1}`.slice(-2);
