@@ -6,10 +6,9 @@ const appError = require("../../utils/appError");
 
 const globalSearchController = async (req, res, next) => {
   try {
-    let { query = "", limit = 5 } = req.query;
+    let { query = "" } = req.query;
 
     query = query.trim();
-    limit = Math.min(parseInt(limit, 10) || 5, 20);
 
     if (!query || query.length < 2) {
       return res.status(200).json({
@@ -38,7 +37,6 @@ const globalSearchController = async (req, res, next) => {
               "merchantDetail.displayAddress merchantDetail.averageRating " +
               "merchantDetail.businessCategoryId status openedToday"
           )
-          .limit(limit)
           .lean(),
 
         BusinessCategory.find({
@@ -46,7 +44,6 @@ const globalSearchController = async (req, res, next) => {
           title: searchRegex,
         })
           .select("_id title bannerImageURL")
-          .limit(limit)
           .lean(),
 
         Product.find({
@@ -136,8 +133,7 @@ const globalSearchController = async (req, res, next) => {
             },
           };
         })
-        .filter(Boolean)
-        .slice(0, limit);
+        .filter(Boolean);
     }
 
     // ── Enrich merchant categories with their merchant info ──────────────────
@@ -192,8 +188,7 @@ const globalSearchController = async (req, res, next) => {
             },
           };
         })
-        .filter(Boolean)
-        .slice(0, limit);
+        .filter(Boolean);
     }
 
     // ── Shape merchant results ───────────────────────────────────────────────
