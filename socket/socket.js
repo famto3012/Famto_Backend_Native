@@ -4893,7 +4893,7 @@ io.on("connection", async (socket) => {
         taskFound.deliveryDetail.deliveryStatus = "Cancelled";
 
         // Calculate earnings for agent
-        const { calculatedSalary, calculatedSurge } =
+        const { calculatedSalary, calculatedSurge, hourlyFare } =
           await calculateAgentEarnings(agentFound, orderFound);
 
         const isOrderCompleted = false;
@@ -4903,7 +4903,8 @@ io.on("connection", async (socket) => {
           orderFound,
           calculatedSalary,
           calculatedSurge,
-          isOrderCompleted
+          isOrderCompleted,
+          hourlyFare
         );
 
         const stepperDetail = {

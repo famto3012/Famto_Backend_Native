@@ -149,6 +149,11 @@ const agentPricingValidations = [
     .withMessage("Minimum order number must be a number"),
   body("fareAfterMinLoginHours").optional().trim(),
   body("fareAfterMinOrderNumber").optional().trim(),
+  body("hourlyRate")
+    .optional()
+    .trim()
+    .isNumeric()
+    .withMessage("Hourly rate must be a number"),
   body("geofenceId").trim().notEmpty().withMessage("Geofence is required"),
 ];
 

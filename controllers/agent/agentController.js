@@ -2140,11 +2140,15 @@ const completeOrderController = async (req, res, next) => {
       await processReferralRewards(customerFound, itemTotal);
     }
 
-    const { calculatedSalary: rawSalary, calculatedSurge: rawSurge } =
-      await calculateAgentEarnings(agentFound, orderFound);
+    const {
+      calculatedSalary: rawSalary,
+      calculatedSurge: rawSurge,
+      hourlyFare: rawHourlyFare,
+    } = await calculateAgentEarnings(agentFound, orderFound);
 
     const calculatedSalary = Number.isFinite(rawSalary) ? rawSalary : 0;
     const calculatedSurge = Number.isFinite(rawSurge) ? rawSurge : 0;
+    const hourlyFare = Number.isFinite(rawHourlyFare) ? rawHourlyFare : 0;
 
     console.log("✅ Calculated Salary:", calculatedSalary);
     console.log("✅ Calculated Surge:", calculatedSurge);
@@ -2167,7 +2171,8 @@ const completeOrderController = async (req, res, next) => {
           orderFound,
           calculatedSalary,
           calculatedSurge,
-          isOrderCompleted
+          isOrderCompleted,
+          hourlyFare
         )
       );
     }
@@ -2256,156 +2261,131 @@ const completeOrderController = async (req, res, next) => {
 
 const completeBatchOrderController = async (req, res, next) => {
   try {
-    const { orderId, isBatchOrder, batchOrderId } = req.body;
+    const { batchOrderId } = req.body;
     const agentId = req.userAuth;
 
-    console.log("👉 Incoming request:", {
-      orderId,
-      agentId,
-      isBatchOrder,
-      batchOrderId,
-    });
+    if (!batchOrderId) return next(appError("batchOrderId is required", 400));
 
-    const [agentFound, orderFound] = await Promise.all([
+    const [agentFound, batchOrderFound] = await Promise.all([
       Agent.findById(agentId),
-      Order.findById(orderId),
-      // BatchOrder.findById(batchOrderId),
-    ]);
-
-    const [batchOrderFound] = await Promise.all([
       BatchOrder.findById(batchOrderId),
     ]);
 
-    // console.log("✅ Agent found:", agentFound?._id);
-    // console.log("✅ Order found:", orderFound?._id);
+    if (!agentFound) return next(appError("Agent not found", 404));
+    if (!batchOrderFound) return next(appError("Batch order not found", 404));
 
-    // if (!agentFound) return next(appError("Agent not found", 404));
-    // if (!orderFound) return next(appError("Order not found", 404));
+    // Fetch all child orders of this batch
+    const childOrderIds = batchOrderFound.dropDetails.map((d) => d.orderId);
+    const childOrders = await Order.find({ _id: { $in: childOrderIds } });
 
-    // if (orderFound.status === "Completed")
-    //   return next(appError("Order already completed", 400));
-
-    // const customerFound = await Customer.findById(batchOrderFound.customerId);
-    // if (!customerFound) return next(appError("Customer not found", 404));
-
-    // console.log("✅ Customer found:", customerFound._id);
-
-    // const { itemTotal } = orderFound.billDetail;
-
-    // Loyalty points
-    // const loyaltyPointCriteria = await LoyaltyPoint.findOne({ status: true });
-    // if (
-    //   loyaltyPointCriteria &&
-    //   itemTotal >= loyaltyPointCriteria.minOrderAmountForEarning
-    // ) {
-    //   console.log("📌 Updating loyalty points...");
-    //   updateLoyaltyPoints(
-    //     customerFound,
-    //     loyaltyPointCriteria,
-    //     orderFound.billDetail.grandTotal
-    //   );
-    // }
-
-    // Referral rewards
-    // if (!customerFound?.referralDetail?.processed) {
-    //   console.log("📌 Processing referral rewards...");
-    //   await processReferralRewards(customerFound, itemTotal);
-    // }
-
-    // Agent earnings
-    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
-      agentFound,
-      batchOrderFound
-    );
-
-    // console.log("✅ Calculated Salary:", calculatedSalary);
-    // console.log("✅ Calculated Surge:", calculatedSurge);
-
-    // // Update order
-    // updateOrderDetails(orderFound, calculatedSalary);
-    // console.log("✅ Order details updated.");
-
-    const isOrderCompleted = true;
-
-    // // Update customer, notification, and agent
-    const updates = [];
-
-    // Only push notification update if it's a batch order
-    if (isBatchOrder) {
-      // Fetch all child orders of this batch
-      const batchOrders = await Order.find({
-        _id: { $in: batchOrderFound.dropDetails.map((d) => d.orderId) },
-      });
-
-      console.log("📌 Updating batch order and agent details...", batchOrders);
-
-      updates.push(
-        updateAgentDetailsForBatch(
-          agentFound,
-          batchOrders,
-          calculatedSalary,
-          calculatedSurge
-        ),
-        updateNotificationStatus(orderId)
-      );
+    if (childOrders.length === 0) {
+      return next(appError("No child orders found for this batch", 404));
     }
 
-    await Promise.all(updates);
+    // Check if all child orders are already completed
+    const allCompleted = childOrders.every((o) => o.status === "Completed");
+    if (allCompleted) {
+      return next(appError("Batch order already completed", 400));
+    }
 
-    // console.log("✅ Order, Customer, and Agent (in-memory) updated.");
+    // Mark all child tasks as completed
+    const taskIds = batchOrderFound.dropDetails.map((d) => d.taskId);
+    await Task.updateMany(
+      { _id: { $in: taskIds }, taskStatus: { $ne: "Completed" } },
+      { taskStatus: "Completed" }
+    );
 
-    // // Stepper detail
-    // const stepperDetail = { by: agentFound.fullName, date: new Date() };
-    // orderFound.orderDetailStepper.completed = stepperDetail;
+    // Update agent details using the batch helper (it calculates earnings internally)
+    await updateAgentDetailsForBatch(agentFound, childOrders);
 
-    // console.log("📌 Saving documents...");
-    // agentFound.taskCompleted += 1;
-    // agentFound.markModified("appDetail");
+    // Update notification status for the batch
+    try {
+      await updateNotificationStatus(batchOrderId);
+    } catch (notifErr) {
+      console.error("Notification status update failed (non-fatal):", notifErr.message);
+    }
 
-    // console.log("👉 Agent before save:", agentFound.appDetail);
+    // Mark each child order as completed with stepper
+    const stepperDetail = { by: agentFound.fullName, date: new Date() };
 
-    // await Promise.all([
-    //   orderFound.save(),
-    //   customerFound.save(),
-    //   agentFound.save(),
-    // ]);
+    const customerIds = new Set();
+    const merchantIds = new Set();
 
-    // console.log("✅ Agent after save check...");
-    // const verifyAgent = await Agent.findById(agentId);
-    // console.log("👉 Agent from DB after save:", verifyAgent.appDetail);
+    for (const order of childOrders) {
+      if (order.status !== "Completed") {
+        order.status = "Completed";
+        order.orderDetailStepper = order.orderDetailStepper || {};
+        order.orderDetailStepper.completed = stepperDetail;
+        await order.save();
+      }
+      if (order.customerId) customerIds.add(order.customerId.toString());
+      if (order.merchantId) merchantIds.add(order.merchantId.toString());
+    }
 
-    // // Notifications
-    // const eventName = "orderCompleted";
-    // const { rolesToNotify, data } = await findRolesToNotify(eventName);
+    // Update customer subscription counts
+    for (const customerId of customerIds) {
+      try {
+        await updateCustomerSubscriptionCount(customerId);
+      } catch (subErr) {
+        console.error("Subscription count update failed:", subErr.message);
+      }
+    }
 
-    // let manager;
-    // for (const role of rolesToNotify) {
-    //   let roleId;
-    //   if (role === "admin") roleId = process.env.ADMIN_ID;
-    //   else if (role === "merchant") roleId = orderFound?.merchantId;
-    //   else if (role === "driver") roleId = orderFound?.agentId;
-    //   else if (role === "customer") roleId = orderFound?.customerId;
-    //   else {
-    //     const roleValue = await ManagerRoles.findOne({ roleName: role });
-    //     if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
-    //     if (manager) roleId = manager._id;
-    //   }
+    // Increment agent task count and save
+    agentFound.taskCompleted = (agentFound.taskCompleted || 0) + 1;
+    agentFound.markModified("appDetail");
+    await agentFound.save();
 
-    // }
+    // Send notifications
+    const eventName = "orderCompleted";
+    const { rolesToNotify, data } = await findRolesToNotify(eventName);
 
-    // const socketData = { ...data, orderDetailStepper: stepperDetail };
-    // sendSocketData(process.env.ADMIN_ID, eventName, socketData);
-    // sendSocketData(orderFound.customerId, eventName, socketData);
-    // if (orderFound?.merchantId)
-    //   sendSocketData(orderFound.merchantId, eventName, socketData);
-    // if (manager?._id) sendSocketData(manager._id, eventName, socketData);
+    let manager;
+    for (const role of rolesToNotify) {
+      let roleId;
+      if (role === "admin") roleId = process.env.ADMIN_ID;
+      else if (role === "merchant") roleId = [...merchantIds][0] || null;
+      else if (role === "driver") roleId = agentId;
+      else if (role === "customer") roleId = [...customerIds][0] || null;
+      else {
+        const roleValue = await ManagerRoles.findOne({ roleName: role });
+        if (roleValue) manager = await Manager.findOne({ role: roleValue._id });
+        if (manager) roleId = manager._id;
+      }
+
+      if (roleId) {
+        await sendNotification(
+          roleId,
+          eventName,
+          {
+            fcm: {
+              orderId: batchOrderFound._id,
+              customerId: [...customerIds][0] || null,
+              merchantId: [...merchantIds][0] || null,
+              agentName: agentFound.fullName,
+            },
+          },
+          role.charAt(0).toUpperCase() + role.slice(1)
+        );
+      }
+    }
+
+    // Socket events
+    const socketData = { ...data, orderDetailStepper: stepperDetail };
+    sendSocketData(process.env.ADMIN_ID, eventName, socketData);
+    for (const cid of customerIds) sendSocketData(cid, eventName, socketData);
+    for (const mid of merchantIds) sendSocketData(mid, eventName, socketData);
+    if (manager?._id) sendSocketData(manager._id, eventName, socketData);
 
     res.status(200).json({
-      message: "Order completed successfully",
-      data: calculatedSalary,
+      message: "Batch order completed successfully",
+      data: {
+        batchOrderId: batchOrderFound._id,
+        childOrdersCompleted: childOrders.filter((o) => o.status === "Completed").length,
+      },
     });
   } catch (err) {
-    console.error("❌ Error in completeOrderController:", err);
+    console.error("❌ Error in completeBatchOrderController:", err);
     next(appError(err.message));
   }
 };

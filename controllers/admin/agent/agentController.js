@@ -984,41 +984,44 @@ const approvePaymentController = async (req, res, next) => {
       return next(appError("Payment already settled", 400));
     }
 
-    const { totalEarning } = paymentDetail;
+    const deduction = paymentDetail.deduction || 0;
+    const netEarning = paymentDetail.totalEarning - deduction;
     const cashInHand = agent.workStructure.cashInHand || 0;
 
     let debitAmount = 0;
     let calculatedBalance = 0;
     const transactionUpdates = [];
 
-    // Calculate deductions from cash in hand
-    if (cashInHand > 0) {
-      debitAmount = Math.min(cashInHand, totalEarning);
-      calculatedBalance = cashInHand - debitAmount;
+    // Credit net earnings (after deductions)
+    transactionUpdates.push({
+      agentId,
+      type: "Credit",
+      title: "Salary credited",
+      madeOn: new Date(),
+      amount: netEarning,
+    });
 
-      transactionUpdates.push(
-        {
-          agentId,
-          type: "Credit",
-          title: "Salary credited",
-          madeOn: new Date(),
-          amount: totalEarning,
-        },
-        {
-          agentId,
-          type: "Debit",
-          title: "Cash in hand deducted",
-          madeOn: new Date(),
-          amount: debitAmount,
-        }
-      );
-    } else {
+    if (deduction > 0) {
       transactionUpdates.push({
         agentId,
-        type: "Credit",
-        title: "Salary credited",
+        type: "Debit",
+        title: "Deduction applied",
         madeOn: new Date(),
-        amount: totalEarning,
+        amount: deduction,
+      });
+    }
+
+    // Calculate deductions from cash in hand
+    if (cashInHand > 0) {
+      debitAmount = Math.min(cashInHand, netEarning);
+      calculatedBalance = cashInHand - debitAmount;
+
+      transactionUpdates.push({
+        agentId,
+        type: "Debit",
+        title: "Cash in hand deducted",
+        madeOn: new Date(),
+        amount: debitAmount,
       });
     }
 

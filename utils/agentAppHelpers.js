@@ -86,6 +86,54 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           if (appDetail.orders > 0 && appDetail.loginDuration > 0) {
             totalEarning = agentPricing.baseFare;
           }
+        } else if (agentPricing?.type?.startsWith("Hourly")) {
+          const fareForStartToPick =
+            totalStartToPickDistance * agentPricing.startToPickFarePerKM;
+          const fareForPickToDrop =
+            (totalDistance - totalStartToPickDistance) *
+            agentPricing.baseDistanceFarePerKM;
+
+          const accumulatedHourlyFare = appDetail?.totalHourlyFare || 0;
+
+          totalEarning =
+            fareForStartToPick +
+            fareForPickToDrop +
+            accumulatedHourlyFare +
+            totalSurge;
+
+          const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
+          const meetsLoginRequirement = appDetail.loginDuration >= minLoginMillis;
+          const meetsOrderRequirement = appDetail.orders >= agentPricing.minOrderNumber;
+
+          if (agentPricing.splitIncentive !== false) {
+            if (meetsLoginRequirement) {
+              const pricePerOrder =
+                agentPricing.baseFare / agentPricing.minOrderNumber;
+              const calculatedEarning = pricePerOrder * appDetail.orders;
+              totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+            }
+          } else {
+            if (meetsOrderRequirement && meetsLoginRequirement) {
+              totalEarning += agentPricing.baseFare;
+            }
+          }
+
+          if (meetsLoginRequirement && meetsOrderRequirement) {
+            if (appDetail.orders > agentPricing.minOrderNumber) {
+              const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
+              totalEarning +=
+                extraOrders * (agentPricing.fareAfterMinOrderNumber || 0);
+            }
+
+            const extraMillis = appDetail.loginDuration - minLoginMillis;
+            if (extraMillis > 0) {
+              const extraHours = Math.floor(extraMillis / (60 * 60 * 1000));
+              if (extraHours >= 1) {
+                totalEarning +=
+                  extraHours * (agentPricing.fareAfterMinLoginHours || 0);
+              }
+            }
+          }
         } else {
           const fareForStartToPick =
             totalStartToPickDistance * agentPricing.startToPickFarePerKM;
@@ -105,45 +153,49 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           // }
 
           const minLoginMillis = agentPricing.minLoginHours * 60 * 60 * 1000;
+          const meetsLoginRequirement = appDetail.loginDuration >= minLoginMillis;
+          const meetsOrderRequirement = appDetail.orders >= agentPricing.minOrderNumber;
 
           // Incentive calculation based on splitIncentive toggle
           if (agentPricing.splitIncentive !== false) {
-            // Split mode: proportional per order, capped at baseFare
-            const pricePerOrder =
-              agentPricing.baseFare / agentPricing.minOrderNumber;
-            const calculatedEarning = pricePerOrder * appDetail.orders;
+            // Split mode: proportional per order, capped at baseFare, requires min login
+            if (meetsLoginRequirement) {
+              const pricePerOrder =
+                agentPricing.baseFare / agentPricing.minOrderNumber;
+              const calculatedEarning = pricePerOrder * appDetail.orders;
 
-            totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+              totalEarning += Math.min(calculatedEarning, agentPricing.baseFare);
+            }
           } else {
             // Non-split mode: full baseFare only when both criteria met
-            if (
-              appDetail.orders >= agentPricing.minOrderNumber &&
-              appDetail.loginDuration >= minLoginMillis
-            ) {
+            if (meetsOrderRequirement && meetsLoginRequirement) {
               totalEarning += agentPricing.baseFare;
             }
           }
 
-          // Extra orders beyond minimum (same for both modes)
-          if (appDetail.orders > agentPricing.minOrderNumber) {
-            const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
-            const earningForExtraOrders =
-              extraOrders * agentPricing.fareAfterMinOrderNumber;
+          // Extra orders/hours bonuses only when base incentive criteria are met
+          if (meetsLoginRequirement && meetsOrderRequirement) {
+            // Extra orders beyond minimum
+            if (appDetail.orders > agentPricing.minOrderNumber) {
+              const extraOrders = appDetail.orders - agentPricing.minOrderNumber;
+              const earningForExtraOrders =
+                extraOrders * (agentPricing.fareAfterMinOrderNumber || 0);
 
-            totalEarning += earningForExtraOrders;
-          }
+              totalEarning += earningForExtraOrders;
+            }
 
-          // Extra login hours beyond minimum (same for both modes)
-          const extraMillis = appDetail.loginDuration - minLoginMillis;
+            // Extra login hours beyond minimum
+            const extraMillis = appDetail.loginDuration - minLoginMillis;
 
-          if (extraMillis > 0) {
-            const extraHours = Math.floor(extraMillis / (60 * 60 * 1000));
+            if (extraMillis > 0) {
+              const extraHours = Math.floor(extraMillis / (60 * 60 * 1000));
 
-            if (extraHours >= 1) {
-              const earningForExtraHours =
-                Math.floor(extraHours) * agentPricing.fareAfterMinLoginHours;
+              if (extraHours >= 1) {
+                const earningForExtraHours =
+                  extraHours * (agentPricing.fareAfterMinLoginHours || 0);
 
-              totalEarning += earningForExtraHours;
+                totalEarning += earningForExtraHours;
+              }
             }
           }
         }
@@ -159,7 +211,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
         orders: appDetail.orders,
         pendingOrders: appDetail.pendingOrders,
         totalDistance: appDetail.totalDistance,
-        totalDistanceFromPickToDrop: totalStartToPickDistance,
+        totalDistanceFromPickToDrop: totalDistance - totalStartToPickDistance,
         cancelledOrders: appDetail.cancelledOrders,
         loginDuration: appDetail.loginDuration,
         paymentSettled: false,
@@ -178,6 +230,7 @@ const moveAppDetailToWorkHistoryAndResetForAllAgents = async () => {
           "appDetail.totalStartToPickDistance": 0,
           "appDetail.cancelledOrders": 0,
           "appDetail.loginDuration": 0,
+          "appDetail.totalHourlyFare": 0,
           "appDetail.orderDetail": [],
           loginStartTime:
             agent.status !== "Inactive" ? currentTime : agent.loginStartTime,
@@ -360,7 +413,7 @@ const calculateAgentEarnings = async (agent, order) => {
 
   if (!agentPricing) throw new Error("Agent pricing not found");
   if (agentPricing?.type.startsWith("Monthly")) {
-    return 0;
+    return { calculatedSalary: 0, calculatedSurge: 0 };
   }
 
   const distanceFromStartToPick =
@@ -377,9 +430,35 @@ const calculateAgentEarnings = async (agent, order) => {
   let surgePrice = 0;
 
   if (agentSurge) {
-    surgePrice =
-      (order?.detailAddedByAgent?.distanceCoveredByAgent ??
-        order.distance / agentSurge.baseDistance) * agentSurge.baseFare;
+    const surgeDistance =
+      order?.detailAddedByAgent?.distanceCoveredByAgent ?? order.distance;
+    surgePrice = (surgeDistance / agentSurge.baseDistance) * agentSurge.baseFare;
+  }
+
+  // Hourly pricing: baseFare + (hours × hourlyRate) based on delivery time
+  let hourlyFare = 0;
+
+  if (agentPricing?.type.startsWith("Hourly")) {
+    const taskFound = await Task.findOne({ orderId: order._id });
+    if (taskFound) {
+      const deliveryStartTime =
+        taskFound.pickupDropDetails?.[0]?.drops?.[0]?.startTime;
+      const dropCompletedTime =
+        taskFound.pickupDropDetails?.[0]?.drops?.[0]?.completedTime;
+
+      if (deliveryStartTime && dropCompletedTime) {
+        const durationInHours =
+          (new Date(dropCompletedTime) - new Date(deliveryStartTime)) /
+          (1000 * 60 * 60);
+
+        const normalizedHours =
+          durationInHours < 1 ? 1 : Math.ceil(durationInHours);
+
+        hourlyFare =
+          agentPricing.baseFare +
+          normalizedHours * (agentPricing.hourlyRate || 0);
+      }
+    }
   }
 
   let totalPurchaseFare = 0;
@@ -405,13 +484,13 @@ const calculateAgentEarnings = async (agent, order) => {
     }
   }
 
-  const totalEarnings = orderSalary;
-  const totalSurge = surgePrice + totalPurchaseFare;
+  const totalEarnings = orderSalary + totalPurchaseFare + hourlyFare;
+  const totalSurge = surgePrice;
 
-  // Use Number to ensure it's a number with two decimal places
   return {
     calculatedSalary: Number(totalEarnings?.toFixed(2)),
     calculatedSurge: Number(totalSurge?.toFixed(2)),
+    hourlyFare: Number(hourlyFare.toFixed(2)),
   };
 };
 
@@ -490,7 +569,8 @@ const updateAgentDetails = async (
   order,
   calculatedSalary,
   calculatedSurge,
-  isOrderCompleted
+  isOrderCompleted,
+  hourlyFare
 ) => {
   console.log("👉 Entering updateAgentDetails...");
 
@@ -508,6 +588,10 @@ const updateAgentDetails = async (
     order?.detailAddedByAgent?.startToPickDistance?.toFixed(2) || 0
   );
   agent.appDetail.totalSurge += parseFloat(calculatedSurge);
+
+  if (hourlyFare) {
+    agent.appDetail.totalHourlyFare += parseFloat(hourlyFare);
+  }
 
   agent.appDetail.orderDetail.push({
     orderId: order._id,
@@ -537,7 +621,7 @@ const updateAgentDetailsForBatch = async (agent, batchOrders) => {
   console.log("👉 Entering updateAgentDetailsForBatch...");
 
   // calculate salary & surge for all orders
-  const { calculatedSalary, calculatedSurge } =
+  const { calculatedSalary, calculatedSurge, hourlyFare } =
     await calculateBatchAgentEarnings(agent, batchOrders);
 
   // Increase order count
@@ -546,6 +630,10 @@ const updateAgentDetailsForBatch = async (agent, batchOrders) => {
   // Update earnings & surge
   agent.appDetail.totalEarning += calculatedSalary;
   agent.appDetail.totalSurge += calculatedSurge;
+
+  if (hourlyFare) {
+    agent.appDetail.totalHourlyFare += parseFloat(hourlyFare);
+  }
 
   let totalDistance = 0;
   let totalStartToPickDistance = 0;
@@ -593,20 +681,20 @@ const updateAgentDetailsForBatch = async (agent, batchOrders) => {
 const calculateBatchAgentEarnings = async (agent, batchOrders) => {
   let totalSalary = 0;
   let totalSurge = 0;
+  let totalHourlyFare = 0;
 
   for (const order of batchOrders) {
-    const { calculatedSalary, calculatedSurge } = await calculateAgentEarnings(
-      agent,
-      order
-    );
+    const result = await calculateAgentEarnings(agent, order);
 
-    totalSalary += calculatedSalary;
-    totalSurge += calculatedSurge;
+    totalSalary += result.calculatedSalary;
+    totalSurge += result.calculatedSurge;
+    totalHourlyFare += result.hourlyFare || 0;
   }
 
   return {
     calculatedSalary: Number(totalSalary.toFixed(2)),
     calculatedSurge: Number(totalSurge.toFixed(2)),
+    hourlyFare: Number(totalHourlyFare.toFixed(2)),
   };
 };
 

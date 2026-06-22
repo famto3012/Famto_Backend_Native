@@ -46,6 +46,10 @@ const agentPricingSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    hourlyRate: {
+      type: Number,
+      default: null,
+    },
     splitIncentive: {
       type: Boolean,
       default: true,
@@ -68,6 +72,8 @@ const agentPricingSchema = new mongoose.Schema(
         "Daily-Part-Time",
         "Monthly-Full-Time",
         "Monthly-Part-Time",
+        "Hourly-Full-Time",
+        "Hourly-Part-Time",
       ],
       required: true,
     },
