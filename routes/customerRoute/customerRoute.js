@@ -123,6 +123,7 @@ const {
   globalSearchController,
 } = require("../../controllers/customer/globalSearchController");
 const { redeemLoyaltyPointController } = require("../../controllers/admin/loyaltyPoint/loyaltyPointController");
+const { getOfferPopupController } = require("../../controllers/admin/appCustomization/offerPopupController");
 
 const customerRoute = express.Router();
 
@@ -440,6 +441,8 @@ customerRoute.post(
   isAuthenticated,
   redeemLoyaltyPointController
 );
+
+customerRoute.get("/offer-popup", getOfferPopupController);
 
 customerRoute.get("/get-cart", isAuthenticated, getCustomerCartController);
 
