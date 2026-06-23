@@ -380,32 +380,27 @@ const changeAgentStatusController = async (req, res, next) => {
     }
 
     if (agentFound.isApproved === "Pending") {
-      res.status(400).json({
+      return res.status(400).json({
         message: "Agent is not approved",
       });
-      return;
-    }
-
-    if (agentFound.status === "Busy") {
-      res.status(400).json({
-        message: "Agent can't go offline during an ongoing delivery",
-      });
-      return;
     }
 
     let description = "";
-
     const eventName = "updatedAgentStatusToggle";
 
-    if (agentFound.status === "Free") {
+    // OFFLINE (Admin can force offline even if Busy)
+    if (agentFound.status !== "Inactive") {
       agentFound.status = "Inactive";
+
       const data = { status: "Offline" };
 
-      // Set the end time when the agent goes offline
+      // Set end time
       agentFound.loginEndTime = new Date();
 
       if (agentFound.loginStartTime) {
-        const loginDuration = new Date() - new Date(agentFound.loginStartTime); // in milliseconds
+        const loginDuration =
+          new Date() - new Date(agentFound.loginStartTime);
+
         agentFound.appDetail.loginDuration += loginDuration;
       }
 
@@ -415,10 +410,14 @@ const changeAgentStatusController = async (req, res, next) => {
 
       sendSocketData(agentFound._id, eventName, data);
     } else {
-      const agentWorkTimings = agentFound.workStructure.workTimings || [];
+      const agentWorkTimings =
+        agentFound.workStructure?.workTimings || [];
+
       const nowUTC = new Date();
       const nowIST = new Date(
-        nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+        nowUTC.toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+        })
       );
 
       const objectIds = agentWorkTimings.map((id) =>
@@ -427,7 +426,11 @@ const changeAgentStatusController = async (req, res, next) => {
 
       const workTimings = await AgentAppCustomization.aggregate([
         { $unwind: "$workingTime" },
-        { $match: { "workingTime._id": { $in: objectIds } } },
+        {
+          $match: {
+            "workingTime._id": { $in: objectIds },
+          },
+        },
         {
           $project: {
             _id: "$workingTime._id",
@@ -440,8 +443,11 @@ const changeAgentStatusController = async (req, res, next) => {
       const isWithInWorkingHours = workTimings.some((workTime) => {
         const { startTime, endTime } = workTime;
 
-        const [startHour, startMinute] = startTime.split(":").map(Number);
-        const [endHour, endMinute] = endTime.split(":").map(Number);
+        const [startHour, startMinute] =
+          startTime.split(":").map(Number);
+
+        const [endHour, endMinute] =
+          endTime.split(":").map(Number);
 
         const start = new Date(nowIST);
         const end = new Date(nowIST);
@@ -458,11 +464,9 @@ const changeAgentStatusController = async (req, res, next) => {
       });
 
       if (!isWithInWorkingHours) {
-        res.status(400).json({
-          message: `Agent can go online during their working time only!`,
+        return res.status(400).json({
+          message: "Agent can go online during their working time only!",
         });
-
-        return;
       }
 
       const activeTasks = await Task.countDocuments({
@@ -476,7 +480,7 @@ const changeAgentStatusController = async (req, res, next) => {
 
       description = "Agent status changed to ONLINE from panel";
 
-      // Set the start time when the agent goes online
+      // Set start time
       agentFound.loginStartTime = new Date();
 
       sendSocketData(agentFound._id, eventName, data);
@@ -491,21 +495,152 @@ const changeAgentStatusController = async (req, res, next) => {
       }),
     ]);
 
-    let status;
-    if (agentFound.status === "Free") {
-      status = true;
-    } else {
-      status = false;
-    }
-
     res.status(200).json({
       message: "Agent status changed",
-      data: status,
+      data: agentFound.status !== "Inactive",
     });
   } catch (err) {
     next(appError(err.message));
   }
 };
+
+// const changeAgentStatusController = async (req, res, next) => {
+//   try {
+//     const { agentId } = req.params;
+
+//     const agentFound = await Agent.findById(agentId);
+
+//     if (!agentFound) {
+//       return next(appError("Agent not found", 404));
+//     }
+
+//     if (agentFound.isApproved === "Pending") {
+//       res.status(400).json({
+//         message: "Agent is not approved",
+//       });
+//       return;
+//     }
+
+//     if (agentFound.status === "Busy") {
+//       res.status(400).json({
+//         message: "Agent can't go offline during an ongoing delivery",
+//       });
+//       return;
+//     }
+
+//     let description = "";
+
+//     const eventName = "updatedAgentStatusToggle";
+
+//     if (agentFound.status === "Free") {
+//       agentFound.status = "Inactive";
+//       const data = { status: "Offline" };
+
+//       // Set the end time when the agent goes offline
+//       agentFound.loginEndTime = new Date();
+
+//       if (agentFound.loginStartTime) {
+//         const loginDuration = new Date() - new Date(agentFound.loginStartTime); // in milliseconds
+//         agentFound.appDetail.loginDuration += loginDuration;
+//       }
+
+//       description = "Agent status changed to OFFLINE from panel";
+
+//       agentFound.loginStartTime = null;
+
+//       sendSocketData(agentFound._id, eventName, data);
+//     } else {
+//       const agentWorkTimings = agentFound.workStructure.workTimings || [];
+//       const nowUTC = new Date();
+//       const nowIST = new Date(
+//         nowUTC.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+//       );
+
+//       const objectIds = agentWorkTimings.map((id) =>
+//         mongoose.Types.ObjectId.createFromHexString(id)
+//       );
+
+//       const workTimings = await AgentAppCustomization.aggregate([
+//         { $unwind: "$workingTime" },
+//         { $match: { "workingTime._id": { $in: objectIds } } },
+//         {
+//           $project: {
+//             _id: "$workingTime._id",
+//             startTime: "$workingTime.startTime",
+//             endTime: "$workingTime.endTime",
+//           },
+//         },
+//       ]);
+
+//       const isWithInWorkingHours = workTimings.some((workTime) => {
+//         const { startTime, endTime } = workTime;
+
+//         const [startHour, startMinute] = startTime.split(":").map(Number);
+//         const [endHour, endMinute] = endTime.split(":").map(Number);
+
+//         const start = new Date(nowIST);
+//         const end = new Date(nowIST);
+
+//         if (process.env.NODE_ENV === "production") {
+//           start.setUTCHours(startHour, startMinute, 0, 0);
+//           end.setUTCHours(endHour, endMinute, 0, 0);
+//         } else {
+//           start.setHours(startHour, startMinute, 0, 0);
+//           end.setHours(endHour, endMinute, 0, 0);
+//         }
+
+//         return nowIST >= start && nowIST <= end;
+//       });
+
+//       if (!isWithInWorkingHours) {
+//         res.status(400).json({
+//           message: `Agent can go online during their working time only!`,
+//         });
+
+//         return;
+//       }
+
+//       const activeTasks = await Task.countDocuments({
+//         taskStatus: "Assigned",
+//         agentId: agentFound._id,
+//       });
+
+//       agentFound.status = activeTasks > 0 ? "Busy" : "Free";
+
+//       const data = { status: "Online" };
+
+//       description = "Agent status changed to ONLINE from panel";
+
+//       // Set the start time when the agent goes online
+//       agentFound.loginStartTime = new Date();
+
+//       sendSocketData(agentFound._id, eventName, data);
+//     }
+
+//     await Promise.all([
+//       agentFound.save(),
+//       AgentActivityLog.create({
+//         agentId,
+//         date: new Date(),
+//         description,
+//       }),
+//     ]);
+
+//     let status;
+//     if (agentFound.status === "Free") {
+//       status = true;
+//     } else {
+//       status = false;
+//     }
+
+//     res.status(200).json({
+//       message: "Agent status changed",
+//       data: status,
+//     });
+//   } catch (err) {
+//     next(appError(err.message));
+//   }
+// };
 
 const approveAgentRegistrationController = async (req, res, next) => {
   try {

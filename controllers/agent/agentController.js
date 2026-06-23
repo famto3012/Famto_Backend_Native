@@ -1754,6 +1754,146 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
   }
 };
 
+// Add/update items in Home Delivery order by agent during delivery
+const addHomeDeliveryItemController = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { items } = req.body;
+    const agentId = req.userAuth;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return next(appError("Items array is required", 400));
+    }
+
+    const orderFound = await Order.findById(orderId);
+    if (!orderFound) return next(appError("Order not found", 404));
+
+    if (orderFound.deliveryMode !== "Home Delivery") {
+      return next(appError("This API is only for Home Delivery orders", 400));
+    }
+
+    if (!orderFound.agentId || orderFound.agentId.toString() !== agentId.toString()) {
+      return next(appError("Agent access denied", 403));
+    }
+
+    if (orderFound.status === "Completed" || orderFound.status === "Cancelled") {
+      return next(appError("Cannot modify a completed or cancelled order", 400));
+    }
+
+    const addedItems = [];
+
+    for (const item of items) {
+      const { productName, quantity, price } = item;
+
+      if (!productName || !quantity || quantity <= 0) {
+        return next(appError(`Invalid item: productName and quantity are required`, 400));
+      }
+
+      const itemPrice = parseFloat(price) || 0;
+
+      const newItem = {
+        productId: null,
+        variantId: null,
+        productName,
+        quantity: parseInt(quantity),
+        price: itemPrice,
+        costPrice: null,
+        variantTypeName: null,
+      };
+
+      orderFound.purchasedItems.push(newItem);
+      addedItems.push(newItem);
+    }
+
+    // Add items to drops[0].items too
+    if (orderFound.drops && orderFound.drops.length > 0) {
+      for (const addedItem of addedItems) {
+        orderFound.drops[0].items.push({
+          itemName: addedItem.productName,
+          quantity: addedItem.quantity,
+          price: addedItem.price,
+        });
+      }
+    }
+
+    // Recalculate bill
+    const itemTotal = orderFound.purchasedItems.reduce(
+      (sum, item) => sum + ((item.price || 0) * (item.quantity || 1)),
+      0
+    );
+
+    const deliveryCharge = orderFound.billDetail.deliveryCharge || 0;
+    const surgePrice = orderFound.billDetail.surgePrice || 0;
+    const addedTip = orderFound.billDetail.addedTip || 0;
+    const taxAmount = orderFound.billDetail.taxAmount || 0;
+    const discountedAmount = orderFound.billDetail.discountedAmount || 0;
+
+    const subTotal = itemTotal + deliveryCharge + surgePrice + taxAmount;
+    const grandTotal = subTotal + addedTip - discountedAmount;
+
+    orderFound.billDetail.itemTotal = parseFloat(itemTotal.toFixed(2));
+    orderFound.billDetail.subTotal = parseFloat(subTotal.toFixed(2));
+    orderFound.billDetail.grandTotal = parseFloat(grandTotal.toFixed(2));
+
+    await orderFound.save();
+
+    // Update Task items too
+    const taskFound = await Task.findOne({ orderId });
+    if (taskFound) {
+      for (const detail of taskFound.pickupDropDetails || []) {
+        for (const pickup of detail.pickups || []) {
+          for (const addedItem of addedItems) {
+            pickup.items.push({
+              itemName: addedItem.productName,
+              quantity: addedItem.quantity,
+              price: addedItem.price,
+            });
+          }
+        }
+      }
+      taskFound.markModified("pickupDropDetails");
+      await taskFound.save();
+    }
+
+    // Notify customer
+    if (orderFound.customerId) {
+      const itemNames = addedItems.map((i) => i.productName).join(", ");
+
+      const notificationData = {
+        fcm: {
+          title: "Order updated by delivery agent",
+          body: `New item(s) added: ${itemNames}. Updated total: ₹${orderFound.billDetail.grandTotal}`,
+          sendToCustomer: true,
+        },
+      };
+
+      const eventName = "orderItemsUpdatedByAgent";
+
+      await sendNotification(
+        orderFound.customerId,
+        eventName,
+        notificationData
+      );
+
+      sendSocketData(orderFound.customerId, eventName, {
+        orderId: orderFound._id,
+        addedItems,
+        billDetail: orderFound.billDetail,
+      });
+    }
+
+    res.status(200).json({
+      message: "Items added successfully",
+      data: {
+        addedItems,
+        billDetail: orderFound.billDetail,
+      },
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 // Add details by agent
 const addOrderDetailsController = async (req, res, next) => {
   try {
@@ -3082,6 +3222,7 @@ module.exports = {
   getPickUpDetailController,
   getDeliveryDetailController,
   addCustomOrderItemPriceController,
+  addHomeDeliveryItemController,
   addOrderDetailsController,
   confirmCashReceivedController,
   completeOrderController,

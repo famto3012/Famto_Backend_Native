@@ -183,6 +183,7 @@ const getReferralDetailController = async (req, res, next) => {
       customerId: referral.customerId,
       name: referral.name,
       email: referral.email,
+      phoneNumber: referral.phoneNumber,
       referralCode: referral.referralCode,
       numOfReferrals: referral.numOfReferrals,
     }));
