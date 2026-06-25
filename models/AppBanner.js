@@ -22,6 +22,11 @@ const appBannerSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ServiceCategory",
+      required: true,
+    },
     businessCategoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "BusinessCategory",
@@ -34,7 +39,7 @@ const appBannerSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const AppBanner = mongoose.model("AppBanner", appBannerSchema);
