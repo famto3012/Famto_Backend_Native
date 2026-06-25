@@ -10,11 +10,11 @@ const {
 } = require("../../utils/whatsappApi");
 const axios = require("axios");
 
-// INR rates per conversation (Meta pricing India 2024-25)
+// INR rates per delivered message (Meta pricing India 2024-25)
 const CONVERSATION_RATES = {
-  marketing: 0.88,
-  utility: 0.18,
-  authentication: 0.13,
+  marketing: 0.863,
+  utility: 0.119,
+  authentication: 0.04,
   service: 0.0,
 };
 
@@ -59,14 +59,13 @@ const getWallet = async (req, res, next) => {
       metaWabaResult,
       metaTemplatesResult,
     ] = await Promise.allSettled([
-      // This month by direction + type
+      // This month by direction + type + delivery status
       WhatsappMessage.aggregate([
         { $match: { timestamp: { $gte: startOfMonth, $lte: now } } },
         {
           $group: {
-            _id: { direction: "$direction", messageType: "$messageType" },
+            _id: { direction: "$direction", messageType: "$messageType", deliveryStatus: "$deliveryStatus" },
             count: { $sum: 1 },
-            uniqueContacts: { $addToSet: "$waId" },
           },
         },
       ]),
@@ -91,9 +90,8 @@ const getWallet = async (req, res, next) => {
         { $match: { timestamp: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
         {
           $group: {
-            _id: { direction: "$direction", messageType: "$messageType" },
+            _id: { direction: "$direction", messageType: "$messageType", deliveryStatus: "$deliveryStatus" },
             count: { $sum: 1 },
-            uniqueContacts: { $addToSet: "$waId" },
           },
         },
       ]),
@@ -107,9 +105,9 @@ const getWallet = async (req, res, next) => {
               date: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
               direction: "$direction",
               messageType: "$messageType",
+              deliveryStatus: "$deliveryStatus",
             },
             count: { $sum: 1 },
-            uniqueContacts: { $addToSet: "$waId" },
           },
         },
         { $sort: { "_id.date": 1 } },
@@ -182,83 +180,85 @@ const getWallet = async (req, res, next) => {
     const safe = (r) => (r.status === "fulfilled" ? r.value : null);
 
     const msgData = safe(msgStats) || [];
-    let outboundTemplateContacts = new Set();
-    let outboundRegularContacts = new Set();
-    let inboundContacts = new Set();
+    const DELIVERED_STATUSES = ["delivered", "read"];
+    let marketingDelivered = 0;
+    let utilityDelivered = 0;
+    let serviceDelivered = 0;
     let outboundTemplateMessages = 0;
     let outboundRegularMessages = 0;
     let totalOutbound = 0;
     let totalInbound = 0;
 
     msgData.forEach((row) => {
-      const { direction, messageType } = row._id;
+      const { direction, messageType, deliveryStatus } = row._id;
+      const isDelivered = DELIVERED_STATUSES.includes(deliveryStatus);
+
       if (direction === "outbound") {
         totalOutbound += row.count;
         if (messageType === "template") {
           outboundTemplateMessages += row.count;
-          row.uniqueContacts.forEach((c) => outboundTemplateContacts.add(c));
+          if (isDelivered) marketingDelivered += row.count;
         } else {
           outboundRegularMessages += row.count;
-          row.uniqueContacts.forEach((c) => outboundRegularContacts.add(c));
+          if (isDelivered) utilityDelivered += row.count;
         }
       } else {
-        totalOutbound; // no-op
         totalInbound += row.count;
-        row.uniqueContacts.forEach((c) => inboundContacts.add(c));
+        if (isDelivered) serviceDelivered += row.count;
       }
     });
 
-    // ── 3. Conversations & spend ─────────────────────────────
-    const marketingConversations = outboundTemplateContacts.size;
-    const utilityConversations = outboundRegularContacts.size;
-    const serviceConversations = inboundContacts.size;
-    const freeServiceConversations = Math.min(serviceConversations, 1000);
-    const paidServiceConversations = Math.max(0, serviceConversations - 1000);
+    // ── 3. Spend (based on delivered messages per category) ──
+    const freeServiceMessages = Math.min(serviceDelivered, 1000);
+    const paidServiceMessages = Math.max(0, serviceDelivered - 1000);
 
-    const marketingSpend = marketingConversations * CONVERSATION_RATES.marketing;
-    const utilitySpend = utilityConversations * CONVERSATION_RATES.utility;
-    const serviceSpend = paidServiceConversations * 0.04;
+    const marketingSpend = marketingDelivered * CONVERSATION_RATES.marketing;
+    const utilitySpend = utilityDelivered * CONVERSATION_RATES.utility;
+    const serviceSpend = paidServiceMessages * 0.04;
     const totalSpend = marketingSpend + utilitySpend + serviceSpend;
 
     // Last month
     const lastMonthData = safe(lastMonthMsgStats) || [];
     let lastOutbound = 0;
     let lastInbound = 0;
-    let lastTemplateContacts = new Set();
-    let lastRegularContacts = new Set();
+    let lastMarketingDelivered = 0;
+    let lastUtilityDelivered = 0;
 
     lastMonthData.forEach((row) => {
-      const { direction, messageType } = row._id;
+      const { direction, messageType, deliveryStatus } = row._id;
+      const isDelivered = DELIVERED_STATUSES.includes(deliveryStatus);
+
       if (direction === "outbound") {
         lastOutbound += row.count;
-        if (messageType === "template") {
-          row.uniqueContacts.forEach((c) => lastTemplateContacts.add(c));
-        } else {
-          row.uniqueContacts.forEach((c) => lastRegularContacts.add(c));
-        }
+        if (messageType === "template" && isDelivered) lastMarketingDelivered += row.count;
+        else if (isDelivered) lastUtilityDelivered += row.count;
       } else {
         lastInbound += row.count;
       }
     });
 
     const lastMonthSpend =
-      lastTemplateContacts.size * CONVERSATION_RATES.marketing +
-      lastRegularContacts.size * CONVERSATION_RATES.utility;
+      lastMarketingDelivered * CONVERSATION_RATES.marketing +
+      lastUtilityDelivered * CONVERSATION_RATES.utility;
 
     // ── 4. Daily usage chart ─────────────────────────────────
     const dailyData = safe(dailyBreakdown) || [];
     const dailyMap = {};
     dailyData.forEach((row) => {
-      const { date, direction, messageType } = row._id;
+      const { date, direction, messageType, deliveryStatus } = row._id;
+      const isDelivered = DELIVERED_STATUSES.includes(deliveryStatus);
+
       if (!dailyMap[date]) {
-        dailyMap[date] = { date, sent: 0, received: 0, templateContacts: 0, regularContacts: 0, spend: 0 };
+        dailyMap[date] = { date, sent: 0, received: 0, marketingDelivered: 0, utilityDelivered: 0, spend: 0 };
       }
       if (direction === "outbound") {
         dailyMap[date].sent += row.count;
-        if (messageType === "template") {
-          dailyMap[date].templateContacts += row.uniqueContacts.length;
-        } else {
-          dailyMap[date].regularContacts += row.uniqueContacts.length;
+        if (isDelivered) {
+          if (messageType === "template") {
+            dailyMap[date].marketingDelivered += row.count;
+          } else {
+            dailyMap[date].utilityDelivered += row.count;
+          }
         }
       } else {
         dailyMap[date].received += row.count;
@@ -267,8 +267,8 @@ const getWallet = async (req, res, next) => {
 
     const dailyUsage = Object.values(dailyMap).map((day) => {
       day.spend = parseFloat(
-        (day.templateContacts * CONVERSATION_RATES.marketing +
-          day.regularContacts * CONVERSATION_RATES.utility).toFixed(2)
+        (day.marketingDelivered * CONVERSATION_RATES.marketing +
+          day.utilityDelivered * CONVERSATION_RATES.utility).toFixed(2)
       );
       return day;
     });
@@ -347,7 +347,7 @@ const getWallet = async (req, res, next) => {
 
         thisMonth: {
           spend: parseFloat(totalSpend.toFixed(2)),
-          conversations: marketingConversations + utilityConversations + serviceConversations,
+          conversations: marketingDelivered + utilityDelivered + serviceDelivered,
           messages: { sent: totalOutbound, received: totalInbound, total: totalOutbound + totalInbound },
           periodLabel: now.toLocaleString("en-IN", { month: "long", year: "numeric" }),
           dailyUsage,
@@ -363,36 +363,36 @@ const getWallet = async (req, res, next) => {
           {
             category: "Marketing",
             rate: CONVERSATION_RATES.marketing,
-            conversations: marketingConversations,
+            conversations: marketingDelivered,
             messages: outboundTemplateMessages,
             spend: parseFloat(marketingSpend.toFixed(2)),
-            description: "Template messages sent by you",
+            description: "Template messages delivered",
             color: "violet",
           },
           {
             category: "Utility",
             rate: CONVERSATION_RATES.utility,
-            conversations: utilityConversations,
+            conversations: utilityDelivered,
             messages: outboundRegularMessages,
             spend: parseFloat(utilitySpend.toFixed(2)),
-            description: "Replies & non-template outbound",
+            description: "Non-template outbound delivered",
             color: "sky",
           },
           {
             category: "Service",
             rate: 0,
-            conversations: freeServiceConversations,
+            conversations: freeServiceMessages,
             messages: totalInbound,
             spend: 0,
             description: "Free (first 1,000/month) — customer-initiated",
             color: "emerald",
           },
-          ...(paidServiceConversations > 0
+          ...(paidServiceMessages > 0
             ? [
                 {
                   category: "Service (paid)",
                   rate: 0.04,
-                  conversations: paidServiceConversations,
+                  conversations: paidServiceMessages,
                   messages: 0,
                   spend: parseFloat(serviceSpend.toFixed(2)),
                   description: "Customer-initiated (over 1,000 free)",

@@ -41,8 +41,11 @@ const uploadToFirebase = async (file, folderName, originalQuality = false) => {
 
   let fileBuffer;
 
-  if (file?.mimetype?.startsWith("image/")) {
-    // If it's an image, process it with sharp
+  if (file?.mimetype === "image/gif") {
+    // GIFs: skip sharp to preserve animation
+    fileBuffer = file.buffer;
+  } else if (file?.mimetype?.startsWith("image/")) {
+    // Other images: process with sharp
 
     try {
       if (originalQuality) {
