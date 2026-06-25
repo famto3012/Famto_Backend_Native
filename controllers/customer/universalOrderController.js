@@ -55,7 +55,7 @@ const {
 // Get all available business categories according to the order
 const getAllBusinessCategoryController = async (req, res, next) => {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, serviceId } = req.body;
 
     if (!latitude || !longitude)
       return next(appError("Latitude & Longitude are required", 400));
@@ -69,20 +69,27 @@ const getAllBusinessCategoryController = async (req, res, next) => {
       query.geofenceId = { $in: [geofence._id] };
     }
 
+        // Filter by service
+    if (serviceId) {
+      query.serviceId = serviceId;
+    }
+
     const allBusinessCategories = await BusinessCategory.find(query)
-      .select("title bannerImageURL")
+      .select("title bannerImageURL serviceId")
       .sort({ order: 1 });
 
     const formattedResponse = allBusinessCategories?.map((category) => ({
       id: category._id,
       title: category.title,
       bannerImageURL: category.bannerImageURL,
+      serviceId: category.serviceId,
     }));
 
     res.status(200).json({
       outside: !geofence,
       data: formattedResponse,
     });
+    console.log(formattedResponse);
   } catch (err) {
     next(appError(err.message));
   }
@@ -1853,6 +1860,7 @@ const confirmOrderDetailController = async (req, res, next) => {
   try {
     const {
       businessCategoryId,
+      serviceId,
       deliveryAddressType,
       deliveryAddressOtherAddressId,
       newDeliveryAddress,
@@ -1981,6 +1989,7 @@ const confirmOrderDetailController = async (req, res, next) => {
         customerId: customer._id,
         merchantId: merchant._id,
         businessCategoryId: businessCategoryId,
+        serviceId: serviceId,
         items: cart.items,
         cartDetail: {
           ...req.body,

@@ -14,6 +14,7 @@ const addBusinessCategoryController = async (req, res, next) => {
   const {
     title,
     geofenceId,
+    serviceId,
     increasedPercentage,
     merchantFilters,
     productFilters,
@@ -43,13 +44,14 @@ const addBusinessCategoryController = async (req, res, next) => {
     if (req.file) {
       bannerImageURL = await uploadToFirebase(
         req.file,
-        "BusinessCategoryImages"
+        "BusinessCategoryImages",
       );
     }
 
     const newBusinessCategory = await BusinessCategory.create({
       title,
       geofenceId,
+      serviceId,
       bannerImageURL,
       order: newOrder,
       increasedPercentage,
@@ -79,12 +81,15 @@ const getAllBusinessCategoryController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const allBusinessCategories = await BusinessCategory.find(filter).sort({ order: 1 }).lean();
+    const allBusinessCategories = await BusinessCategory.find(filter)
+      .sort({ order: 1 })
+      .lean();
 
     const formattedResponse = allBusinessCategories?.map((category) => {
       return {
         _id: category._id,
         title: category.title,
+        serviceId: category.serviceId,
         bannerImageURL: category.bannerImageURL,
         increasedPercentage: category.increasedPercentage,
         status: category.status,
@@ -106,7 +111,7 @@ const getAllBusinessCategoryController = async (req, res, next) => {
 const getSingleBusinessCategoryController = async (req, res, next) => {
   try {
     const businessCategory = await BusinessCategory.findById(
-      req.params.businessCategoryId
+      req.params.businessCategoryId,
     ).lean();
 
     if (!businessCategory) {
@@ -117,6 +122,7 @@ const getSingleBusinessCategoryController = async (req, res, next) => {
       _id: businessCategory._id,
       title: businessCategory.title,
       geofenceId: businessCategory?.geofenceId,
+      serviceId: businessCategory.serviceId,
       increasedPercentage: businessCategory.increasedPercentage,
       bannerImageURL: businessCategory.bannerImageURL,
       merchantFilters: businessCategory.merchantFilters,
@@ -138,6 +144,7 @@ const editBusinessCategoryController = async (req, res, next) => {
   const {
     title,
     geofenceId,
+    serviceId,
     increasedPercentage,
     merchantFilters,
     productFilters,
@@ -157,7 +164,7 @@ const editBusinessCategoryController = async (req, res, next) => {
 
   try {
     const businessCategoryFound = await BusinessCategory.findById(
-      req.params.businessCategoryId
+      req.params.businessCategoryId,
     );
 
     if (!businessCategoryFound)
@@ -173,7 +180,7 @@ const editBusinessCategoryController = async (req, res, next) => {
 
       bannerImageURL = await uploadToFirebase(
         req.file,
-        "BusinessCategoryImages"
+        "BusinessCategoryImages",
       );
     }
 
@@ -185,6 +192,7 @@ const editBusinessCategoryController = async (req, res, next) => {
       {
         title,
         geofenceId,
+        serviceId,
         bannerImageURL,
         order,
         increasedPercentage,
@@ -194,7 +202,7 @@ const editBusinessCategoryController = async (req, res, next) => {
         imageDisplayType,
         hasFoodType: hasFoodType === "true" || hasFoodType === true,
       },
-      { new: true }
+      { new: true },
     );
 
     // If the price percentage changed, recalculate all product prices
@@ -211,7 +219,7 @@ const editBusinessCategoryController = async (req, res, next) => {
 
       const bulkOps = products.map((product) => {
         const newPrice = Math.round(
-          product.costPrice * (1 + newPercentage / 100)
+          product.costPrice * (1 + newPercentage / 100),
         );
 
         const updatedVariants = product.variants.map((variant) => ({
@@ -252,7 +260,7 @@ const editBusinessCategoryController = async (req, res, next) => {
 const deleteBusinessCategoryController = async (req, res, next) => {
   try {
     const businessCategoryFound = await BusinessCategory.findById(
-      req.params.businessCategoryId
+      req.params.businessCategoryId,
     );
 
     if (!businessCategoryFound) {
@@ -273,7 +281,7 @@ const deleteBusinessCategoryController = async (req, res, next) => {
 const enableOrDisableBusinessCategoryController = async (req, res, next) => {
   try {
     const businessCategoryFound = await BusinessCategory.findById(
-      req.params.businessCategoryId
+      req.params.businessCategoryId,
     );
 
     if (!businessCategoryFound)
@@ -302,7 +310,7 @@ const updateBusinessCategoryOrderController = async (req, res, next) => {
           filter: { _id: category.id },
           update: { $set: { order: category.order } },
         },
-      }))
+      })),
     );
 
     res.status(200).json({

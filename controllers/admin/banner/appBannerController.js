@@ -20,7 +20,7 @@ const addAppBannerController = async (req, res, next) => {
   }
 
   try {
-    const { name, merchantId, geofenceId, businessCategoryId } = req.body;
+    const { name, merchantId, geofenceId, businessCategoryId, serviceId } = req.body;
 
     let imageUrl = "";
     if (req.file) {
@@ -39,9 +39,11 @@ const addAppBannerController = async (req, res, next) => {
       imageUrl,
       merchantId,
       businessCategoryId,
+      serviceId
     });
 
     newAppBanner = await newAppBanner.populate("geofenceId", "name");
+    newAppBanner = await newAppBanner.populate("serviceId", "title");
 
     res.status(201).json({
       success: "App Banner created successfully",
@@ -55,7 +57,7 @@ const addAppBannerController = async (req, res, next) => {
 const editAppBannerController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, merchantId, geofenceId, businessCategoryId } = req.body;
+    const { name, merchantId, geofenceId, businessCategoryId, serviceId } = req.body;
 
     const appBanner = await AppBanner.findById(id);
 
@@ -85,6 +87,7 @@ const editAppBannerController = async (req, res, next) => {
         imageUrl, // Only update imageUrl if a new file is uploaded
         merchantId,
         geofenceId,
+        serviceId,
         businessCategoryId,
       },
       { new: true }
@@ -95,6 +98,7 @@ const editAppBannerController = async (req, res, next) => {
     }
 
     updatedAppBanner = await updatedAppBanner.populate("geofenceId", "name");
+    updatedAppBanner = await updatedAppBanner.populate("serviceId", "title");
 
     res.status(200).json({
       message: "App Banner updated successfully!",
@@ -112,7 +116,8 @@ const getAllAppBannersController = async (req, res, next) => {
         ? { geofenceId: { $in: req.geofenceId } }
         : {};
 
-    const appBanners = await AppBanner.find(filter).populate("geofenceId", "name").lean();
+    const appBanners = await AppBanner.find(filter).populate("geofenceId", "name").populate("serviceId", "title").lean();
+    
 
     res.status(200).json({
       success: true,

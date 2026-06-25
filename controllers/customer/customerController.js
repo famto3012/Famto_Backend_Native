@@ -52,7 +52,6 @@ const { sendNotification, sendSocketData } = require("../../socket/socket");
 const Task = require("../../models/Task");
 const { sendWelcomeMessage } = require("../../utils/whatsappApi");
 
-
 //For OTP Services -- SMS Provider 2factor.in
 
 const sendOtp = async (req, res) => {
@@ -122,8 +121,7 @@ const registerAndLoginController = async (req, res, next) => {
     if (customer && referralCode) {
       return res.status(400).json({
         success: false,
-        message:
-          "You are already a registered customer",
+        message: "You are already a registered customer",
       });
     }
 
@@ -172,11 +170,8 @@ const registerAndLoginController = async (req, res, next) => {
       }
 
       // Send welcome WhatsApp message (non-blocking)
-      sendWelcomeMessage(
-        phoneNumber,
-        customer?.fullName || ""
-      ).catch((err) =>
-        console.error("[WhatsApp] Welcome message error:", err.message)
+      sendWelcomeMessage(phoneNumber, customer?.fullName || "").catch((err) =>
+        console.error("[WhatsApp] Welcome message error:", err.message),
       );
     }
 
@@ -1261,7 +1256,7 @@ const getCustomerCartController = async (req, res, next) => {
       .populate({
         path: "items.productId",
         select:
-          "productName productImageURL description variants businessCategoryId",
+          "productName productImageURL description variants businessCategoryId serviceId",
       })
       .exec();
 
@@ -1308,6 +1303,8 @@ const getCustomerCartController = async (req, res, next) => {
         merchantId: populatedCartWithVariantNames?.merchantId || null,
         businessCategoryId:
           populatedCartWithVariantNames?.businessCategoryId || null,
+        serviceId: populatedCartWithVariantNames?.serviceId || null,
+
         items: populatedCartWithVariantNames?.items || [],
         deliveryOption:
           populatedCartWithVariantNames?.cartDetail?.deliveryOption || null,
@@ -1339,6 +1336,7 @@ const getSplashScreenImageController = async (req, res, next) => {
 const getCustomerAppBannerController = async (req, res, next) => {
   try {
     const customerId = req?.userAuth;
+    const { serviceId } = req.query;
 
     let matchCriteria = { status: true };
 
@@ -1350,8 +1348,13 @@ const getCustomerAppBannerController = async (req, res, next) => {
       matchCriteria.geofenceId = customer?.customerDetails?.geofenceId;
     }
 
+    // Filter by serviceId
+    if (serviceId) {
+      matchCriteria.serviceId = serviceId;
+    }
+
     const allBanners = await AppBanner.find(matchCriteria).select(
-      "name imageUrl businessCategoryId merchantId",
+      "name imageUrl businessCategoryId merchantId serviceId",
     );
 
     const formattedResponse = await Promise.all(
@@ -1365,6 +1368,7 @@ const getCustomerAppBannerController = async (req, res, next) => {
           imageUrl: banner.imageUrl,
           businessCategoryId: banner.businessCategoryId,
           merchantId: banner.merchantId,
+          serviceId: banner.serviceId,
           merchantName: merchant?.merchantDetail?.merchantName || "",
         };
       }),
@@ -1446,6 +1450,7 @@ const getAvailableServiceController = async (req, res, next) => {
 
     const formattedResponse = availableServices?.map((service) => {
       return {
+        id: service._id,
         title: service.title,
         bannerImageURL: service.bannerImageURL,
       };
