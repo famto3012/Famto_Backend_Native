@@ -70,7 +70,7 @@ const getAllBusinessCategoryController = async (req, res, next) => {
       query.geofenceId = { $in: [geofence._id] };
     }
 
-        // Filter by service
+    // Filter by service
     if (serviceId) {
       query.serviceId = serviceId;
     }
@@ -139,7 +139,13 @@ const homeSearchController = async (req, res, next) => {
 
 // ─── Shared helper: build full 7-day week availability for a merchant ────────
 const WEEK_DAYS = [
-  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
 ];
 
 const _to12Hour = (timeStr) => {
@@ -171,13 +177,34 @@ const buildMerchantWeekAvailability = (availability) => {
   const week = WEEK_DAYS.map((day) => {
     const d = availability.specificDays?.[day];
     if (!d) {
-      return { day, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+      return {
+        day,
+        status: "Unavailable",
+        openAllDay: false,
+        closedAllDay: true,
+        startTime: null,
+        endTime: null,
+      };
     }
     if (d.openAllDay) {
-      return { day, status: "Open all day", openAllDay: true, closedAllDay: false, startTime: null, endTime: null };
+      return {
+        day,
+        status: "Open all day",
+        openAllDay: true,
+        closedAllDay: false,
+        startTime: null,
+        endTime: null,
+      };
     }
     if (d.closedAllDay) {
-      return { day, status: "Closed", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+      return {
+        day,
+        status: "Closed",
+        openAllDay: false,
+        closedAllDay: true,
+        startTime: null,
+        endTime: null,
+      };
     }
     const hasTime = d.startTime && d.endTime;
     if (hasTime) {
@@ -192,12 +219,19 @@ const buildMerchantWeekAvailability = (availability) => {
         endTime24: d.endTime,
       };
     }
-    return { day, status: "Unavailable", openAllDay: false, closedAllDay: true, startTime: null, endTime: null };
+    return {
+      day,
+      status: "Unavailable",
+      openAllDay: false,
+      closedAllDay: true,
+      startTime: null,
+      endTime: null,
+    };
   });
 
   // Rotate so today is index 0
   const todayIndex = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }),
   ).getDay();
 
   return {
@@ -257,11 +291,12 @@ const listRestaurantsController = async (req, res, next) => {
     const filteredMerchants = merchants?.filter((merchant) => {
       const servingRadius = merchant.merchantDetail.servingRadius || 0;
       if (servingRadius > 0) {
-        const merchantLocation = merchant.merchantDetail.geoLocation.coordinates;
+        const merchantLocation =
+          merchant.merchantDetail.geoLocation.coordinates;
         const distance = turf.distance(
           turf.point(merchantLocation),
           turf.point(customerLocation),
-          { units: "kilometers" }
+          { units: "kilometers" },
         );
         return distance <= servingRadius;
       }
@@ -290,10 +325,10 @@ const listRestaurantsController = async (req, res, next) => {
           preOrderStatus: merchant?.merchantDetail?.preOrderStatus,
           isFavorite:
             currentCustomer?.customerDetails?.favoriteMerchants?.some(
-              (favorite) => favorite?.merchantId === merchant?._id
+              (favorite) => favorite?.merchantId === merchant?._id,
             ) ?? false,
         };
-      })
+      }),
     );
 
     res.status(200).json(simplifiedMerchants);
@@ -372,7 +407,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
     const allProducts = await Product.find(matchCriteria)
       .populate(
         "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
       )
       .sort({ order: 1 })
       .skip(skip)
@@ -410,7 +445,7 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
 
       const isFavorite =
         currentCustomer?.customerDetails?.favoriteProducts?.some(
-          (fav) => fav.toString() === product._id.toString()
+          (fav) => fav.toString() === product._id.toString(),
         ) ?? false;
 
       return {
@@ -449,128 +484,85 @@ const getAllProductsOfMerchantController = async (req, res, next) => {
 // Get merchant data
 const getMerchantData = async (req, res, next) => {
   try {
-    const { merchantId, latitude, longitude } =
-      req.query;
+    const { merchantId, latitude, longitude } = req.query;
 
     const customerId = req.userAuth;
 
-    const [merchantFound, customerFound] =
-      await Promise.all([
-        Merchant.findById(merchantId),
-        Customer.findById(customerId),
-      ]);
+    const [merchantFound, customerFound] = await Promise.all([
+      Merchant.findById(merchantId),
+      Customer.findById(customerId),
+    ]);
 
     if (!merchantFound) {
-      return next(
-        appError("Merchant not found", 404)
-      );
+      return next(appError("Merchant not found", 404));
     }
 
     if (customerId && !customerFound) {
-      return next(
-        appError("Customer not found", 404)
-      );
+      return next(appError("Customer not found", 404));
     }
 
     let distanceInKM = null;
 
     console.log("Lat Lng", latitude, longitude);
 
-    const geo =
-      merchantFound?.merchantDetail
-        ?.geoLocation?.coordinates;
+    const geo = merchantFound?.merchantDetail?.geoLocation?.coordinates;
 
     console.log("merchant geo raw", geo);
 
     if (latitude && longitude) {
-      if (
-        Array.isArray(geo) &&
-        geo.length === 2
-      ) {
+      if (Array.isArray(geo) && geo.length === 2) {
         // 🔥 FIX: convert [lng, lat] → [lat, lng]
-        const merchantLocation = [
-          geo[1],
-          geo[0],
-        ];
+        const merchantLocation = [geo[1], geo[0]];
 
-        const customerLocation = [
-          Number(latitude),
-          Number(longitude),
-        ];
+        const customerLocation = [Number(latitude), Number(longitude)];
 
-        const distance =
-          await getDistanceFromPickupToDelivery(
-            merchantLocation,
-            customerLocation
-          );
+        const distance = await getDistanceFromPickupToDelivery(
+          merchantLocation,
+          customerLocation,
+        );
 
         console.log("distance", distance);
 
-        distanceInKM =
-          distance?.distanceInKM ?? null;
+        distanceInKM = distance?.distanceInKM ?? null;
       }
     }
 
     console.log("Distance", distanceInKM);
 
-    const distanceWarning =
-      distanceInKM > 12;
+    const distanceWarning = distanceInKM > 12;
 
-    const isFavourite =
-      customerFound?.customerDetails
-        ?.favoriteMerchants?.some(
-          (fav) =>
-            fav.merchantId?.toString() ===
-            merchantFound._id.toString()
-        );
+    const isFavourite = customerFound?.customerDetails?.favoriteMerchants?.some(
+      (fav) => fav.merchantId?.toString() === merchantFound._id.toString(),
+    );
 
     return res.status(200).json({
-      merchantName:
-        merchantFound.merchantDetail
-          ?.merchantName,
+      merchantName: merchantFound.merchantDetail?.merchantName,
 
       distanceInKM,
 
-      deliveryTime:
-        merchantFound.merchantDetail
-          ?.deliveryTime || null,
+      deliveryTime: merchantFound.merchantDetail?.deliveryTime || null,
 
-      description:
-        merchantFound.merchantDetail
-          ?.description || null,
+      description: merchantFound.merchantDetail?.description || null,
 
-      displayAddress:
-        merchantFound.merchantDetail
-          ?.displayAddress || null,
+      displayAddress: merchantFound.merchantDetail?.displayAddress || null,
 
-      preOrderStatus:
-        merchantFound.merchantDetail
-          ?.preOrderStatus || false,
+      preOrderStatus: merchantFound.merchantDetail?.preOrderStatus || false,
 
-      rating:
-        merchantFound.merchantDetail
-          ?.averageRating || 0,
+      rating: merchantFound.merchantDetail?.averageRating || 0,
 
-      phoneNumber:
-        merchantFound.phoneNumber,
+      phoneNumber: merchantFound.phoneNumber,
 
-      fssaiNumber:
-        merchantFound.merchantDetail
-          ?.FSSAINumber || null,
+      fssaiNumber: merchantFound.merchantDetail?.FSSAINumber || null,
 
       isFavourite: !!isFavourite,
 
       distanceWarning,
 
-      merchantImage:
-        merchantFound.merchantDetail
-          ?.merchantImageURL || null,
+      merchantImage: merchantFound.merchantDetail?.merchantImageURL || null,
     });
   } catch (err) {
     console.error(err);
-    return next(
-      appError(err.message || "Server error")
-    );
+    return next(appError(err.message || "Server error"));
   }
 };
 
@@ -582,7 +574,7 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
     const product = await Product.findById(productId)
       .populate(
         "discountId",
-        "discountType discountValue maxAmount status validFrom validTo onAddOn"
+        "discountType discountValue maxAmount status validFrom validTo onAddOn",
       )
       .exec();
 
@@ -625,12 +617,12 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
                 }
                 variantDiscountPrice = Math.max(
                   0,
-                  variantType.price - discountAmount
+                  variantType.price - discountAmount,
                 );
               } else if (discount.discountType === "Flat-discount") {
                 variantDiscountPrice = Math.max(
                   0,
-                  variantType.price - discount.discountValue
+                  variantType.price - discount.discountValue,
                 );
               }
 
@@ -638,7 +630,7 @@ const getProductVariantsByProductIdController = async (req, res, next) => {
                 ...variantType._doc,
                 discountPrice: Number(variantDiscountPrice.toFixed(2)),
               };
-            }
+            },
           );
           return {
             ...variant._doc,
@@ -834,7 +826,6 @@ const distanceCache = {};
 //   }
 // };
 
-
 // OPTIONAL: const redis = require("../config/redis");
 
 const filterAndSearchMerchantController = async (req, res, next) => {
@@ -861,7 +852,11 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     latitude = Number(latitude);
     longitude = Number(longitude);
 
-    if (!businessCategoryId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    if (
+      !businessCategoryId ||
+      Number.isNaN(latitude) ||
+      Number.isNaN(longitude)
+    ) {
       return next(appError("Invalid input parameters", 400));
     }
 
@@ -961,11 +956,7 @@ const filterAndSearchMerchantController = async (req, res, next) => {
       {
         $addFields: {
           priorityMerchant: {
-            $cond: [
-              merchantId ? { $eq: ["$_id", merchantId] } : false,
-              1,
-              0,
-            ],
+            $cond: [merchantId ? { $eq: ["$_id", merchantId] } : false, 1, 0],
           },
           isSponsored: {
             $cond: [
@@ -1033,7 +1024,9 @@ const filterAndSearchMerchantController = async (req, res, next) => {
     // =====================================
 
     const merchants = await Merchant.aggregate(pipeline);
-    console.log(`API TIME: ${Date.now() - startTime}ms | Results: ${merchants.length}`);
+    console.log(
+      `API TIME: ${Date.now() - startTime}ms | Results: ${merchants.length}`,
+    );
 
     console.log("API TIME:", Date.now() - startTime, "ms");
 
@@ -1063,7 +1056,6 @@ const filterAndSearchMerchantController = async (req, res, next) => {
   }
 };
 
-
 // GET /customers/products/often-bought-together/:productId
 const getOftenBoughtTogetherController = async (req, res, next) => {
   try {
@@ -1077,7 +1069,7 @@ const getOftenBoughtTogetherController = async (req, res, next) => {
     if (!product) return next(appError("Product not found", 404));
 
     let partnerIds = (product.oftenBoughtTogetherId || []).map((id) =>
-      id.toString()
+      id.toString(),
     );
 
     // 2. If the pre-computed list is empty, compute in real-time from orders
@@ -1094,19 +1086,17 @@ const getOftenBoughtTogetherController = async (req, res, next) => {
 
     const products = await Product.find({ _id: { $in: partnerIds } })
       .select(
-        "_id productName price description productImageURL inventory variants discountId type"
+        "_id productName price description productImageURL inventory variants discountId type",
       )
       .populate(
         "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
       )
       .lean();
 
     // 4. Sort response to match the ranked order from partnerIds
     const productMap = new Map(products.map((p) => [p._id.toString(), p]));
-    const ordered = partnerIds
-      .map((id) => productMap.get(id))
-      .filter(Boolean);
+    const ordered = partnerIds.map((id) => productMap.get(id)).filter(Boolean);
 
     // 5. Format response — same shape as other product list endpoints
     const formatted = ordered.map((p) => {
@@ -1123,7 +1113,7 @@ const getOftenBoughtTogetherController = async (req, res, next) => {
           const reduction = (p.price * discount.discountValue) / 100;
           discountedPrice = Math.max(
             0,
-            p.price - Math.min(reduction, discount.maxAmount || Infinity)
+            p.price - Math.min(reduction, discount.maxAmount || Infinity),
           );
         } else if (discount.discountType === "Fixed") {
           discountedPrice = Math.max(0, p.price - discount.discountValue);
@@ -1187,10 +1177,10 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     })
       .populate(
         "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
       )
       .select(
-        "_id productName price description discountId productImageURL inventory variants"
+        "_id productName price description discountId productImageURL inventory variants",
       )
       .sort({ order: 1 });
 
@@ -1234,11 +1224,11 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
                   if (discountAmount > discount.maxAmount)
                     discountAmount = discount.maxAmount;
                   variantDiscountPrice = Math.round(
-                    Math.max(0, variantType.price - discountAmount)
+                    Math.max(0, variantType.price - discountAmount),
                   );
                 } else if (discount.discountType === "Flat-discount") {
                   variantDiscountPrice = Math.round(
-                    Math.max(0, variantType.price - discount.discountValue)
+                    Math.max(0, variantType.price - discount.discountValue),
                   );
                 }
 
@@ -1258,11 +1248,11 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
             if (discountAmount > discount.maxAmount)
               discountAmount = discount.maxAmount;
             discountPrice = Math.round(
-              Math.max(0, product.price - discountAmount)
+              Math.max(0, product.price - discountAmount),
             );
           } else if (discount.discountType === "Flat-discount") {
             discountPrice = Math.round(
-              Math.max(0, product.price - discount.discountValue)
+              Math.max(0, product.price - discount.discountValue),
             );
           }
         }
@@ -1353,11 +1343,11 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
     // Fetch the filtered and sorted products
     const products = await Product.find(query)
       .select(
-        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId"
+        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId",
       )
       .populate(
         "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status"
+        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
       )
       .sort(sortObj);
 
@@ -1397,7 +1387,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
         maxQuantityPerOrder: product.maxQuantityPerOrder || null,
         isFavorite:
           currentCustomer?.customerDetails?.favoriteProducts?.includes(
-            product._id
+            product._id,
           ) ?? false,
         preparationTime: product?.preparationTime
           ? `${product.preparationTime} min`
@@ -1467,8 +1457,8 @@ const toggleProductFavoriteController = async (req, res, next) => {
 
     let favoriteProducts = new Set(
       currentCustomer.customerDetails.favoriteProducts.map((fav) =>
-        fav.toString()
-      )
+        fav.toString(),
+      ),
     );
 
     if (favoriteProducts.has(productId)) {
@@ -1520,8 +1510,8 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
         JSON.stringify({
           merchantId: fav.merchantId.toString(),
           businessCategoryId: fav.businessCategoryId.toString(),
-        })
-      )
+        }),
+      ),
     );
 
     const merchantKey = JSON.stringify({ merchantId, businessCategoryId });
@@ -1544,7 +1534,7 @@ const toggleMerchantFavoriteController = async (req, res, next) => {
 
     // Convert Set back to array and update database
     currentCustomer.customerDetails.favoriteMerchants = Array.from(
-      favoriteMerchants
+      favoriteMerchants,
     ).map((fav) => JSON.parse(fav));
 
     await currentCustomer.save();
@@ -1609,7 +1599,7 @@ const addOrUpdateCartItemController = async (req, res, next) => {
     }
 
     const product = await Product.findById(productId).populate(
-      "categoryId discountId"
+      "categoryId discountId",
     );
 
     if (!product) {
@@ -1633,7 +1623,7 @@ const addOrUpdateCartItemController = async (req, res, next) => {
 
     const { discountPrice, variantsWithDiscount } = calculateDiscountedPrice(
       product,
-      variantTypeId
+      variantTypeId,
     );
 
     let finalPrice = discountPrice;
@@ -1664,7 +1654,7 @@ const addOrUpdateCartItemController = async (req, res, next) => {
         ((variantTypeId &&
           item.variantTypeId &&
           item.variantTypeId.equals(variantTypeId)) ||
-          (!variantTypeId && !item.variantTypeId))
+          (!variantTypeId && !item.variantTypeId)),
     );
 
     if (existingItemIndex >= 0) {
@@ -1691,7 +1681,7 @@ const addOrUpdateCartItemController = async (req, res, next) => {
     // Calculate the itemTotal ensuring no NaN values
     cart.itemTotal = cart.items.reduce(
       (total, item) => total + item.price * item.quantity,
-      0
+      0,
     );
 
     await cart.save();
@@ -1740,7 +1730,7 @@ const addOrUpdateCartItemController = async (req, res, next) => {
           },
           variantTypeId: variantTypeData,
         };
-      }
+      },
     );
 
     res.status(200).json({
@@ -1783,7 +1773,7 @@ const addItemsToCart = async (req, res, next) => {
       {
         $set: { merchantId, items: formattedItems },
       },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
 
     res.status(200).json({
@@ -1811,7 +1801,7 @@ const getProductsWithVariantsInCart = async (req, res, next) => {
 
     // Find the specific product from the cart
     const cartItems = cart.items.filter(
-      (item) => item.productId._id.toString() === productId
+      (item) => item.productId._id.toString() === productId,
     );
 
     if (!cartItems.length) {
@@ -1828,7 +1818,7 @@ const getProductsWithVariantsInCart = async (req, res, next) => {
           .flatMap((variant) => variant.variantTypes)
           .find(
             (vType) =>
-              vType._id.toString() === cartItem.variantTypeId?.toString()
+              vType._id.toString() === cartItem.variantTypeId?.toString(),
           )?.typeName || null;
 
       return {
@@ -1882,12 +1872,11 @@ const confirmOrderDetailController = async (req, res, next) => {
       isSuperMarketOrder = false,
     } = req.body;
 
-
     console.log("PRESCRIPTION", req.body);
 
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
-      next
+      next,
     );
 
     console.log(req.body);
@@ -1904,8 +1893,11 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
 
-    const { voiceInstructionToMerchantURL, voiceInstructionToAgentURL, prescriptionURL } =
-      await processVoiceInstructions(req, cart, next);
+    const {
+      voiceInstructionToMerchantURL,
+      voiceInstructionToAgentURL,
+      prescriptionURL,
+    } = await processVoiceInstructions(req, cart, next);
 
     console.log("[prescription URL]", prescriptionURL);
 
@@ -1921,7 +1913,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       merchant,
       deliveryAddressType,
       deliveryAddressOtherAddressId,
-      newDeliveryAddress
+      newDeliveryAddress,
     );
 
     const cartItems = cart.items;
@@ -1954,7 +1946,7 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const loyaltyDiscount = await getDiscountAmountFromLoyalty(
       customer,
-      itemTotal
+      itemTotal,
     );
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
@@ -1965,7 +1957,7 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     if (subscriptionOfCustomer?.length > 0) {
       const subscriptionLog = await SubscriptionLog.findById(
-        subscriptionOfCustomer[0]
+        subscriptionOfCustomer[0],
       );
 
       if (subscriptionLog) {
@@ -1991,7 +1983,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       discountTotal,
       taxAmount || 0,
       cart?.billDetail?.addedTip || 0,
-      returnCharge || 0
+      returnCharge || 0,
     );
 
     const customerCart = await CustomerCart.findOneAndUpdate(
@@ -2027,7 +2019,7 @@ const confirmOrderDetailController = async (req, res, next) => {
         // Persist prescription URL so orderPaymentController can read it from cart
         ...(prescriptionURL && { prescription: prescriptionURL }),
       },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
 
     res.status(200).json({
@@ -2047,7 +2039,7 @@ const getCartBillController = async (req, res, next) => {
     const { cartId } = req.query;
 
     const cartFound = await CustomerCart.findById(cartId).select(
-      "billDetail merchantId"
+      "billDetail merchantId",
     );
 
     res.status(200).json({
@@ -2089,7 +2081,7 @@ const orderPaymentController = async (req, res, next) => {
 
     const deliveryTimeMinutes = parseInt(
       merchant.merchantDetail.deliveryTime,
-      10
+      10,
     );
 
     const deliveryTime = new Date();
@@ -2135,7 +2127,7 @@ const orderPaymentController = async (req, res, next) => {
       });
 
     const purchasedItems = await filterProductIdAndQuantity(
-      populatedCartWithVariantNames.items
+      populatedCartWithVariantNames.items,
     );
 
     let formattedItems = populatedCartWithVariantNames.items.map((items) => {
@@ -2196,8 +2188,7 @@ const orderPaymentController = async (req, res, next) => {
         location: cart.cartDetail.deliveryLocation,
         address: cart.cartDetail.deliveryAddress,
         instructionInDrop: cart.cartDetail.instructionToDeliveryAgent,
-        voiceInstructionInDrop:
-          cart.cartDetail.voiceInstructionToDeliveryAgent,
+        voiceInstructionInDrop: cart.cartDetail.voiceInstructionToDeliveryAgent,
         items: formattedItems,
       },
     ];
@@ -2213,7 +2204,7 @@ const orderPaymentController = async (req, res, next) => {
 
       // Deduct the amount from wallet
       customer.customerDetails.walletBalance = Number(
-        (customer.customerDetails.walletBalance - orderAmount).toFixed(2)
+        (customer.customerDetails.walletBalance - orderAmount).toFixed(2),
       );
 
       if (cart.cartDetail.deliveryOption === "Scheduled") {
@@ -2246,7 +2237,7 @@ const orderPaymentController = async (req, res, next) => {
         await Promise.all([
           PromoCode.findOneAndUpdate(
             { promoCode: newOrderCreated.billDetail.promoCodeUsed },
-            { $inc: { noOfUserUsed: 1 } }
+            { $inc: { noOfUserUsed: 1 } },
           ),
           customer.save(),
           CustomerCart.deleteOne({ customerId }),
@@ -2255,14 +2246,16 @@ const orderPaymentController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Scheduled order (#${newOrderCreated._id
-              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
-              } )`,
+            description: `Scheduled order (#${
+              newOrderCreated._id
+            }) from customer app by ${req?.userName || "N/A"} ( ${
+              req.userAuth
+            } )`,
           }),
         ]);
 
         newOrder = await ScheduledOrder.findById(newOrderCreated._id).populate(
-          "merchantId"
+          "merchantId",
         );
 
         const eventName = "newOrderCreated";
@@ -2387,10 +2380,11 @@ const orderPaymentController = async (req, res, next) => {
       }
     } else if (paymentMode === "Cash-on-delivery") {
       if (cart.cartDetail.deliveryOption === "Scheduled") {
-        return res.status(400).json({
-          success: false,
-          message: "Scheduled orders cannot be paid through Cash on delivery",
-        });
+        console.log(paymentMode);
+        // return res.status(400).json({
+        //   success: false,
+        //   message: "Scheduled orders cannot be paid through Cash on delivery",
+        // });
       }
 
       // Generate a unique order ID
@@ -2442,8 +2436,11 @@ const orderPaymentController = async (req, res, next) => {
       // NOTE: Cron worker (index.js) creates the final Order after expiresAt
       // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
     } else if (paymentMode === "Online-payment") {
-      const { success, orderId: razorpayOrderId, error } =
-        await createRazorpayOrderId(orderAmount);
+      const {
+        success,
+        orderId: razorpayOrderId,
+        error,
+      } = await createRazorpayOrderId(orderAmount);
 
       if (!success) {
         return next(appError(error, 500));
@@ -2463,8 +2460,12 @@ const orderPaymentController = async (req, res, next) => {
         billDetail: orderBill,
         distance: cart.cartDetail.distance,
         deliveryTime,
-        startDate: cart.cartDetail.startDate ? new Date(cart.cartDetail.startDate) : null,
-        endDate: cart.cartDetail.endDate ? new Date(cart.cartDetail.endDate) : null,
+        startDate: cart.cartDetail.startDate
+          ? new Date(cart.cartDetail.startDate)
+          : null,
+        endDate: cart.cartDetail.endDate
+          ? new Date(cart.cartDetail.endDate)
+          : null,
         time: cart.cartDetail.time ? new Date(cart.cartDetail.time) : null,
         numOfDays: cart.cartDetail.numOfDays || null,
         totalAmount: orderAmount,
@@ -3184,7 +3185,6 @@ const orderPaymentController = async (req, res, next) => {
 //       });
 //     }
 
-
 //     return next(appError("Invalid payment mode", 400));
 //   } catch (err) {
 //     next(appError(err.message));
@@ -3196,11 +3196,8 @@ const verifyOnlinePaymentController = async (req, res, next) => {
   try {
     const { paymentDetails } = req.body;
 
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-    } = paymentDetails;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      paymentDetails;
 
     const isValid = await verifyPayment(paymentDetails);
 
@@ -3218,7 +3215,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
         paymentStatus: "PAYMENT_COMPLETED",
         paymentId: razorpay_payment_id,
       },
-      { new: true }
+      { new: true },
     );
 
     if (!tempOrder) {
@@ -3269,7 +3266,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
   }
 };
 
-// Razorpay Webhook 
+// Razorpay Webhook
 
 // Razorpay Webhook — ONLY updates payment status. Cron Worker creates the order.
 const razorpayWebhookController = async (req, res) => {
@@ -3296,7 +3293,12 @@ const razorpayWebhookController = async (req, res) => {
         console.log(`Webhook: duplicate event ${eventId}, skipping`);
         return res.status(200).json({ success: true });
       }
-      await WebhookEvent.create({ eventId, eventType: event, processed: true, payload });
+      await WebhookEvent.create({
+        eventId,
+        eventType: event,
+        processed: true,
+        payload,
+      });
     }
 
     if (event === "payment.captured") {
@@ -3307,7 +3309,7 @@ const razorpayWebhookController = async (req, res) => {
       const tempOrder = await TemporaryOrder.findOneAndUpdate(
         { razorpayOrderId, paymentStatus: "PENDING_PAYMENT" },
         { paymentStatus: "PAYMENT_COMPLETED", paymentId },
-        { new: true }
+        { new: true },
       );
 
       if (tempOrder) {
@@ -3319,15 +3321,22 @@ const razorpayWebhookController = async (req, res) => {
             tempOrder.deliveryMode === "Pick and Drop" ||
             tempOrder.deliveryMode === "Custom Order"
           ) {
-            await PickAndCustomCart.deleteOne({ customerId: tempOrder.customerId });
+            await PickAndCustomCart.deleteOne({
+              customerId: tempOrder.customerId,
+            });
           } else {
             await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
           }
         } catch (cartErr) {
-          console.log(`Webhook: cart clear failed for ${razorpayOrderId}:`, cartErr.message);
+          console.log(
+            `Webhook: cart clear failed for ${razorpayOrderId}:`,
+            cartErr.message,
+          );
         }
       } else {
-        console.log(`Webhook: temp order not found or already completed for ${razorpayOrderId}`);
+        console.log(
+          `Webhook: temp order not found or already completed for ${razorpayOrderId}`,
+        );
       }
     }
 
@@ -3337,7 +3346,7 @@ const razorpayWebhookController = async (req, res) => {
 
       await TemporaryOrder.findOneAndUpdate(
         { razorpayOrderId, paymentStatus: "PENDING_PAYMENT" },
-        { paymentStatus: "PAYMENT_FAILED" }
+        { paymentStatus: "PAYMENT_FAILED" },
       );
 
       console.log(`Webhook: payment FAILED for ${razorpayOrderId}`);
@@ -3363,7 +3372,7 @@ const markPaymentFailedController = async (req, res, next) => {
     const tempOrder = await TemporaryOrder.findOneAndUpdate(
       { razorpayOrderId, customerId, paymentStatus: "PENDING_PAYMENT" },
       { paymentStatus: "PAYMENT_FAILED" },
-      { new: true }
+      { new: true },
     );
 
     if (!tempOrder) {
@@ -3397,8 +3406,11 @@ const retryPaymentController = async (req, res, next) => {
       return next(appError("No failed payment found for retry", 404));
     }
 
-    const { success, orderId: newRazorpayOrderId, error } =
-      await createRazorpayOrderId(tempOrder.totalAmount);
+    const {
+      success,
+      orderId: newRazorpayOrderId,
+      error,
+    } = await createRazorpayOrderId(tempOrder.totalAmount);
 
     if (!success) {
       return next(appError(error, 500));
@@ -3420,7 +3432,7 @@ const retryPaymentController = async (req, res, next) => {
   } catch (err) {
     next(appError(err.message));
   }
-}
+};
 
 // const verifyOnlinePaymentController = async (req, res, next) => {
 //   try {
@@ -3843,7 +3855,7 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
         processingStatus: "PENDING",
       },
       { processingStatus: "CANCELLED" },
-      { new: true }
+      { new: true },
     );
 
     if (!orderFound) {
@@ -3896,8 +3908,7 @@ const cancelOrderBeforeCreationController = async (req, res, next) => {
         refundAmount = orderFound.billDetail.grandTotal;
         updatedTransactionDetail.transactionAmount = refundAmount;
       } else if (orderFound.deliveryOption === "Scheduled") {
-        refundAmount =
-          orderFound.billDetail.grandTotal / orderFound.numOfDays;
+        refundAmount = orderFound.billDetail.grandTotal / orderFound.numOfDays;
         updatedTransactionDetail.transactionAmount = refundAmount;
       }
 
@@ -3974,9 +3985,9 @@ const getOrderTrackingDetail = async (req, res, next) => {
       },
       inTransit:
         task.pickupDetail.pickupStatus === "Started" ||
-          task.pickupDetail.pickupStatus === "Completed" ||
-          task.deliveryDetail.deliveryStatus === "Started" ||
-          task.deliveryDetail.deliveryStatus === "Completed"
+        task.pickupDetail.pickupStatus === "Completed" ||
+        task.deliveryDetail.deliveryStatus === "Started" ||
+        task.deliveryDetail.deliveryStatus === "Completed"
           ? true
           : false,
       completeStatus: order.status === "Completed" ? true : false,
@@ -4149,7 +4160,7 @@ const getMerchantTodayAvailability = async (req, res) => {
 
     // Resolve today's name in IST
     const todayIndex = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }),
     ).getDay();
     const todayName = WEEK_DAYS[todayIndex];
 
@@ -4171,9 +4182,10 @@ const getImageDisplayType = async (req, res, next) => {
   try {
     const { businessCategoryId } = req.query;
 
-    const category = await BusinessCategory.findById(businessCategoryId).select(
-      "imageDisplayType"
-    );
+    const category =
+      await BusinessCategory.findById(businessCategoryId).select(
+        "imageDisplayType",
+      );
 
     const displayType = category?.imageDisplayType ?? "cover";
 
@@ -4221,5 +4233,5 @@ module.exports = {
   getImageDisplayType,
   getOftenBoughtTogetherController,
   markPaymentFailedController,
-  retryPaymentController
+  retryPaymentController,
 };
