@@ -1444,7 +1444,21 @@ const getMerchantAppBannerController = async (req, res, next) => {
 //
 const getAvailableServiceController = async (req, res, next) => {
   try {
-    const availableServices = await ServiceCategory.find({})
+    const customerId = req?.userAuth;
+
+    let matchCriteria = {};
+
+    if (customerId) {
+      const customer = await Customer.findById(customerId).select(
+        "customerDetails.geofenceId",
+      );
+
+      if (customer?.customerDetails?.geofenceId) {
+        matchCriteria.geofenceId = customer.customerDetails.geofenceId;
+      }
+    }
+
+    const availableServices = await ServiceCategory.find(matchCriteria)
       .select("title geofenceId bannerImageURL")
       .sort({ order: 1 });
 

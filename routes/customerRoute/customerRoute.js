@@ -602,7 +602,11 @@ customerRoute.get(
   getMerchantAppBannerController
 );
 
-customerRoute.get("/available-services", getAvailableServiceController);
+customerRoute.get(
+  "/available-services",
+  isLooselyAuthenticated,
+  getAvailableServiceController,
+);
 
 customerRoute.get("/generate-referral", isAuthenticated, generateReferralCode);
 
