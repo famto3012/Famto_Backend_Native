@@ -86,7 +86,10 @@ const editServiceCategoryController = async (req, res, next) => {
     }
 
     service.title = title || service.title;
-    service.geofenceId = geofenceId || service.geofenceId;
+    service.geofenceId =
+      Array.isArray(geofenceId) && geofenceId.length > 0
+        ? geofenceId
+        : service.geofenceId;
     service.bannerImageURL = bannerImageURL;
 
     const updatedServiceCategory = await service.save();
