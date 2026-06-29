@@ -19,7 +19,9 @@ serviceCategoryRoute.post(
   upload.single("serviceImage"),
   [
     body("title").notEmpty().withMessage("Title is required"),
-    body("geofenceId").notEmpty().withMessage("Geofence id is required"),
+    body("geofenceId")
+      .isArray({ min: 1 })
+      .withMessage("At least one geofence is required"),
   ],
   isAuthenticated,
   isAdmin,
@@ -31,7 +33,9 @@ serviceCategoryRoute.put(
   upload.single("serviceImage"),
   [
     body("title").notEmpty().withMessage("Title is required"),
-    body("geofenceId").notEmpty().withMessage("Geofence id is required"),
+    body("geofenceId")
+      .isArray({ min: 1 })
+      .withMessage("At least one geofence is required"),
   ],
   isAuthenticated,
   isAdmin,

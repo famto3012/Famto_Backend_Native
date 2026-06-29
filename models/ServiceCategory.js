@@ -6,11 +6,12 @@ const ServiceCategorySchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    geofenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Geofence",
-      required: true,
-    },
+    geofenceId: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Geofence",
+      },
+    ],
     bannerImageURL: {
       type: String,
       required: true,
