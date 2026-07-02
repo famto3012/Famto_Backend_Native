@@ -1610,7 +1610,15 @@ const getScheduledOrderDetailController = async (req, res, next) => {
         timeTaken: "-",
         delayedBy: "-",
       },
-      items: orderFound.items || null,
+      items:
+        orderFound?.purchasedItems?.map((item) => ({
+          productId: item?.productId || null,
+          variantId: item?.variantId || null,
+          productName: item?.productName || "-",
+          quantity: item?.quantity || 0,
+          price: item?.price || 0,
+          costPrice: item?.costPrice || 0,
+        })) || [],
       billDetail: orderFound.billDetail || null,
       pickUpLocation: orderFound?.pickups[0]?.location || null,
       deliveryLocation: orderFound?.drops[0]?.location || null,
