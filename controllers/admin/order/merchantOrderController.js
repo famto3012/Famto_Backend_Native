@@ -1525,7 +1525,63 @@ const getScheduledOrderDetailController = async (req, res, next) => {
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        address: orderFound?.drops[0]?.address,
+        pickAddress:
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+
+        dropAddress:
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+        pickInstructions:
+          orderFound.pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
+          })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
