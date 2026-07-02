@@ -943,7 +943,7 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.drops[0]?.address?.fullName || "",
+          order?.customerId?.fullName || order?.drops?.[0]?.deliveryAddress?.fullName || "",
         deliveryMode: order?.deliveryMode,
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
