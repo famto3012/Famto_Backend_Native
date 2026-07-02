@@ -1421,7 +1421,15 @@ const getOrderDetailController = async (req, res, next) => {
         timeTaken: formatToHours(orderFound?.timeTaken) || "-",
         delayedBy: formatToHours(orderFound?.delayedBy) || "-",
       },
-      items: orderFound.items || null,
+      items:
+        orderFound?.purchasedItems?.map((item) => ({
+          productId: item?.productId || null,
+          variantId: item?.variantId || null,
+          itemName: item?.productName || "-",
+          quantity: item?.quantity || 0,
+          price: item?.price || 0,
+          costPrice: item?.costPrice || 0,
+        })) || [],
       billDetail: orderFound.billDetail || null,
       pickUpLocation: orderFound?.pickups?.[0]?.address || null,
       deliveryLocation: orderFound?.drops?.[0]?.address || null,
@@ -1614,7 +1622,7 @@ const getScheduledOrderDetailController = async (req, res, next) => {
         orderFound?.purchasedItems?.map((item) => ({
           productId: item?.productId || null,
           variantId: item?.variantId || null,
-          productName: item?.productName || "-",
+          itemName: item?.productName || "-",
           quantity: item?.quantity || 0,
           price: item?.price || 0,
           costPrice: item?.costPrice || 0,
