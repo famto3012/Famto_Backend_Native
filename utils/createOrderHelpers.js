@@ -1796,7 +1796,9 @@ const saveCustomerCart = async (
   instructionToMerchant,
   instructionToDeliveryAgent,
   instructionInPickup,
-  instructionInDelivery
+  instructionInDelivery,
+  businessCategoryId = null,
+  serviceId = null
 ) => {
   // Normalize items: map variantId → variantTypeId for CustomerCart schema compatibility
   const normalizedItems = (items || []).map((item) => ({
@@ -1815,6 +1817,8 @@ const saveCustomerCart = async (
   const cartDetails = {
     customerId: customer._id,
     merchantId: merchant?._id || null,
+    businessCategoryId,
+    serviceId,
     items: updatedItems,
     cartDetail: {
       pickupLocation,
