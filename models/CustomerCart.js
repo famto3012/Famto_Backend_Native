@@ -193,10 +193,10 @@ const CustomerCartSchema = mongoose.Schema(
       ref: "BusinessCategoryId",
       required: true,
     },
-     serviceId: {
+    serviceId: {
       type: String,
       ref: "ServiceCategory",
-      required: true,
+      default: null,
     },
     scheduledOrderId: {
       type: String,

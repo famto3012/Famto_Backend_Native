@@ -23,6 +23,7 @@ const processOrderService = async (tempOrder) => {
     const orderPayload = {
       customerId: tempOrder.customerId,
       merchantId: tempOrder.merchantId,
+      serviceId: tempOrder.serviceId,
       pickups: tempOrder.pickups,
       drops: tempOrder.drops,
       billDetail: tempOrder.billDetail,
