@@ -6,7 +6,7 @@ const appError = require("../../utils/appError");
 
 const globalSearchController = async (req, res, next) => {
   try {
-    let { query = "" } = req.query;
+    let { query = "", serviceId } = req.query;
 
     query = query.trim();
 
@@ -19,6 +19,42 @@ const globalSearchController = async (req, res, next) => {
       });
     }
 
+    // Get business categories for the specified service
+    let businessCategoryIds = [];
+    if (serviceId) {
+      const businessCategories = await BusinessCategory.find({
+        serviceId: serviceId,
+        status: true,
+      })
+        .select("_id")
+        .lean();
+
+      businessCategoryIds = businessCategories.map((cat) => cat._id);
+
+      // If no business categories found for this service, return empty results
+      if (businessCategoryIds.length === 0) {
+        return res.status(200).json({
+          query,
+          merchants: [],
+          products: [],
+          categories: [],
+          businessCategories: [],
+        });
+      }
+    }
+
+    // Get valid category IDs if filtering by service
+    let validCategoryIds = [];
+    if (businessCategoryIds.length > 0) {
+      const validCategories = await Category.find({
+        businessCategoryId: { $in: businessCategoryIds },
+      })
+        .select("_id")
+        .lean();
+
+      validCategoryIds = validCategories.map((cat) => cat._id);
+    }
+
     const searchRegex = { $regex: query, $options: "i" };
 
     const [merchants, businessCategories, products, merchantCategories] =
@@ -27,6 +63,9 @@ const globalSearchController = async (req, res, next) => {
           isApproved: "Approved",
           isBlocked: false,
           "merchantDetail.merchantName": { $exists: true, $ne: null },
+          ...(businessCategoryIds.length > 0 && {
+            "merchantDetail.businessCategoryId": { $in: businessCategoryIds },
+          }),
           $or: [
             { "merchantDetail.merchantName": searchRegex },
             { "merchantDetail.description": searchRegex },
@@ -42,11 +81,17 @@ const globalSearchController = async (req, res, next) => {
         BusinessCategory.find({
           status: true,
           title: searchRegex,
+          ...(businessCategoryIds.length > 0 && {
+            _id: { $in: businessCategoryIds },
+          }),
         })
           .select("_id title bannerImageURL")
           .lean(),
 
         Product.find({
+          ...(validCategoryIds.length > 0 && {
+            categoryId: { $in: validCategoryIds },
+          }),
           $or: [
             { productName: searchRegex },
             { searchTags: searchRegex },
@@ -58,6 +103,9 @@ const globalSearchController = async (req, res, next) => {
         Category.find({
           status: true,
           categoryName: searchRegex,
+          ...(businessCategoryIds.length > 0 && {
+            businessCategoryId: { $in: businessCategoryIds },
+          }),
         })
           .select(
             "_id categoryName categoryImageURL merchantId businessCategoryId type"
