@@ -1951,11 +1951,11 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
-    let actualDeliveryCharge = 0;
+    let actualDeliveryCharge = oneTimeDeliveryCharge;
 
     const subscriptionOfCustomer = customer.customerDetails.pricing;
 
-    if (subscriptionOfCustomer?.length > 0) {
+    if (subscriptionOfCustomer?.length > 0 && deliveryMode === "Home Delivery") {
       const subscriptionLog = await SubscriptionLog.findById(
         subscriptionOfCustomer[0],
       );
@@ -1964,11 +1964,13 @@ const confirmOrderDetailController = async (req, res, next) => {
         const now = new Date();
 
         if (
-          (new Date(subscriptionLog?.startDate) < now ||
-            new Date(subscriptionLog?.endDate) > now) &&
-          subscriptionLog?.currentNumberOfOrders < subscriptionLog?.maxOrders
+          new Date(subscriptionLog.startDate) <= now &&
+          new Date(subscriptionLog.endDate) >= now &&
+          subscriptionLog.currentNumberOfOrders < subscriptionLog.maxOrders
         ) {
           actualDeliveryCharge = 0;
+          subscriptionLog.currentNumberOfOrders += 1;
+          await subscriptionLog.save();
         }
       }
     } else {
