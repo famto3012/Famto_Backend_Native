@@ -58,6 +58,7 @@ const createSubscriptionLog = async (req, res, next) => {
 
     const { amount, duration, taxId } = subscriptionPlan;
     const maxOrders = merchant ? null : subscriptionPlan.noOfOrder;
+    const maxFreeDistanceKm = subscriptionPlan.maxFreeDistanceKm || null;
     const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
@@ -108,6 +109,7 @@ const createSubscriptionLog = async (req, res, next) => {
       endDate,
       typeOfUser: "Merchant",
       maxOrders,
+      maxFreeDistanceKm,
       paymentStatus: "Unpaid",
       razorpayOrderId: null,
     });
@@ -247,6 +249,7 @@ const createSubscriptionLogUser = async (req, res, next) => {
 
     const { amount, duration, taxId } = subscriptionPlan;
     const maxOrders = merchant ? null : subscriptionPlan.noOfOrder;
+    const maxFreeDistanceKm = subscriptionPlan.maxFreeDistanceKm || null;
     const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
@@ -291,6 +294,7 @@ const createSubscriptionLogUser = async (req, res, next) => {
         endDate,
         typeOfUser: "Merchant",
         maxOrders,
+        maxFreeDistanceKm,
         paymentStatus: "Unpaid",
         razorpayOrderId: null,
       });

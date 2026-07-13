@@ -1969,9 +1969,22 @@ const confirmOrderDetailController = async (req, res, next) => {
           (subscriptionLog.maxOrders === null ||
             subscriptionLog.currentNumberOfOrders < subscriptionLog.maxOrders)
         ) {
-          actualDeliveryCharge = 0;
-          subscriptionLog.currentNumberOfOrders += 1;
-          await subscriptionLog.save();
+          // Check distance limit for free delivery
+          const orderDistance = Number(distance);
+          const exceedsDistanceLimit =
+            subscriptionLog.maxFreeDistanceKm !== null &&
+            !isNaN(orderDistance) &&
+            orderDistance > subscriptionLog.maxFreeDistanceKm;
+
+          if (exceedsDistanceLimit) {
+            // Distance too far — no free delivery, no slot consumed
+            actualDeliveryCharge = oneTimeDeliveryCharge;
+          } else {
+            // Within distance limit or no limit set — apply free delivery
+            actualDeliveryCharge = 0;
+            subscriptionLog.currentNumberOfOrders += 1;
+            await subscriptionLog.save();
+          }
         }
       }
     } else {
