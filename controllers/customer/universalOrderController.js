@@ -2251,11 +2251,9 @@ const orderPaymentController = async (req, res, next) => {
           ActivityLog.create({
             userId: req.userAuth,
             userType: req.userRole,
-            description: `Scheduled order (#${
-              newOrderCreated._id
-            }) from customer app by ${req?.userName || "N/A"} ( ${
-              req.userAuth
-            } )`,
+            description: `Scheduled order (#${newOrderCreated._id
+              }) from customer app by ${req?.userName || "N/A"} ( ${req.userAuth
+              } )`,
           }),
         ]);
 
@@ -3291,22 +3289,18 @@ const razorpayWebhookController = async (req, res) => {
       return res.status(400).send("Invalid signature");
     }
 
-    const payload = JSON.parse(req.body);
+    const payload = JSON.parse(req.body.toString()); // Fix: Convert Buffer to string for reliable parsing
     const event = payload.event;
     const eventId = payload.payload?.payment?.entity?.id;
 
+    // Check for duplicate events early to avoid reprocessing
     if (eventId) {
       const existing = await WebhookEvent.findOne({ eventId });
       if (existing) {
         console.log(`Webhook: duplicate event ${eventId}, skipping`);
         return res.status(200).json({ success: true });
       }
-      await WebhookEvent.create({
-        eventId,
-        eventType: event,
-        processed: true,
-        payload,
-      });
+      // Note: WebhookEvent creation moved to AFTER successful update (race condition fix)
     }
 
     if (event === "payment.captured") {
@@ -3314,6 +3308,7 @@ const razorpayWebhookController = async (req, res) => {
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
+      // FIRST: Update payment status (do the actual work)
       const tempOrder = await TemporaryOrder.findOneAndUpdate(
         { razorpayOrderId, paymentStatus: "PENDING_PAYMENT" },
         { paymentStatus: "PAYMENT_COMPLETED", paymentId },
@@ -3321,30 +3316,29 @@ const razorpayWebhookController = async (req, res) => {
       );
 
       if (tempOrder) {
+        // THEN: Mark webhook as processed (only after successful update)
+        // This prevents lost payments if update fails
+        if (eventId) {
+          await WebhookEvent.create({
+            eventId,
+            eventType: event,
+            processed: true,
+            payload,
+          });
+        }
+
         console.log(`Webhook: payment marked COMPLETED for ${razorpayOrderId}`);
 
-        // Clear cart now that payment is confirmed
-        try {
-          if (
-            tempOrder.deliveryMode === "Pick and Drop" ||
-            tempOrder.deliveryMode === "Custom Order"
-          ) {
-            await PickAndCustomCart.deleteOne({
-              customerId: tempOrder.customerId,
-            });
-          } else {
-            await CustomerCart.deleteOne({ customerId: tempOrder.customerId });
-          }
-        } catch (cartErr) {
-          console.log(
-            `Webhook: cart clear failed for ${razorpayOrderId}:`,
-            cartErr.message,
-          );
-        }
+        // Cart is NOT deleted here to allow user retries if they think payment failed
+        // Cart will be deleted by:
+        // 1. verifyOnlinePaymentController when user's frontend explicitly verifies payment
+        // 2. processOrderService when cron job successfully creates the Order from TemporaryOrder
       } else {
         console.log(
           `Webhook: temp order not found or already completed for ${razorpayOrderId}`,
         );
+        // Don't mark as processed if update failed - allows Razorpay to retry
+        return res.status(500).json({ error: "Order update failed" });
       }
     }
 
@@ -3993,9 +3987,9 @@ const getOrderTrackingDetail = async (req, res, next) => {
       },
       inTransit:
         task.pickupDetail.pickupStatus === "Started" ||
-        task.pickupDetail.pickupStatus === "Completed" ||
-        task.deliveryDetail.deliveryStatus === "Started" ||
-        task.deliveryDetail.deliveryStatus === "Completed"
+          task.pickupDetail.pickupStatus === "Completed" ||
+          task.deliveryDetail.deliveryStatus === "Started" ||
+          task.deliveryDetail.deliveryStatus === "Completed"
           ? true
           : false,
       completeStatus: order.status === "Completed" ? true : false,

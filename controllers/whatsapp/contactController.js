@@ -51,20 +51,20 @@ const getContacts = async (req, res, next) => {
 };
 
 // ─── Get all distinct tags used by contacts ───────────────
-const getContactTags = async (req, res, next) => {
-  try {
-    const tags = await WhatsappContact.aggregate([
-      { $unwind: "$tags" },
-      { $group: { _id: "$tags", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $project: { _id: 0, id: "$_id", label: "$_id", count: 1 } },
-    ]);
+// const getContactTags = async (req, res, next) => {
+//   try {
+//     const tags = await WhatsappContact.aggregate([
+//       { $unwind: "$tags" },
+//       { $group: { _id: "$tags", count: { $sum: 1 } } },
+//       { $sort: { count: -1 } },
+//       { $project: { _id: 0, id: "$_id", label: "$_id", count: 1 } },
+//     ]);
 
-    res.status(200).json({ success: true, data: tags });
-  } catch (err) {
-    next(appError(err.message, 500));
-  }
-};
+//     res.status(200).json({ success: true, data: tags });
+//   } catch (err) {
+//     next(appError(err.message, 500));
+//   }
+// };
 
 const syncContacts = async (req, res, next) => {
   try {
@@ -154,11 +154,7 @@ const getContactTags = async (req, res, next) => {
   }
 };
 
-const syncFromFamtoCustomers = async (req, res, next) => {
-  try {
-    const customers = await Customer.find({ isBlocked: false })
-      .select("_id fullName phoneNumber")
-      .lean();
+
 // ─── Sync from Famto customers ───────────────────────────
 const syncFromFamtoCustomers = async (req, res, next) => {
   try {
@@ -246,7 +242,8 @@ const syncFromFamtoCustomers = async (req, res, next) => {
       message: `Sync complete. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`,
       data: { created, updated, skipped, total: customers.length },
     });
-  } catch (err) {
+  } 
+}catch (err) {
     next(appError(err.message, 500));
   }
 };

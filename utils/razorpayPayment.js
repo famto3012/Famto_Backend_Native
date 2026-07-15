@@ -181,13 +181,8 @@ const razorpayWebhookController = async (req, res) => {
       });
     }
 
-    await WebhookEvent.create({
-      eventId,
-      eventType: payload.event,
-      payload,
-      processed: true,
-    });
-
+    // ✅ FIX #2: Do critical work FIRST before creating WebhookEvent
+    
     if (payload.event === "payment.captured") {
       const payment = payload.payload.payment.entity;
 
@@ -223,6 +218,14 @@ const razorpayWebhookController = async (req, res) => {
         `❌ Payment failed for ${payment.order_id}`
       );
     }
+
+    // ✅ FIX #2: Create WebhookEvent AFTER critical work succeeds
+    await WebhookEvent.create({
+      eventId,
+      eventType: payload.event,
+      payload,
+      processed: true,
+    });
 
     return res.status(200).json({
       success: true,
