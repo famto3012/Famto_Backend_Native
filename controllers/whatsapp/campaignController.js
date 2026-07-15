@@ -89,55 +89,103 @@ const getCampaigns = async (req, res, next) => {
 
 const createCampaign = async (req, res, next) => {
   try {
-    const { name, templateId, audience, recipients, templateParams, scheduledAt, sendNow, maxRecipients } = req.body;
-    if (!name || !templateId) {
-      return next(appError("Campaign name and template are required", 400));
-      console.log("Body",req.body);
+    console.log("Body:", req.body);
 
+    const {
+      name,
+      templateId,
+      audience,
+      recipients,
+      templateParams,
+      scheduledAt,
+      sendNow,
+      maxRecipients,
+    } = req.body;
+
+    // Validate required fields
     if (!name || !templateId) {
       return next(
-        appError("Name, templateId, and recipients are required", 400)
+        appError("Campaign name and template are required", 400)
       );
     }
-    console.log(templateId);
+
+    // Find template
     const template = await WhatsappTemplate.findById(templateId);
-    if (!template) return next(appError("Template not found", 404));
+
     if (!template) {
       return next(appError("Template not found", 404));
     }
 
-    console.log(template);
     if (template.status !== "APPROVED") {
-      return next(appError("Template must be APPROVED to use in campaigns", 400));
-    }
-
-    // Check if template body has parameters that need values
-    const bodyComp = (template.components || []).find((c) => c.type === "BODY");
-    const paramCount = (bodyComp?.text?.match(/\{\{[^}]+\}\}/g) || []).length;
-    if (paramCount > 0 && (!templateParams || templateParams.length === 0)) {
       return next(
         appError(
-          `Template "${template.name}" requires ${paramCount} body parameter(s). Provide templateParams in the request.`,
+          "Template must be APPROVED to use in campaigns",
           400
         )
       );
     }
 
-    // Resolve recipients
+    // Check if template requires body parameters
+    const bodyComp = (template.components || []).find(
+      (c) => c.type === "BODY"
+    );
+
+    const paramCount =
+      (bodyComp?.text?.match(/\{\{[^}]+\}\}/g) || []).length;
+
+    if (
+      paramCount > 0 &&
+      (!templateParams || templateParams.length < paramCount)
+    ) {
+      return next(
+        appError(
+          `Template "${template.name}" requires ${paramCount} body parameter(s).`,
+          400
+        )
+      );
+    }
+
+    // Resolve recipients from audience if recipients not provided
     let resolvedRecipients = recipients;
-    if (!resolvedRecipients?.length && audience) {
-      resolvedRecipients = await resolveAudience(audience, maxRecipients);
-    }
-    if (resolvedRecipients?.length && maxRecipients > 0) {
-      resolvedRecipients = resolvedRecipients.slice(0, parseInt(maxRecipients));
-    }
-    if (!resolvedRecipients?.length) {
-      return next(appError(`No contacts found for audience "${audience || "unknown"}". Add contacts first.`, 400));
+
+    if ((!resolvedRecipients || !resolvedRecipients.length) && audience) {
+      resolvedRecipients = await resolveAudience(
+        audience,
+        maxRecipients
+      );
     }
 
-    // Determine initial status
-    const initialStatus = sendNow ? "sending" : scheduledAt ? "scheduled" : "draft";
+    // Apply recipient limit
+    if (
+      resolvedRecipients &&
+      resolvedRecipients.length &&
+      maxRecipients > 0
+    ) {
+      resolvedRecipients = resolvedRecipients.slice(
+        0,
+        parseInt(maxRecipients)
+      );
+    }
 
+    if (!resolvedRecipients || !resolvedRecipients.length) {
+      return next(
+        appError(
+          `No contacts found for audience "${audience || "unknown"}".`,
+          400
+        )
+      );
+    }
+
+    // Determine campaign status
+    let initialStatus = "draft";
+
+    if (sendNow) {
+      initialStatus = "sending";
+    } else if (scheduledAt) {
+      initialStatus = "scheduled";
+    }
+
+    // Create campaign
     const campaign = await WhatsappCampaign.create({
       name,
       templateId,
@@ -145,32 +193,43 @@ const createCampaign = async (req, res, next) => {
       audience: audience || "Custom",
       recipients: resolvedRecipients,
       templateParams: templateParams || [],
-      scheduledAt: sendNow ? null : (scheduledAt || null),
+      scheduledAt: sendNow ? null : scheduledAt || null,
       sentAt: sendNow ? new Date() : null,
       status: initialStatus,
-      stats: { total: resolvedRecipients.length },
+      stats: {
+        total: resolvedRecipients.length,
+        sent: 0,
+        delivered: 0,
+        read: 0,
+        failed: 0,
+      },
       createdBy: req.userAuth,
     });
 
-    // If sendNow, kick off immediately in background
+    // Start sending immediately
     if (sendNow) {
-      processCampaignSend(campaign, req.userAuth).catch((err) =>
-        console.error(`[Campaign] Send error for ${campaign._id}:`, err.message)
-      );
+      processCampaignSend(campaign, req.userAuth).catch((err) => {
+        console.error(
+          `[Campaign ${campaign._id}] Send failed:`,
+          err
+        );
+      });
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      data: formatCampaign(campaign),
       message: sendNow
         ? `Campaign sending started to ${resolvedRecipients.length} contacts`
         : scheduledAt
-          ? `Campaign scheduled for ${new Date(scheduledAt).toLocaleString("en-IN")}`
-          : "Campaign saved as draft",
+        ? `Campaign scheduled for ${new Date(
+            scheduledAt
+          ).toLocaleString("en-IN")}`
+        : "Campaign saved as draft",
+      data: formatCampaign(campaign),
     });
   } catch (err) {
-    console.log(err.message);
-    next(appError(err.message, 500));
+    console.error("Create Campaign Error:", err);
+    return next(appError(err.message || "Internal Server Error", 500));
   }
 };
 
