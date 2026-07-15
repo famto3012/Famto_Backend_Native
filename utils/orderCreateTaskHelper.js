@@ -57,6 +57,7 @@ const orderCreateTaskHelper = async (orderId) => {
 
     await Task.create({
       orderId,
+      serviceId: order.serviceId,
       deliveryMode: order.deliveryMode,
       pickupDropDetails: [
         {

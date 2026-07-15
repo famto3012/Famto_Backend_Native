@@ -41,6 +41,8 @@ const {
 } = require("../libs/automatic");
 const BatchOrder = require("../models/BatchOrder");
 
+const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
+
 const serviceAccount1 = {
   type: process.env.TYPE_1,
   project_id: process.env.PROJECT_ID_1,
@@ -2183,7 +2185,16 @@ io.on("connection", async (socket) => {
             return [lat, lng];
           };
 
-          const pickupLocation = normalizeLocation(pickupDetail.location);
+          const isHandymanOrder =
+            (taskFound.serviceId || orderFound.serviceId)?.toString() ===
+            HANDYMAN_SERVICE_ID;
+
+          // Handyman jobs happen at the customer's address, not a merchant pickup point
+          const locationToValidate = isHandymanOrder
+            ? taskFound.pickupDropDetails?.[0]?.drops?.[0]?.location
+            : pickupDetail.location;
+
+          const pickupLocation = normalizeLocation(locationToValidate);
           const parsedAgentLocation = normalizeLocation(agentLocation);
 
           // Only validate distance if pickup location exists
@@ -2196,7 +2207,9 @@ io.on("connection", async (socket) => {
 
             if (distance >= 0.5) {
               return socket.emit("error", {
-                message: "Agent is far from pickup point",
+                message: isHandymanOrder
+                  ? "Agent is far from customer location"
+                  : "Agent is far from pickup point",
                 success: false,
               });
             }
