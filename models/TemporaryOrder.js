@@ -138,6 +138,12 @@ const temporaryOrderSchema = new mongoose.Schema(
       ref: "Merchant",
     },
 
+    serviceId: {
+      type: String,
+      ref: "ServiceCategory",
+      default: null,
+    },
+
     idempotencyKey: {
       type: String,
       unique: true,

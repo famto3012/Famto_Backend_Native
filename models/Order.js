@@ -249,6 +249,7 @@ const orderSchema = mongoose.Schema(
     customerId: { type: String, ref: "Customer", required: true },
     merchantId: { type: String, ref: "Merchant", default: null },
     scheduledOrderId: { type: String, ref: "ScheduledOrder", default: null },
+    serviceId: { type: String, ref: "ServiceCategory", default: null },
     agentId: { type: String, ref: "Agent", default: null },
 
     deliveryMode: {

@@ -23,7 +23,9 @@ const {
 
 const {
   getContacts,
+  getContactTags,
   syncContacts,
+  syncFromFamtoCustomers,
   updateContact,
   getContactTags,
   syncFromFamtoCustomers,
@@ -49,7 +51,6 @@ const {
 
 const {
   getWallet,
-  rechargeWallet,
   getBusinessProfile,
   updateBusinessProfile,
   verifyPhoneNumber,
@@ -116,7 +117,6 @@ whatsappRoute.delete(
 
 // ─── Contacts ────────────────────────────────────────────
 whatsappRoute.get("/contacts", isAuthenticated, isAdmin, getContacts);
-// Specific routes BEFORE parameterised :contactId
 whatsappRoute.get("/contacts/tags", isAuthenticated, isAdmin, getContactTags);
 whatsappRoute.post("/contacts/sync", isAuthenticated, isAdmin, syncContacts);
 whatsappRoute.post("/contacts/sync-famto", isAuthenticated, isAdmin, syncFromFamtoCustomers);
@@ -169,7 +169,6 @@ whatsappRoute.get("/analytics", isAuthenticated, isAdmin, getAnalytics);
 
 // ─── Billing & Profile ──────────────────────────────────
 whatsappRoute.get("/wallet", isAuthenticated, isAdmin, getWallet);
-whatsappRoute.post("/wallet/recharge", isAuthenticated, isAdmin, rechargeWallet);
 whatsappRoute.get(
   "/business-profile",
   isAuthenticated,

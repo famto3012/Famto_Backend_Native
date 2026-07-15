@@ -16,6 +16,7 @@ const Message = require("../../../models/Message");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
 const CustomerCart = require("../../../models/CustomerCart");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
+const BusinessCategory = require("../../../models/BusinessCategory");
 const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
 const AgentAnnouncementLogs = require("../../../models/AgentAnnouncementLog");
 const ActivityLog = require("../../../models/ActivityLog");
@@ -2057,6 +2058,15 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     console.log("Request body:", req.body);
 
+    // Derive serviceId from the business category itself rather than trusting client input
+    const businessCategoryDoc = selectedBusinessCategory
+      ? await BusinessCategory.findById(selectedBusinessCategory).select(
+          "serviceId",
+        )
+      : null;
+    const resolvedServiceId =
+      businessCategoryDoc?.serviceId?.toString() || null;
+
     const merchantFound = await fetchMerchantDetails(
       merchantId,
       deliveryMode,
@@ -2188,6 +2198,8 @@ const createInvoiceByAdminController = async (req, res, next) => {
       instructionToDeliveryAgent,
       instructionInPickup,
       instructionInDrop,
+      selectedBusinessCategory,
+      resolvedServiceId,
     );
 
     console.log("Cart created successfully:", cart);
@@ -2738,6 +2750,7 @@ const createOrderByAdminController = async (req, res, next) => {
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+      serviceId: cartFound.serviceId,
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,

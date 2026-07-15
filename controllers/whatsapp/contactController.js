@@ -4,14 +4,16 @@ const Customer = require("../../models/Customer");
 const appError = require("../../utils/appError");
 const csvParser = require("csv-parser");
 const stream = require("stream");
+const csv = require("csv-parser");
+const { Readable } = require("stream");
 
 const getContacts = async (req, res, next) => {
   try {
     const { search = "", tag, page = 1, limit = 50 } = req.query;
 
     const filter = {};
-
     // Fix: "all" means no tag filter
+    // Only apply tag filter when a specific tag is requested (not "all")
     if (tag && tag !== "all") filter.tags = { $in: tag.split(",") };
     if (search) {
       filter.$or = [
@@ -43,6 +45,22 @@ const getContacts = async (req, res, next) => {
         pages: Math.ceil(total / parseInt(limit)),
       },
     });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
+// ─── Get all distinct tags used by contacts ───────────────
+const getContactTags = async (req, res, next) => {
+  try {
+    const tags = await WhatsappContact.aggregate([
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $project: { _id: 0, id: "$_id", label: "$_id", count: 1 } },
+    ]);
+
+    res.status(200).json({ success: true, data: tags });
   } catch (err) {
     next(appError(err.message, 500));
   }
@@ -120,7 +138,6 @@ const updateContact = async (req, res, next) => {
     next(appError(err.message, 500));
   }
 };
-
 // ─── New Functions ────────────────────────────────────────
 
 const getContactTags = async (req, res, next) => {
@@ -142,6 +159,22 @@ const syncFromFamtoCustomers = async (req, res, next) => {
     const customers = await Customer.find({ isBlocked: false })
       .select("_id fullName phoneNumber")
       .lean();
+// ─── Sync from Famto customers ───────────────────────────
+const syncFromFamtoCustomers = async (req, res, next) => {
+  try {
+    // Fetch all Famto customers who have a phone number
+    const customers = await Customer.find(
+      { phoneNumber: { $exists: true, $ne: "" } },
+      { fullName: 1, phoneNumber: 1, email: 1, _id: 0 }
+    ).lean();
+
+    if (!customers.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No Famto customers with phone numbers found",
+        data: { created: 0, updated: 0, skipped: 0 },
+      });
+    }
 
     let created = 0;
     let updated = 0;
@@ -172,12 +205,46 @@ const syncFromFamtoCustomers = async (req, res, next) => {
       );
 
       result.lastErrorObject?.updatedExisting ? updated++ : created++;
+    for (const customer of customers) {
+      try {
+        // Normalize phone: strip non-digits, add 91 prefix if 10 digits
+        const raw = String(customer.phoneNumber).replace(/\D/g, "");
+        if (!raw || raw.length < 10) { skipped++; continue; }
+        const waId = raw.length === 10 ? `91${raw}` : raw;
+
+        const name = (customer.fullName || "").trim();
+        const email = (customer.email || "").trim() || undefined;
+
+        const existing = await WhatsappContact.findOne({ waId });
+
+        if (existing) {
+          // Only update name/email if blank in WhatsApp contact
+          const updates = {};
+          if (!existing.name && name) updates.name = name;
+          if (!existing.email && email) updates.email = email;
+          if (Object.keys(updates).length) {
+            await WhatsappContact.findByIdAndUpdate(existing._id, { $set: updates });
+          }
+          updated++;
+        } else {
+          await WhatsappContact.create({
+            waId,
+            name,
+            phone: `+${waId}`,
+            ...(email && { email }),
+            tags: [],
+          });
+          created++;
+        }
+      } catch (rowErr) {
+        skipped++;
+      }
     }
 
     res.status(200).json({
       success: true,
-      message: `Sync done. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`,
-      data: { created, updated, skipped },
+      message: `Sync complete. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`,
+      data: { created, updated, skipped, total: customers.length },
     });
   } catch (err) {
     next(appError(err.message, 500));
@@ -256,8 +323,8 @@ const importContactsCsv = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: `Import done. Created: ${created}, Updated: ${updated}`,
-      data: { created, updated, errors },
+      message: `Import complete. Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`,
+      data: { created, updated, skipped, errors: errors.slice(0, 20) },
     });
   } catch (err) {
     next(appError(err.message, 500));
@@ -266,10 +333,10 @@ const importContactsCsv = async (req, res, next) => {
 
 module.exports = {
   getContacts,
-  syncContacts,
-  updateContact,
   getContactTags,
+  syncContacts,
   syncFromFamtoCustomers,
+  updateContact,
   downloadSampleCsv,
   importContactsCsv,
 };

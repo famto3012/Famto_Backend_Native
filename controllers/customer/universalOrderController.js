@@ -1861,7 +1861,6 @@ const confirmOrderDetailController = async (req, res, next) => {
   try {
     const {
       businessCategoryId,
-      serviceId,
       deliveryAddressType,
       deliveryAddressOtherAddressId,
       newDeliveryAddress,
@@ -1873,6 +1872,12 @@ const confirmOrderDetailController = async (req, res, next) => {
     } = req.body;
 
     console.log("PRESCRIPTION", req.body);
+
+    // Derive serviceId from the business category itself rather than trusting client input
+    const businessCategoryDoc = businessCategoryId
+      ? await BusinessCategory.findById(businessCategoryId).select("serviceId")
+      : null;
+    const resolvedServiceId = businessCategoryDoc?.serviceId?.toString() || null;
 
     const { customer, cart, merchant } = await fetchCustomerAndMerchantAndCart(
       req.userAuth,
@@ -1992,7 +1997,7 @@ const confirmOrderDetailController = async (req, res, next) => {
         customerId: customer._id,
         merchantId: merchant._id,
         businessCategoryId: businessCategoryId,
-        serviceId: serviceId,
+        serviceId: resolvedServiceId,
         items: cart.items,
         cartDetail: {
           ...req.body,
@@ -2335,6 +2340,7 @@ const orderPaymentController = async (req, res, next) => {
           orderId,
           customerId,
           merchantId: cart.merchantId,
+          serviceId: cart.serviceId,
           deliveryMode: cart.cartDetail.deliveryMode,
           deliveryOption: cart.cartDetail.deliveryOption,
           pickups,
@@ -2396,6 +2402,7 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         customerId,
         merchantId: cart.merchantId,
+        serviceId: cart.serviceId,
         deliveryMode: cart.cartDetail.deliveryMode,
         deliveryOption: cart.cartDetail.deliveryOption,
         pickups,
@@ -2453,6 +2460,7 @@ const orderPaymentController = async (req, res, next) => {
         razorpayOrderId,
         customerId,
         merchantId: cart.merchantId,
+        serviceId: cart.serviceId,
         deliveryMode: cart.cartDetail.deliveryMode,
         deliveryOption: cart.cartDetail.deliveryOption,
         pickups,

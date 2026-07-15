@@ -9,6 +9,7 @@ const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
 const CustomerCart = require("../../../models/CustomerCart");
+const BusinessCategory = require("../../../models/BusinessCategory");
 const ActivityLog = require("../../../models/ActivityLog");
 const Product = require("../../../models/Product");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
@@ -1686,6 +1687,7 @@ const createOrderController = async (req, res, next) => {
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+      serviceId: cartFound.serviceId,
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,
@@ -2263,6 +2265,15 @@ const createInvoiceController = async (req, res, next) => {
       // ifScheduled,
     } = req.body;
 
+    // Derive serviceId from the business category itself rather than trusting client input
+    const businessCategoryDoc = selectedBusinessCategory
+      ? await BusinessCategory.findById(selectedBusinessCategory).select(
+          "serviceId",
+        )
+      : null;
+    const resolvedServiceId =
+      businessCategoryDoc?.serviceId?.toString() || null;
+
     const merchantId = req.userAuth;
     const merchantFound = await Merchant.findById(merchantId);
     if (!merchantFound) return next(appError("Merchant not found", 404));
@@ -2473,6 +2484,8 @@ const createInvoiceController = async (req, res, next) => {
         {
           customerId: customer._id,
           merchantId,
+          businessCategoryId: selectedBusinessCategory || null,
+          serviceId: resolvedServiceId,
           items: normalizedItems,
           cartDetail: {
             pickupLocation,

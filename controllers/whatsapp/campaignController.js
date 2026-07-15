@@ -90,13 +90,23 @@ const getCampaigns = async (req, res, next) => {
 const createCampaign = async (req, res, next) => {
   try {
     const { name, templateId, audience, recipients, templateParams, scheduledAt, sendNow, maxRecipients } = req.body;
-
     if (!name || !templateId) {
       return next(appError("Campaign name and template are required", 400));
-    }
+      console.log("Body",req.body);
 
+    if (!name || !templateId) {
+      return next(
+        appError("Name, templateId, and recipients are required", 400)
+      );
+    }
+    console.log(templateId);
     const template = await WhatsappTemplate.findById(templateId);
     if (!template) return next(appError("Template not found", 404));
+    if (!template) {
+      return next(appError("Template not found", 404));
+    }
+
+    console.log(template);
     if (template.status !== "APPROVED") {
       return next(appError("Template must be APPROVED to use in campaigns", 400));
     }
@@ -159,6 +169,7 @@ const createCampaign = async (req, res, next) => {
           : "Campaign saved as draft",
     });
   } catch (err) {
+    console.log(err.message);
     next(appError(err.message, 500));
   }
 };

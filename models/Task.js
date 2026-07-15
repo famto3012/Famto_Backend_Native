@@ -48,6 +48,7 @@ const taskSchema = new mongoose.Schema(
   {
     orderId: { type: String, ref: "Order", required: true },
     agentId: { type: String, ref: "Agent", default: null },
+    serviceId: { type: String, ref: "ServiceCategory", default: null },
     taskStatus: {
       type: String,
       enum: ["Assigned", "Unassigned", "Completed", "Cancelled"],
