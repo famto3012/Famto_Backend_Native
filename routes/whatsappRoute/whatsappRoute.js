@@ -23,12 +23,10 @@ const {
 
 const {
   getContacts,
-  getContactTags,
   syncContacts,
   syncFromFamtoCustomers,
   updateContact,
   getContactTags,
-  syncFromFamtoCustomers,
   downloadSampleCsv,
   importContactsCsv,
 } = require("../../controllers/whatsapp/contactController");
