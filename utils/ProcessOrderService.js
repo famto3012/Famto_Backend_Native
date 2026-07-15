@@ -8,6 +8,8 @@ const CustomerWalletTransaction = require("../models/CustomerWalletTransaction")
 const PromoCode = require("../models/PromoCode");
 const ActivityLog = require("../models/ActivityLog");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
+const PickAndCustomCart = require("../models/PickAndCustomCart");
+const DatabaseCounter = require("../models/DatabaseCounter");
 
 const processOrderService = async (tempOrder) => {
   const session = await mongoose.startSession();
@@ -21,6 +23,7 @@ const processOrderService = async (tempOrder) => {
     const orderPayload = {
       customerId: tempOrder.customerId,
       merchantId: tempOrder.merchantId,
+      serviceId: tempOrder.serviceId,
       pickups: tempOrder.pickups,
       drops: tempOrder.drops,
       billDetail: tempOrder.billDetail,
@@ -52,6 +55,21 @@ const processOrderService = async (tempOrder) => {
       },
     };
 
+    // Generate order ID inside the transaction to prevent counter drift on abort
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = `0${now.getMonth() + 1}`.slice(-2);
+    const counterType = isScheduled ? "ScheduledOrder" : "Order";
+    const prefix = isScheduled ? "SO" : "O";
+
+    const counter = await DatabaseCounter.findOneAndUpdate(
+      { type: counterType, year: parseInt(year), month: parseInt(month) },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true, session }
+    );
+
+    orderPayload._id = `${prefix}${year}${month}${counter.count}`;
+
     let createdOrder;
 
     if (isScheduled) {
@@ -68,12 +86,21 @@ const processOrderService = async (tempOrder) => {
 
     const finalOrder = createdOrder[0];
 
-    await CustomerCart.deleteOne(
-      {
-        customerId: tempOrder.customerId,
-      },
-      { session }
-    );
+    // Use the correct cart model based on delivery mode
+    if (
+      tempOrder.deliveryMode === "Pick and Drop" ||
+      tempOrder.deliveryMode === "Custom Order"
+    ) {
+      await PickAndCustomCart.deleteOne(
+        { customerId: tempOrder.customerId },
+        { session }
+      );
+    } else {
+      await CustomerCart.deleteOne(
+        { customerId: tempOrder.customerId },
+        { session }
+      );
+    }
 
     if (tempOrder.billDetail?.promoCodeUsed) {
       await PromoCode.findOneAndUpdate(

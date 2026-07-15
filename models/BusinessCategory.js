@@ -14,10 +14,16 @@ const BusinessCategorySchema = new mongoose.Schema(
         required: true,
       },
     ],
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ServiceCategory",
+      required: true,
+    },
     bannerImageURL: {
       type: String,
       required: true,
     },
+
     status: {
       type: Boolean,
       default: true,
@@ -48,7 +54,7 @@ const BusinessCategorySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 BusinessCategorySchema.index({ status: 1, order: 1 });
@@ -57,6 +63,6 @@ BusinessCategorySchema.index({ status: 1, geofenceId: 1 });
 
 const BusinessCategory = mongoose.model(
   "BusinessCategory",
-  BusinessCategorySchema
+  BusinessCategorySchema,
 );
 module.exports = BusinessCategory;

@@ -16,7 +16,9 @@ const {
   getMessages,
   sendMessage,
   sendTemplateMessage,
+  getNotes,
   addNote,
+  deleteNote,
 } = require("../../controllers/whatsapp/inboxController");
 
 const {
@@ -25,6 +27,8 @@ const {
   syncContacts,
   syncFromFamtoCustomers,
   updateContact,
+  getContactTags,
+  syncFromFamtoCustomers,
   downloadSampleCsv,
   importContactsCsv,
 } = require("../../controllers/whatsapp/contactController");
@@ -34,6 +38,8 @@ const {
   createCampaign,
   sendCampaign,
   getCampaignEvents,
+  getAudiencePreview,
+  getAudienceOptions,
 } = require("../../controllers/whatsapp/campaignController");
 
 const {
@@ -90,11 +96,23 @@ whatsappRoute.post(
   isAdmin,
   sendTemplateMessage
 );
+whatsappRoute.get(
+  "/conversations/:conversationId/notes",
+  isAuthenticated,
+  isAdmin,
+  getNotes
+);
 whatsappRoute.post(
   "/conversations/:conversationId/notes",
   isAuthenticated,
   isAdmin,
   addNote
+);
+whatsappRoute.delete(
+  "/conversations/:conversationId/notes/:noteId",
+  isAuthenticated,
+  isAdmin,
+  deleteNote
 );
 
 // ─── Contacts ────────────────────────────────────────────
@@ -118,6 +136,8 @@ whatsappRoute.patch(
 );
 
 // ─── Campaigns ───────────────────────────────────────────
+whatsappRoute.get("/campaigns/audience-options", isAuthenticated, isAdmin, getAudienceOptions);
+whatsappRoute.get("/campaigns/audience-preview", isAuthenticated, isAdmin, getAudiencePreview);
 whatsappRoute.get("/campaigns", isAuthenticated, isAdmin, getCampaigns);
 whatsappRoute.post("/campaigns", isAuthenticated, isAdmin, createCampaign);
 whatsappRoute.post(

@@ -1,6 +1,9 @@
 const { validationResult } = require("express-validator");
 
 const LoyaltyPoint = require("../../../models/LoyaltyPoint");
+const Customer = require("../../../models/Customer");                         // ← ADD
+const CustomerWalletTransaction = require("../../../models/CustomerWalletTransaction"); // ← ADD
+const ActivityLog = require("../../../models/ActivityLog");  
 
 const appError = require("../../../utils/appError");
 
@@ -131,8 +134,120 @@ const updateStatusController = async (req, res, next) => {
   }
 };
 
+const redeemLoyaltyPointController = async (req, res, next) => {
+  try {
+    const customerId = req.userAuth;
+    const { pointsToRedeem } = req.body;
+
+    // ── Validate input ──────────────────────────────────────────────
+    if (!pointsToRedeem || typeof pointsToRedeem !== "number" || pointsToRedeem <= 0) {
+      return next(appError("Points to redeem must be a number greater than 0", 400));
+    }
+
+    // ── Fetch loyalty config ────────────────────────────────────────
+    const loyaltyConfig = await LoyaltyPoint.findOne({}).lean();
+
+    if (!loyaltyConfig || !loyaltyConfig.status) {
+      return next(appError("Loyalty point redemption is currently disabled", 400));
+    }
+
+    // ── Fetch customer ──────────────────────────────────────────────
+    const customer = await Customer.findById(customerId)
+      .select("customerDetails.loyaltyPointLeftForRedemption customerDetails.walletBalance")
+      .lean();
+
+    if (!customer) {
+      return next(appError("Customer not found", 404));
+    }
+
+    const availablePoints =
+      customer.customerDetails?.loyaltyPointLeftForRedemption || 0;
+
+    // ── Minimum points threshold check ──────────────────────────────
+    if (pointsToRedeem < loyaltyConfig.minLoyaltyPointForRedemption) {
+      return next(
+        appError(
+          `Minimum ${loyaltyConfig.minLoyaltyPointForRedemption} points required per redemption`,
+          400
+        )
+      );
+    }
+
+    // ── Sufficient balance check ────────────────────────────────────
+    if (pointsToRedeem > availablePoints) {
+      return next(
+        appError(
+          `Insufficient loyalty points. Available: ${availablePoints}, Requested: ${pointsToRedeem}`,
+          400
+        )
+      );
+    }
+
+    // ── Convert points → rupees ─────────────────────────────────────
+    // Example: config says 10 points = ₹1 → 100 points = ₹10
+    const redeemAmount =
+      (pointsToRedeem / loyaltyConfig.redemptionCriteriaPoint) *
+      loyaltyConfig.redemptionCriteriaRupee;
+
+    const creditAmount = Math.round(redeemAmount * 100) / 100;
+
+    // ── Atomic update: deduct points + credit wallet ────────────────
+    const updatedCustomer = await Customer.findOneAndUpdate(
+      {
+        _id: customerId,
+        "customerDetails.loyaltyPointLeftForRedemption": { $gte: pointsToRedeem },
+      },
+      {
+        $inc: {
+          "customerDetails.loyaltyPointLeftForRedemption": -pointsToRedeem,
+          "customerDetails.walletBalance": creditAmount,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedCustomer) {
+      return next(
+        appError("Redemption failed. Points may have changed, please try again.", 409)
+      );
+    }
+
+    // ── Create wallet transaction record ────────────────────────────
+    await Promise.all([
+      CustomerWalletTransaction.create({
+        customerId,
+        closingBalance: updatedCustomer.customerDetails.walletBalance,
+        transactionAmount: creditAmount,
+        date: new Date(),
+        type: "Credit",
+        transactionId: `LOYALTY_REDEEM_${Date.now()}`,
+      }),
+      ActivityLog.create({
+        userId: customerId,
+        userType: "Customer",
+        description: `Redeemed ${pointsToRedeem} loyalty points for ₹${creditAmount} wallet credit`,
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Loyalty points redeemed successfully",
+      data: {
+        redeemedPoints: pointsToRedeem,
+        creditedAmount: creditAmount,
+        walletBalance: updatedCustomer.customerDetails.walletBalance,
+        remainingPoints:
+          updatedCustomer.customerDetails.loyaltyPointLeftForRedemption,
+      },
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
 module.exports = {
   addLoyaltyPointController,
   getLoyaltyPointController,
   updateStatusController,
+  redeemLoyaltyPointController
 };

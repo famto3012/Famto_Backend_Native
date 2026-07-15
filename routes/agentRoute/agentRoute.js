@@ -22,6 +22,7 @@ const {
   getTaskPreviewController,
   getPickUpDetailController,
   addCustomOrderItemPriceController,
+  addHomeDeliveryItemController,
   addOrderDetailsController,
   getDeliveryDetailController,
   confirmCashReceivedController,
@@ -223,6 +224,12 @@ agentRoute.patch(
   "/add-item-price/:orderId/:itemId",
   isAuthenticated,
   addCustomOrderItemPriceController
+);
+
+agentRoute.post(
+  "/add-items/:orderId",
+  isAuthenticated,
+  addHomeDeliveryItemController
 );
 
 agentRoute.post(

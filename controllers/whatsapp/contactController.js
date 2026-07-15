@@ -2,6 +2,8 @@ const WhatsappContact = require("../../models/WhatsappContact");
 const WhatsappConversation = require("../../models/WhatsappConversation");
 const Customer = require("../../models/Customer");
 const appError = require("../../utils/appError");
+const csvParser = require("csv-parser");
+const stream = require("stream");
 const csv = require("csv-parser");
 const { Readable } = require("stream");
 
@@ -10,7 +12,7 @@ const getContacts = async (req, res, next) => {
     const { search = "", tag, page = 1, limit = 50 } = req.query;
 
     const filter = {};
-
+    // Fix: "all" means no tag filter
     // Only apply tag filter when a specific tag is requested (not "all")
     if (tag && tag !== "all") filter.tags = { $in: tag.split(",") };
     if (search) {
@@ -136,7 +138,27 @@ const updateContact = async (req, res, next) => {
     next(appError(err.message, 500));
   }
 };
+// ─── New Functions ────────────────────────────────────────
 
+const getContactTags = async (req, res, next) => {
+  try {
+    const tags = await WhatsappContact.aggregate([
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $project: { _id: 0, id: "$_id", label: "$_id", count: 1 } },
+    ]);
+    res.status(200).json({ success: true, data: tags });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
+const syncFromFamtoCustomers = async (req, res, next) => {
+  try {
+    const customers = await Customer.find({ isBlocked: false })
+      .select("_id fullName phoneNumber")
+      .lean();
 // ─── Sync from Famto customers ───────────────────────────
 const syncFromFamtoCustomers = async (req, res, next) => {
   try {
@@ -158,6 +180,31 @@ const syncFromFamtoCustomers = async (req, res, next) => {
     let updated = 0;
     let skipped = 0;
 
+    for (const cust of customers) {
+      const phone = String(cust.phoneNumber || "").replace(/\D/g, "");
+      if (!phone) {
+        skipped++;
+        continue;
+      }
+      const waId = phone.startsWith("91") ? phone : `91${phone}`;
+
+      const result = await WhatsappContact.findOneAndUpdate(
+        { waId },
+        {
+          $setOnInsert: {
+            waId,
+            phone: `+${waId}`,
+            tags: ["famto-customer"],
+          },
+          $set: {
+            name: cust.fullName || "",
+            customFields: { famtoId: cust._id.toString() },
+          },
+        },
+        { upsert: true, new: true, rawResult: true }
+      );
+
+      result.lastErrorObject?.updatedExisting ? updated++ : created++;
     for (const customer of customers) {
       try {
         // Normalize phone: strip non-digits, add 91 prefix if 10 digits
@@ -204,13 +251,12 @@ const syncFromFamtoCustomers = async (req, res, next) => {
   }
 };
 
-// ─── Download sample CSV template ────────────────────────
 const downloadSampleCsv = (req, res) => {
-  const sample = [
-    "name,phone,email,tags,notes",
-    "Rahul Sharma,919876543210,rahul@example.com,vip;new,Premium customer",
-    "Priya Patel,919876543211,priya@example.com,new,",
-    "Amit Kumar,919876543212,,vip,",
+  const content = [
+    "name,phone,email,tags",
+    'John Doe,919876543210,john@example.com,"vip,new"',
+    "Jane Smith,919812345678,,regular",
+    "Ravi Kumar,917890123456,ravi@example.com,famto-customer",
   ].join("\n");
 
   res.setHeader("Content-Type", "text/csv");
@@ -218,100 +264,60 @@ const downloadSampleCsv = (req, res) => {
     "Content-Disposition",
     'attachment; filename="whatsapp_contacts_sample.csv"'
   );
-  res.send(sample);
+  res.send(content);
 };
 
-// ─── Import contacts from CSV ─────────────────────────────
 const importContactsCsv = async (req, res, next) => {
   try {
     if (!req.file) {
-      return next(appError("CSV file is required", 400));
+      return next(appError("No CSV file uploaded", 400));
     }
 
-    const results = [];
-    const errors = [];
-
+    const rows = [];
     await new Promise((resolve, reject) => {
-      const readable = Readable.from(req.file.buffer);
+      const readable = new stream.PassThrough();
+      readable.end(req.file.buffer);
       readable
-        .pipe(csv({ mapHeaders: ({ header }) => header.trim().toLowerCase() }))
-        .on("data", (row) => results.push(row))
+        .pipe(csvParser())
+        .on("data", (row) => rows.push(row))
         .on("end", resolve)
         .on("error", reject);
     });
 
-    if (!results.length) {
-      return next(appError("CSV file is empty or has no valid rows", 400));
-    }
-
     let created = 0;
     let updated = 0;
-    let skipped = 0;
+    const errors = [];
 
-    for (const row of results) {
+    for (const row of rows) {
       try {
-        // phone is required — strip everything except digits
-        const rawPhone = String(row.phone || row.phonenumber || row.mobile || "").replace(/\D/g, "");
-        if (!rawPhone || rawPhone.length < 10) {
-          errors.push({ row, reason: "Invalid or missing phone number" });
-          skipped++;
+        const phone = String(row.phone || row.Phone || "").replace(/\D/g, "");
+        if (!phone) {
+          errors.push(`Row skipped: missing phone (name: ${row.name || row.Name || "unknown"})`);
           continue;
         }
 
-        // Ensure country code — if 10 digits assume India (+91)
-        const waId = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+        const waId = phone.startsWith("91") ? phone : `91${phone}`;
+        const tags = (row.tags || row.Tags || "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
 
-        const name = String(row.name || row.fullname || row.customer_name || "").trim();
-        const email = String(row.email || "").trim() || undefined;
-        const notes = String(row.notes || row.note || "").trim() || undefined;
-
-        // tags column supports semicolon-separated values e.g. "vip;new"
-        const tags = row.tags
-          ? String(row.tags)
-              .split(";")
-              .map((t) => t.trim().toLowerCase())
-              .filter(Boolean)
-          : [];
-
-        // customFields: any extra columns beyond the known ones
-        const knownKeys = ["name", "phone", "phonenumber", "mobile", "email", "tags", "notes", "note", "fullname", "customer_name"];
-        const customFields = {};
-        Object.entries(row).forEach(([key, value]) => {
-          if (!knownKeys.includes(key) && value) {
-            customFields[key.trim()] = String(value).trim();
-          }
-        });
-
-        const existing = await WhatsappContact.findOne({ waId });
-
-        if (existing) {
-          // Update — merge tags, keep existing name if new one is blank
-          const mergedTags = [...new Set([...existing.tags, ...tags])];
-          await WhatsappContact.findByIdAndUpdate(existing._id, {
+        const result = await WhatsappContact.findOneAndUpdate(
+          { waId },
+          {
+            $setOnInsert: { waId, phone: `+${waId}` },
             $set: {
-              name: name || existing.name,
-              ...(email && { email }),
-              ...(notes && { notes }),
-              tags: mergedTags,
-              ...(Object.keys(customFields).length && { customFields }),
+              name: row.name || row.Name || "",
+              email: row.email || row.Email || "",
+              ...(tags.length ? { tags } : {}),
             },
-          });
-          updated++;
-        } else {
-          await WhatsappContact.create({
-            waId,
-            name,
-            phone: `+${waId}`,
-            ...(email && { email }),
-            ...(notes && { notes }),
-            tags,
-            ...(Object.keys(customFields).length && { customFields }),
-          });
-          created++;
-        }
-      } catch (rowErr) {
-        errors.push({ row, reason: rowErr.message });
-        skipped++;
+          },
+          { upsert: true, new: true, rawResult: true }
+        );
+
+        result.lastErrorObject?.updatedExisting ? updated++ : created++;
+      } catch (e) {
+        errors.push(e.message);
       }
     }
 

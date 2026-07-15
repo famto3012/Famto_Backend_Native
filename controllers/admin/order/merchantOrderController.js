@@ -9,6 +9,7 @@ const Merchant = require("../../../models/Merchant");
 const Order = require("../../../models/Order");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
 const CustomerCart = require("../../../models/CustomerCart");
+const BusinessCategory = require("../../../models/BusinessCategory");
 const ActivityLog = require("../../../models/ActivityLog");
 const Product = require("../../../models/Product");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
@@ -53,6 +54,7 @@ const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
 const { geoLocation } = require("../../../utils/getGeoLocation");
+const { sendOrderTrackingMessage } = require("../../../utils/whatsappApi");
 
 const { findRolesToNotify } = require("../../../socket/socket");
 const { default: mongoose } = require("mongoose");
@@ -92,14 +94,14 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
 
             const variant = product.variants.find((variant) =>
               variant.variantTypes.some((type) =>
-                type._id.equals(item.variantId)
-              )
+                type._id.equals(item.variantId),
+              ),
             );
 
             const variantType = variant
               ? variant.variantTypes.find((type) =>
-                type._id.equals(item.variantId)
-              )
+                  type._id.equals(item.variantId),
+                )
               : null;
 
             return {
@@ -108,7 +110,7 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
               quantity: item.quantity,
               price: item.price,
             };
-          })
+          }),
         );
 
         return {
@@ -137,7 +139,7 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
           amount: order.billDetail.grandTotal,
           items: formattedItems,
         };
-      })
+      }),
     );
 
     const totalDocuments = isPaginated
@@ -152,12 +154,12 @@ const getAllOrdersOfMerchantController = async (req, res, next) => {
       data: orderDetails,
       pagination: isPaginated
         ? {
-          totalDocuments,
-          totalPages,
-          currentPage: page,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-        }
+            totalDocuments,
+            totalPages,
+            currentPage: page,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
+          }
         : undefined,
     });
   } catch (err) {
@@ -441,12 +443,12 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
 
             const variant = product.variants?.find((variant) =>
               variant.variantTypes?.some((type) =>
-                type._id.equals(item.variantId)
-              )
+                type._id.equals(item.variantId),
+              ),
             );
 
             const variantType = variant?.variantTypes?.find((type) =>
-              type._id.equals(item.variantId)
+              type._id.equals(item.variantId),
             );
 
             return {
@@ -455,7 +457,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
               quantity: item.quantity,
               price: item.price,
             };
-          })
+          }),
         );
 
         return {
@@ -484,7 +486,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
           amount: order.billDetail?.grandTotal || 0,
           items: formattedItems,
         };
-      })
+      }),
     );
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -502,7 +504,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
     });
   } catch (err) {
     next(
-      appError(err.message || "Something went wrong while fetching orders.")
+      appError(err.message || "Something went wrong while fetching orders."),
     );
   }
 };
@@ -650,7 +652,7 @@ const searchScheduledOrderByIdController = async (req, res, next) => {
       (await ScheduledOrder.countDocuments(searchCriteria)) || 1;
 
     const unSeenOrdersCount = ordersFound.filter(
-      (order) => !order.isViewed
+      (order) => !order.isViewed,
     ).length;
 
     const formattedOrders = ordersFound.map((order) => {
@@ -765,7 +767,7 @@ const filterScheduledOrdersController = async (req, res, next) => {
       (await ScheduledOrder.countDocuments(filterCriteria)) || 1;
 
     const unSeenOrdersCount = filteredOrderResults.filter(
-      (order) => !order.isViewed
+      (order) => !order.isViewed,
     ).length;
 
     const formattedOrders = filteredOrderResults.map((order) => {
@@ -940,17 +942,19 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
         orderStatus: order?.status,
         merchantName: order?.merchantData?.merchantDetail?.merchantName || "-",
         customerName:
-          order?.customerId?.fullName || order?.drops[0]?.address?.fullName || "",
-        deliveryMode: order?.deliveryMode,
-        orderDate: formatDate(order?.createdAt),
-        orderTime: formatTime(order?.createdAt),
+          order?.customerData?.fullName ||
+          order?.drops?.[0]?.deliveryAddress?.fullName ||
+          "",
+        deliveryMode: order?.deliveryMode || "",
+        orderDate: order?.createdAt ? formatDate(order?.createdAt) : "",
+        orderTime: order?.createdAt ? formatTime(order?.createdAt) : "",
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
         deliveryTime: order?.time ? formatTime(order?.time) : "-",
         paymentMethod:
           order.paymentMode === "Cash-on-delivery"
             ? "Pay-on-delivery"
-            : order.paymentMode,
-        deliveryOption: order?.deliveryOption,
+            : order.paymentMode || "",
+        deliveryOption: order?.deliveryOption || "",
         amount: order.billDetail.grandTotal,
         isViewed: order?.isViewed || false,
       };
@@ -979,7 +983,9 @@ const fetchAllScheduledOrdersOfMerchant = async (req, res, next) => {
 const confirmOrderController = async (req, res, next) => {
   try {
     const currentMerchant = req.userAuth;
-    console.log(`[confirmOrder] 🟡 Merchant accept triggered — merchantId: ${currentMerchant}`);
+    console.log(
+      `[confirmOrder] 🟡 Merchant accept triggered — merchantId: ${currentMerchant}`,
+    );
 
     if (!currentMerchant) {
       return next(appError("Merchant is not authenticated", 401));
@@ -990,7 +996,7 @@ const confirmOrderController = async (req, res, next) => {
 
     let orderFound = await Order.findById(orderId).populate(
       "merchantId",
-      "merchantDetail"
+      "merchantDetail",
     );
 
     if (!orderFound) return next(appError("Order not found", 404));
@@ -1035,13 +1041,15 @@ const confirmOrderController = async (req, res, next) => {
 
         if (!task) return next(appError("Task not created"));
       } else {
-        console.log(`[confirmOrder] deliveryMode is Take Away — skipping task creation`);
+        console.log(
+          `[confirmOrder] deliveryMode is Take Away — skipping task creation`,
+        );
       }
 
       await Promise.all([
         reduceProductAvailableQuantity(
           orderFound.purchasedItems,
-          orderFound.merchantId
+          orderFound.merchantId,
         ),
         orderFound.save(),
         ActivityLog.create({
@@ -1086,6 +1094,31 @@ const confirmOrderController = async (req, res, next) => {
         notificationData,
         socketData,
       });
+
+      // Send order tracking WhatsApp message (non-blocking)
+      const customer = await Customer.findById(orderFound.customerId)
+        .select("phoneNumber fullName")
+        .lean();
+
+      if (customer?.phoneNumber) {
+        const customerName =
+          orderFound.drops?.[0]?.address?.fullName ||
+          customer.fullName ||
+          "Customer";
+        const merchantName =
+          orderFound.merchantId?.merchantDetail?.merchantName || "your store";
+
+        sendOrderTrackingMessage(
+          customer.phoneNumber,
+          customerName,
+          merchantName,
+        ).catch((err) =>
+          console.error(
+            "[WhatsApp] Order tracking message error:",
+            err.message,
+          ),
+        );
+      }
     } else {
       return next(appError("Access Denied", 400));
     }
@@ -1140,11 +1173,11 @@ const rejectOrderController = async (req, res, next) => {
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;
 
-      if (orderFound.orderDetail.deliveryOption === "On-demand") {
+      if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
-      } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+      } else if (orderFound.deliveryOption === "Scheduled") {
         const orderAmountPerDay =
-          orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+          orderFound.billDetail.grandTotal / orderFound.numOfDays;
         customerFound.customerDetails.walletBalance += orderAmountPerDay;
       }
 
@@ -1168,12 +1201,12 @@ const rejectOrderController = async (req, res, next) => {
 
       if (paymentId) {
         let refundAmount;
-        if (orderFound.orderDetail.deliveryOption === "On-demand") {
+        if (orderFound.deliveryOption === "On-demand") {
           refundAmount = orderFound.billDetail.grandTotal;
           updatedTransactionDetail.transactionAmount = refundAmount;
-        } else if (orderFound.orderDetail.deliveryOption === "Scheduled") {
+        } else if (orderFound.deliveryOption === "Scheduled") {
           refundAmount =
-            orderFound.billDetail.grandTotal / orderFound.orderDetail.numOfDays;
+            orderFound.billDetail.grandTotal / orderFound.numOfDays;
           updatedTransactionDetail.transactionAmount = refundAmount;
         }
 
@@ -1291,10 +1324,10 @@ const getOrderDetailController = async (req, res, next) => {
       deliveryMode: orderFound.deliveryMode || "-",
       deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.createdAt)} | ${formatTime(
-        orderFound.createdAt
+        orderFound.createdAt,
       )}`,
       deliveryTime: `${formatDate(
-        orderFound.deliveryTime
+        orderFound.deliveryTime,
       )} | ${formatTime(orderFound.deliveryTime)}`,
       customerDetail: {
         _id: orderFound.customerId._id,
@@ -1384,13 +1417,20 @@ const getOrderDetailController = async (req, res, next) => {
         phoneNumber: orderFound?.agentId?.phoneNumber || "-",
         avatar: orderFound?.agentId?.agentImageURL || "-",
         team: orderFound?.agentId?.workStructure?.managerId?.name || "-",
-        instructionsByCustomer:
-          orderFound?.instructionToDeliveryAgent || "-",
+        instructionsByCustomer: orderFound?.instructionToDeliveryAgent || "-",
         distanceTravelled: orderFound?.distance,
         timeTaken: formatToHours(orderFound?.timeTaken) || "-",
         delayedBy: formatToHours(orderFound?.delayedBy) || "-",
       },
-      items: orderFound.items || null,
+      items:
+        orderFound?.purchasedItems?.map((item) => ({
+          productId: item?.productId || null,
+          variantId: item?.variantId || null,
+          itemName: item?.productName || "-",
+          quantity: item?.quantity || 0,
+          price: item?.price || 0,
+          costPrice: item?.costPrice || 0,
+        })) || [],
       billDetail: orderFound.billDetail || null,
       pickUpLocation: orderFound?.pickups?.[0]?.address || null,
       deliveryLocation: orderFound?.drops?.[0]?.address || null,
@@ -1478,12 +1518,12 @@ const getScheduledOrderDetailController = async (req, res, next) => {
       deliveryMode: orderFound.deliveryMode || "-",
       deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
-        orderFound.startDate
+        orderFound.startDate,
       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
-        orderFound.endDate
+        orderFound.endDate,
       )}`,
       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
-        orderFound.time
+        orderFound.time,
       )}`,
       isViewed: orderFound?.isViewed,
       customerDetail: {
@@ -1494,7 +1534,63 @@ const getScheduledOrderDetailController = async (req, res, next) => {
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
-        address: orderFound?.drops[0]?.address,
+        pickAddress:
+          orderFound.pickups?.map((pickup) => ({
+            location: pickup?.location || null,
+            fullName: pickup?.address?.fullName,
+            phoneNumber: pickup?.address?.phoneNumber,
+            flat: pickup?.address?.flat,
+            area: pickup?.address?.area,
+            landmark: pickup?.address?.landmark,
+            items: pickup?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+
+        dropAddress:
+          orderFound.drops?.map((drops) => ({
+            location: drops?.location || null,
+            fullName: drops?.address?.fullName,
+            phoneNumber: drops?.address?.phoneNumber,
+            flat: drops?.address?.flat,
+            area: drops?.address?.area,
+            landmark: drops?.address?.landmark,
+            items: drops?.items?.map((item) => ({
+              itemId: item?.itemId,
+              itemName: item?.itemName,
+              quantity: item?.quantity,
+              price: item?.price,
+              length: item?.length,
+              numOfUnits: item?.numOfUnits,
+              itemImageURL: item?.itemImageURL,
+              weight: item?.weight,
+              width: item?.width,
+              height: item?.height,
+              unit: item?.unit,
+              variantTypeName: item?.variantTypeName,
+            })),
+          })) || [],
+        pickInstructions:
+          orderFound.pickups?.map((instruction) => ({
+            instruction: instruction?.instructionInPickup || null,
+            voiceInstruction: instruction?.voiceInstructionInPickup || null,
+          })) || [],
+        dropInstructions:
+          orderFound.drops?.map((instruction) => ({
+            instruction: instruction?.instructionInDrop || null,
+            voiceInstruction: instruction?.voiceInstructionInDrop || null,
+          })) || [],
         ratingsToDeliveryAgent: {
           rating: orderFound?.orderRating?.ratingToDeliveryAgent?.rating || 0,
           review: orderFound.orderRating?.ratingToDeliveryAgent.review || "-",
@@ -1523,7 +1619,15 @@ const getScheduledOrderDetailController = async (req, res, next) => {
         timeTaken: "-",
         delayedBy: "-",
       },
-      items: orderFound.items || null,
+      items:
+        orderFound?.purchasedItems?.map((item) => ({
+          productId: item?.productId || null,
+          variantId: item?.variantId || null,
+          itemName: item?.productName || "-",
+          quantity: item?.quantity || 0,
+          price: item?.price || 0,
+          costPrice: item?.costPrice || 0,
+        })) || [],
       billDetail: orderFound.billDetail || null,
       pickUpLocation: orderFound?.pickups[0]?.location || null,
       deliveryLocation: orderFound?.drops[0]?.location || null,
@@ -1573,7 +1677,7 @@ const createOrderController = async (req, res, next) => {
       cartFound,
       customer,
       deliveryTime,
-      paymentMode
+      paymentMode,
     );
 
     const isPickAndCustomCart =
@@ -1583,61 +1687,62 @@ const createOrderController = async (req, res, next) => {
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+      serviceId: cartFound.serviceId,
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,
 
       pickups: isCustomerCart
         ? [
-          {
-            location: cartFound.cartDetail.pickupLocation,
-            address: cartFound.cartDetail.pickupAddress,
-            instructionInPickup:
-              cartFound.cartDetail.instructionToMerchant || null,
-            voiceInstructionInPickup:
-              cartFound.cartDetail.voiceInstructionToMerchant || null,
-            items: [], // Fill if needed
-          },
-        ]
+            {
+              location: cartFound.cartDetail.pickupLocation,
+              address: cartFound.cartDetail.pickupAddress,
+              instructionInPickup:
+                cartFound.cartDetail.instructionToMerchant || null,
+              voiceInstructionInPickup:
+                cartFound.cartDetail.voiceInstructionToMerchant || null,
+              items: [], // Fill if needed
+            },
+          ]
         : isPickAndCustomCart
           ? cartFound.pickups.map((p) => ({
-            location: p.location || [],
-            address: p.address || {},
-            instructionInPickup:
-              p.instructionInPickup ||
-              cartFound.cartDetail?.instructionToDeliveryAgent,
-            voiceInstructionInDrop: p.voiceInstructionInPickup || null,
-            voiceInstructionInDrop: p.voiceInstructionInDrop || null,
-            items: p.items || [],
-          }))
+              location: p.location || [],
+              address: p.address || {},
+              instructionInPickup:
+                p.instructionInPickup ||
+                cartFound.cartDetail?.instructionToDeliveryAgent,
+              voiceInstructionInDrop: p.voiceInstructionInPickup || null,
+              voiceInstructionInDrop: p.voiceInstructionInDrop || null,
+              items: p.items || [],
+            }))
           : [],
 
       drops: isCustomerCart
         ? [
-          {
-            location: cartFound.cartDetail.deliveryLocation,
-            address: cartFound.cartDetail.deliveryAddress,
-            instructionInDrop:
-              cartFound.cartDetail?.instructionToDeliveryAgent || null,
-            voiceInstructionInDrop:
-              cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
-            items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-              ? orderDetails.formattedItems
-              : cartFound.items,
-            orderDetail: {
-              ...cartFound.cartDetail,
-              deliveryTime,
+            {
+              location: cartFound.cartDetail.deliveryLocation,
+              address: cartFound.cartDetail.deliveryAddress,
+              instructionInDrop:
+                cartFound.cartDetail?.instructionToDeliveryAgent || null,
+              voiceInstructionInDrop:
+                cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
+              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.items,
+              orderDetail: {
+                ...cartFound.cartDetail,
+                deliveryTime,
+              },
             },
-          },
-        ]
+          ]
         : isPickAndCustomCart
           ? cartFound.drops.map((d) => ({
-            location: d.location || [],
-            address: d.address || {},
-            instructionInDrop: d.instructionInDrop || null,
-            voiceInstructionInDrop: d.voiceInstructionInDrop || null,
-            items: d.items || [],
-          }))
+              location: d.location || [],
+              address: d.address || {},
+              instructionInDrop: d.instructionInDrop || null,
+              voiceInstructionInDrop: d.voiceInstructionInDrop || null,
+              items: d.items || [],
+            }))
           : [],
 
       billDetail: orderDetails.billDetail,
@@ -1687,19 +1792,19 @@ const createOrderController = async (req, res, next) => {
       (cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption) ===
       "Scheduled";
     const isPickOrCustomOrder = ["Pick and Drop", "Custom Order"].includes(
-      deliveryMode
+      deliveryMode,
     );
 
     let newOrderCreated;
     let OrderModelToUse;
     if (isScheduledOrder && !isPickOrCustomOrder) {
-      console.log("Creating Scheduled Order", cartFound),
+      (console.log("Creating Scheduled Order", cartFound),
         (newOrderCreated = await ScheduledOrder.create({
           ...orderOptions,
           startDate: cartFound.cartDetail?.startDate || cartFound.startDate,
           endDate: cartFound.cartDetail?.endDate || cartFound.endDate,
           time: cartFound.cartDetail?.time || cartFound.time,
-        }));
+        })));
       OrderModelToUse = ScheduledOrder;
     } else if (isScheduledOrder && isPickOrCustomOrder) {
       console.log("Creating Scheduled Pick and Custom Order", cartFound);
@@ -1719,8 +1824,9 @@ const createOrderController = async (req, res, next) => {
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${newOrderCreated._id
-          }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${
+          newOrderCreated._id
+        }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
       clearCart(customer._id, deliveryMode),
       updateCustomerTransaction(customer, orderDetails.billDetail),
@@ -1874,11 +1980,11 @@ const downloadOrdersCSVByMerchantController = async (req, res, next) => {
           deliveryMode: order?.orderDetail?.deliveryMode || "-",
           orderTime:
             `${formatDate(order?.createdAt)} | ${formatTime(
-              order?.createdAt
+              order?.createdAt,
             )}` || "-",
           deliveryTime:
             `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
-              order?.orderDetail?.deliveryTime
+              order?.orderDetail?.deliveryTime,
             )}` || "-",
           paymentMode: order?.paymentMode || "-",
           deliveryOption: order?.orderDetail?.deliveryOption || "-",
@@ -2013,9 +2119,10 @@ const downloadCSVByMerchantController = async (req, res, next) => {
     let formattedResponse = [];
 
     allOrders?.forEach((order) => {
-      const itemNames = order.items
-        .map((item) => `${item.itemName} (x${item.quantity})`)
-        .join(", ");
+      const itemNames =
+        order.items
+          ?.map((item) => `${item.itemName} (x${item.quantity})`)
+          .join(", ") || "-";
       formattedResponse.push({
         orderId: order._id,
         status: order?.status || "-",
@@ -2027,12 +2134,11 @@ const downloadCSVByMerchantController = async (req, res, next) => {
         customerEmail: order?.customerId?.email || "-",
         deliveryMode: order?.orderDetail?.deliveryMode || "-",
         orderTime:
-          `${formatDate(order?.createdAt)} | ${formatTime(
-            order?.createdAt
-          )}` || "-",
+          `${formatDate(order?.createdAt)} | ${formatTime(order?.createdAt)}` ||
+          "-",
         deliveryTime:
           `${formatDate(order?.orderDetail?.deliveryTime)} | ${formatTime(
-            order?.orderDetail?.deliveryTime
+            order?.orderDetail?.deliveryTime,
           )}` || "-",
         paymentMode: order?.paymentMode || "-",
         deliveryOption: order?.orderDetail?.deliveryOption || "-",
@@ -2043,8 +2149,8 @@ const downloadCSVByMerchantController = async (req, res, next) => {
         distanceInKM: order?.orderDetail?.distance || "-",
         cancellationReason: order?.cancellationReason || "-",
         cancellationDescription: order?.cancellationDescription || "-",
-        merchantEarnings: order?.merchantEarnings || "-",
-        famtoEarnings: order?.famtoEarnings || "-",
+        merchantEarnings: order?.commissionDetail?.merchantEarnings || "-",
+        famtoEarnings: order?.commissionDetail?.famtoEarnings || "-",
         deliveryCharge: order?.billDetail?.deliveryCharge || "-",
         taxAmount: order?.billDetail?.taxAmount || "-",
         discountedAmount: order?.billDetail?.discountedAmount || "-",
@@ -2060,7 +2166,6 @@ const downloadCSVByMerchantController = async (req, res, next) => {
         // height: item.height || "-",
       });
     });
-
 
     const filePath = path.join(__dirname, "../../../Order.csv");
 
@@ -2160,6 +2265,15 @@ const createInvoiceController = async (req, res, next) => {
       // ifScheduled,
     } = req.body;
 
+    // Derive serviceId from the business category itself rather than trusting client input
+    const businessCategoryDoc = selectedBusinessCategory
+      ? await BusinessCategory.findById(selectedBusinessCategory).select(
+          "serviceId",
+        )
+      : null;
+    const resolvedServiceId =
+      businessCategoryDoc?.serviceId?.toString() || null;
+
     const merchantId = req.userAuth;
     const merchantFound = await Merchant.findById(merchantId);
     if (!merchantFound) return next(appError("Merchant not found", 404));
@@ -2168,11 +2282,12 @@ const createInvoiceController = async (req, res, next) => {
       newPickupAddress?.latitude,
       newPickupAddress?.longitude,
     ];
-    const merchantLocation = merchantFound.merchantDetail.geoLocation.coordinates;
+    const merchantLocation =
+      merchantFound.merchantDetail.geoLocation.coordinates;
 
     const customerAddressFromPickOrDrop = locationArraysEqual(
       newPickLocation,
-      merchantLocation
+      merchantLocation,
     )
       ? newDeliveryAddress
       : newPickupAddress;
@@ -2210,7 +2325,7 @@ const createInvoiceController = async (req, res, next) => {
       deliveryAddressType,
       deliveryAddressOtherAddressId,
       newPickupAddress,
-      newDeliveryAddress
+      newDeliveryAddress,
     );
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
@@ -2250,7 +2365,7 @@ const createInvoiceController = async (req, res, next) => {
       merchantDiscountAmount,
       taxAmount || 0,
       addedTip,
-      returnCharge || 0
+      returnCharge || 0,
     );
 
     let customerCart;
@@ -2354,16 +2469,24 @@ const createInvoiceController = async (req, res, next) => {
       customerCart = await PickAndCustomCart.findOneAndUpdate(
         { customerId: customer._id },
         { $set: cartDetailsForPickandCustomCart },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
     } else {
       // ✅ Normal CustomerCart flow
+      // Normalize items: map variantId → variantTypeId for CustomerCart schema
+      const normalizedItems = (items || []).map((item) => ({
+        ...item,
+        variantTypeId: item.variantTypeId || item.variantId || null,
+      }));
+
       customerCart = await CustomerCart.findOneAndUpdate(
         { customerId: customer._id },
         {
           customerId: customer._id,
           merchantId,
-          items,
+          businessCategoryId: selectedBusinessCategory || null,
+          serviceId: resolvedServiceId,
+          items: normalizedItems,
           cartDetail: {
             pickupLocation,
             pickupAddress,
@@ -2382,16 +2505,15 @@ const createInvoiceController = async (req, res, next) => {
             deliveryChargePerDay: oneTimeDeliveryCharge,
           },
         },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
     }
 
     let formattedItems;
 
     if (deliveryMode !== "Pick and Drop") {
-      const populatedCartWithVariantNames = await formattedCartItems(
-        customerCart
-      );
+      const populatedCartWithVariantNames =
+        await formattedCartItems(customerCart);
 
       formattedItems = populatedCartWithVariantNames.items.map((item) => ({
         itemName: item.productId.productName,
@@ -2419,7 +2541,7 @@ const createInvoiceController = async (req, res, next) => {
 const getAvailableMerchantBusinessCategoriesController = async (
   req,
   res,
-  next
+  next,
 ) => {
   try {
     const merchantId = req.userAuth;
@@ -2454,7 +2576,7 @@ const markScheduledOrderViewedController = async (req, res, next) => {
       { _id: orderId, merchantId },
       {
         isViewed: true,
-      }
+      },
     );
 
     if (!scheduledOrder) {
@@ -2507,7 +2629,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
     const geofence = await geoLocation(
       address.coordinates[0],
       address.coordinates[1],
-      next
+      next,
     );
 
     if (!geofence) {
@@ -2545,14 +2667,14 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
 
     const { distanceInKM } = await getDistanceFromPickupToDelivery(
       merchant.merchantDetail.geoLocation.coordinates,
-      address.coordinates
+      address.coordinates,
     );
 
     const deliveryCharge = calculateDeliveryCharges(
       distanceInKM,
       customerPricing.baseFare,
       customerPricing.baseDistance,
-      customerPricing.fareAfterBaseDistance
+      customerPricing.fareAfterBaseDistance,
     );
 
     let surgeCharge = 0;
@@ -2561,7 +2683,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         distanceInKM,
         surgePricing.baseFare,
         surgePricing.baseDistance,
-        surgePricing.fareAfterBaseDistance
+        surgePricing.fareAfterBaseDistance,
       );
     }
 
@@ -2581,7 +2703,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
 
     const deliveryTime = new Date(
       new Date().getTime() + Number(merchant?.merchantDetail?.deliveryTime) ||
-      60
+        60,
     );
 
     const newOrder = await Order.create({

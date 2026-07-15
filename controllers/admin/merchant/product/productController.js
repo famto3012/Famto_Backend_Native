@@ -784,7 +784,7 @@ const downloadCobminedProductAndCategoryController = async (req, res, next) => {
       { id: "productCostPrice", title: "Product Cost Price*" },
       { id: "type", title: "Product Type*" },
       { id: "minQuantityToOrder", title: "Min Quantity To Order" },
-      { id: "maxQuantityPerOrder", title: "Max quantity Per Order" },
+      { id: "maxQuantityPerOrder", title: "Max Quantity Per Order" },
       { id: "sku", title: "SKU" },
       { id: "preparationTime", title: "Preparation Time" },
       { id: "description", title: "Description" },
@@ -832,324 +832,428 @@ const downloadCobminedProductAndCategoryController = async (req, res, next) => {
 };
 
 const addCategoryAndProductsFromCSVController = async (req, res, next) => {
+  let fileUrl = null;
+
   try {
     const { merchantId } = req.body;
+
+    // ── 1. Input validation ──
+    if (!merchantId) {
+      return next(appError("Merchant ID is required", 400));
+    }
 
     if (!req.file) {
       return next(appError("CSV file is required", 400));
     }
 
-    // Upload the CSV file to Firebase and get the download URL
-    const fileUrl = await uploadToFirebase(req.file, "csv-uploads");
+    // ── 2. Upload CSV to Firebase ──
+    fileUrl = await uploadToFirebase(req.file, "csv-uploads");
 
-    const categoriesMap = new Map(); // To store categories and their products
-
-    // Download the CSV data from Firebase Storage
-    const response = await axios.get(fileUrl);
-    const csvData = response.data;
-
-    // Create a readable stream from the CSV data
-    const stream = Readable.from(csvData);
-
+    // ── 3. Fetch merchant + validate ──
     const merchant = await Merchant.findById(merchantId)
       .select("merchantDetail.businessCategoryId")
       .populate("merchantDetail.businessCategoryId", "title")
       .lean();
 
+    if (!merchant) {
+      return next(appError("Merchant not found", 404));
+    }
+
     const businessCategoryTitles =
-      merchant?.merchantDetail?.businessCategoryId?.map((cat) => cat.title);
+      merchant?.merchantDetail?.businessCategoryId?.map((cat) => cat.title) ||
+      [];
 
-    const categoryTypeArray = ["Veg", "Non-veg", "Both"];
-    const productTypeArray = ["Veg", "Non-veg", "Other"];
+    if (businessCategoryTitles.length === 0) {
+      return next(
+        appError("Merchant has no business categories assigned", 400)
+      );
+    }
 
-    // Collect raw rows synchronously — no async work here so "end" always
-    // fires after all rows are collected and before any response is sent.
-    const rawRows = [];
+    // ── 4. Download CSV from Firebase ──
+    const response = await axios.get(fileUrl, { responseType: "text" });
+    let csvData = response.data;
 
-    stream
-      .pipe(csvParser())
-      .on("data", (row) => {
-        const isRowEmpty = Object.values(row).every(
-          (value) => value.trim() === ""
+    // Strip UTF-8 BOM if present (exported CSVs include BOM)
+    if (typeof csvData === "string" && csvData.charCodeAt(0) === 0xfeff) {
+      csvData = csvData.slice(1);
+    }
+
+    // ── 5. Parse CSV into raw rows using a promise wrapper ──
+    const rawRows = await new Promise((resolve, reject) => {
+      const rows = [];
+      const stream = Readable.from(csvData);
+
+      stream
+        .pipe(csvParser())
+        .on("data", (row) => {
+          const isRowEmpty = Object.values(row).every(
+            (val) => val.trim() === ""
+          );
+          if (!isRowEmpty) rows.push(row);
+        })
+        .on("end", () => resolve(rows))
+        .on("error", (err) => reject(err));
+    });
+
+    if (rawRows.length === 0) {
+      return next(appError("CSV file is empty or has no valid rows", 400));
+    }
+
+    // ── 6. Pre-fetch all business categories in one query (cached) ──
+    const uniqueBusinessCatNames = [
+      ...new Set(
+        rawRows
+          .map((r) => r["Business Category Name*"]?.trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    const businessCategories = await BusinessCategory.find({
+      title: { $in: uniqueBusinessCatNames },
+    }).lean();
+
+    const businessCategoryMap = new Map(
+      businessCategories.map((bc) => [bc.title, bc])
+    );
+
+    // ── 7. Validate ALL rows first (no DB writes until validation passes) ──
+    const VALID_CATEGORY_TYPES = new Set(["Veg", "Non-veg", "Both"]);
+    const VALID_PRODUCT_TYPES = new Set(["Veg", "Non-veg", "Other"]);
+    const categoriesMap = new Map();
+    const errors = [];
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      const rowNum = i + 2; // +2 because row 1 is headers, data starts at 2
+
+      const businessCategoryName = row["Business Category Name*"]?.trim();
+      const categoryName = row["Category Name*"]?.trim();
+      const productName = row["Product Name*"]?.trim();
+      const categoryType = row["Category Type*"]?.trim();
+      const productType = row["Product Type*"]?.trim();
+      const rawCostPrice = parseFloat(row["Product Cost Price*"]?.trim());
+
+      // Required field checks
+      if (!businessCategoryName) {
+        errors.push(`Row ${rowNum}: Business Category Name is required`);
+        continue;
+      }
+      if (!categoryName) {
+        errors.push(`Row ${rowNum}: Category Name is required`);
+        continue;
+      }
+      if (!productName) {
+        errors.push(`Row ${rowNum}: Product Name is required`);
+        continue;
+      }
+
+      // Business category must match merchant's categories
+      if (!businessCategoryTitles.includes(businessCategoryName)) {
+        errors.push(
+          `Row ${rowNum}: Business category "${businessCategoryName}" does not match merchant's categories`
         );
-        if (!isRowEmpty) rawRows.push(row);
-      })
-      .on("end", async () => {
-        try {
-          // ── Validation + categoriesMap building (all async work here) ──
-          for (const row of rawRows) {
-            const businessCategoryName = row["Business Category Name*"]?.trim();
-            const categoryName = row["Category Name*"]?.trim();
-            const productName = row["Product Name*"]?.trim();
-            const categoryKey = `${merchantId}-${businessCategoryName}-${categoryName}`;
-            const categoryType = row["Category Type*"]?.trim();
-            const productType = row["Product Type*"]?.trim();
+        continue;
+      }
 
-            if (!businessCategoryTitles.includes(businessCategoryName)) {
-              await deleteFromFirebase(fileUrl);
-              return next(
-                appError(
-                  "One or more business categories does not match the merchant's business categories",
-                  400
-                )
-              );
-            }
+      // Business category must exist in DB
+      if (!businessCategoryMap.has(businessCategoryName)) {
+        errors.push(
+          `Row ${rowNum}: Business category "${businessCategoryName}" not found in database`
+        );
+        continue;
+      }
 
-            if (!categoryTypeArray.includes(categoryType)) {
-              await deleteFromFirebase(fileUrl);
-              return next(
-                appError("One or more category types are invalid", 400)
-              );
-            }
+      if (!VALID_CATEGORY_TYPES.has(categoryType)) {
+        errors.push(
+          `Row ${rowNum}: Invalid category type "${categoryType}". Must be Veg, Non-veg, or Both`
+        );
+        continue;
+      }
 
-            if (!productTypeArray.includes(productType)) {
-              await deleteFromFirebase(fileUrl);
-              return next(
-                appError("One or more product types are invalid", 400)
-              );
-            }
+      if (!VALID_PRODUCT_TYPES.has(productType)) {
+        errors.push(
+          `Row ${rowNum}: Invalid product type "${productType}". Must be Veg, Non-veg, or Other`
+        );
+        continue;
+      }
 
-            if (!categoriesMap.has(categoryKey)) {
-              categoriesMap.set(categoryKey, {
-                categoryData: {
-                  merchantId,
-                  businessCategoryName,
-                  categoryName,
-                  type: categoryType,
-                  status:
-                    row["Category Status*"]?.trim() === "TRUE" ||
-                    row["Category Status*"]?.trim() === "true"
-                      ? true
-                      : false,
-                },
-                products: [],
-              });
-            }
+      if (isNaN(rawCostPrice) || rawCostPrice < 0) {
+        errors.push(
+          `Row ${rowNum}: Product "${productName}" has invalid or missing cost price`
+        );
+        continue;
+      }
 
-            const categoryEntry = categoriesMap.get(categoryKey);
+      // ── Build categoriesMap (in-memory grouping) ──
+      const categoryKey = `${businessCategoryName}||${categoryName}`;
+      const businessCategory = businessCategoryMap.get(businessCategoryName);
+      const increasedPercentage = businessCategory?.increasedPercentage || 5;
 
-            const businessCategory = await BusinessCategory.findOne({
-              title: businessCategoryName,
-            }).lean();
+      if (!categoriesMap.has(categoryKey)) {
+        categoriesMap.set(categoryKey, {
+          categoryData: {
+            merchantId,
+            businessCategoryId: businessCategory._id,
+            categoryName,
+            type: categoryType,
+            status:
+              row["Category Status*"]?.trim()?.toUpperCase() === "TRUE",
+          },
+          products: new Map(), // Map<productKey, productData> for O(1) lookup
+        });
+      }
 
-            let increasedPercentage = 0;
-            if (businessCategory) {
-              increasedPercentage = businessCategory?.increasedPercentage || 5;
-            }
+      const categoryEntry = categoriesMap.get(categoryKey);
 
-            let existingProduct = categoryEntry.products.find(
-              (p) => p.productName.toLowerCase() === productName.toLowerCase()
-            );
+      // Compute price
+      const rawPrice = parseFloat(row["Product Price*"]?.trim());
+      const calculatedPrice = Math.round(
+        req.userRole === "Merchant"
+          ? rawCostPrice * (1 + increasedPercentage / 100)
+          : !isNaN(rawPrice)
+          ? rawPrice
+          : rawCostPrice * (1 + increasedPercentage / 100)
+      );
 
-            if (!existingProduct) {
-              existingProduct = {
-                productName,
-                price: Math.round(
-                  req.userRole === "Merchant"
-                    ? parseFloat(row["Product Cost Price*"]?.trim()) *
-                        (1 + increasedPercentage / 100)
-                    : row["Product Price*"]?.trim()
-                    ? parseFloat(row["Product Price*"]?.trim())
-                    : parseFloat(row["Product Cost Price*"]?.trim()) *
-                      (1 + increasedPercentage / 100)
-                ),
-                minQuantityToOrder:
-                  parseInt(row["Min Quantity To Order"]?.trim()) || 0,
-                maxQuantityPerOrder:
-                  parseInt(row["Max Quantity Per Order"]?.trim()) || 0,
-                costPrice: parseFloat(row["Product Cost Price*"]?.trim()),
-                sku: row["SKU"]?.trim() || null,
-                preparationTime: row["Preparation Time"]?.trim() || "",
-                description: row["Description"]?.trim() || "",
-                longDescription: row["Long Description"]?.trim() || "",
-                type: productType,
-                inventory:
-                  row["Inventory"]?.trim() === "TRUE" ||
-                  row["Inventory"]?.trim() === "true"
-                    ? true
-                    : false,
-                productImageURL: row["Product Image"]?.trim() || "",
-                availableQuantity:
-                  parseInt(row["Available Quantity"]?.trim()) || 0,
-                alert: parseInt(row["Alert"]?.trim()) || 0,
-                variants: [],
-              };
+      // Handle "Max quantity Per Order" vs "Max Quantity Per Order" (case mismatch in download CSV)
+      const maxQty =
+        parseInt(row["Max Quantity Per Order"]?.trim()) ||
+        parseInt(row["Max quantity Per Order"]?.trim()) ||
+        0;
 
-              categoryEntry.products.push(existingProduct);
-            }
+      const productKey = productName.toLowerCase();
 
-            const variantName = row["Variant Name"]?.trim();
-            const variantTypeName = row["Variant Type Name"]?.trim();
-            const variantTypeCostPrice = parseFloat(
-              row["Variant Type Cost Price"]?.trim()
-            );
-            const variantTypePrice = Math.round(
-              req.userRole === "Merchant"
-                ? variantTypeCostPrice * (1 + increasedPercentage / 100)
-                : row["Variant Type Price"]?.trim()
-                ? parseFloat(row["Variant Type Price"]?.trim())
-                : variantTypeCostPrice * (1 + increasedPercentage / 100)
-            );
+      if (!categoryEntry.products.has(productKey)) {
+        categoryEntry.products.set(productKey, {
+          productName,
+          price: calculatedPrice,
+          minQuantityToOrder:
+            parseInt(row["Min Quantity To Order"]?.trim()) || 0,
+          maxQuantityPerOrder: maxQty,
+          costPrice: rawCostPrice,
+          sku: row["SKU"]?.trim() || null,
+          preparationTime: row["Preparation Time"]?.trim() || "",
+          description: row["Description"]?.trim() || "",
+          longDescription: row["Long Description"]?.trim() || "",
+          type: productType,
+          inventory:
+            row["Inventory"]?.trim()?.toUpperCase() === "TRUE",
+          productImageURL: row["Product Image"]?.trim() || "",
+          availableQuantity:
+            parseInt(row["Available Quantity"]?.trim()) || 0,
+          alert: parseInt(row["Alert"]?.trim()) || 0,
+          variants: [], // will hold { variantName, variantTypes: [] }
+        });
+      }
 
-            if (
-              variantName &&
-              variantTypeName &&
-              variantTypePrice !== null &&
-              variantTypePrice !== undefined
-            ) {
-              let existingVariant = existingProduct.variants.find(
-                (v) =>
-                  v.variantName.toLowerCase() === variantName.toLowerCase()
-              );
+      // ── Variant handling ──
+      const variantName = row["Variant Name"]?.trim();
+      const variantTypeName = row["Variant Type Name"]?.trim();
+      const variantTypeCostPrice = parseFloat(
+        row["Variant Type Cost Price"]?.trim()
+      );
+      const variantTypePrice = Math.round(
+        req.userRole === "Merchant"
+          ? variantTypeCostPrice * (1 + increasedPercentage / 100)
+          : row["Variant Type Price"]?.trim()
+          ? parseFloat(row["Variant Type Price"]?.trim())
+          : variantTypeCostPrice * (1 + increasedPercentage / 100)
+      );
 
-              if (!existingVariant) {
-                existingVariant = { variantName, variantTypes: [] };
-                existingProduct.variants.push(existingVariant);
-              }
+      if (variantName && variantTypeName && !isNaN(variantTypePrice)) {
+        const productData = categoryEntry.products.get(productKey);
+        const variantKey = variantName.toLowerCase();
+        let existingVariant = productData.variants.find(
+          (v) => v.variantName.toLowerCase() === variantKey
+        );
 
-              existingVariant.variantTypes.push({
-                typeName: variantTypeName,
-                price: variantTypePrice,
-                costPrice: variantTypeCostPrice,
-              });
-            }
-          }
-
-          // ── All rows valid — now save to DB ──
-          for (const [
-            _,
-            { categoryData, products },
-          ] of categoriesMap.entries()) {
-            // console.log("Final Category Data to Save:", categoryData);
-            // console.log("Associated Products:", products);
-
-            // Find or create the business category using businessCategoryName
-            const businessCategoryFound = await BusinessCategory.findOne({
-              title: categoryData.businessCategoryName,
-            }).lean();
-
-            if (!businessCategoryFound) {
-              // console.log(
-              //   `Business category not found for ${categoryData.businessCategoryName}`
-              // );
-              continue; // Skip this category if the business category does not exist
-            }
-
-            // console.log(
-            //   `Found business category: ${businessCategoryFound.title}`
-            // );
-
-            // Add business category ID to category data
-            categoryData.businessCategoryId = businessCategoryFound._id;
-
-            // Check if the category already exists
-            const existingCategory = await Category.findOne({
-              merchantId,
-              categoryName: categoryData.categoryName,
-            }).lean();
-            // console.log("existingCategory", existingCategory._id)
-
-            let newCategory;
-            if (existingCategory) {
-              // console.log(
-              //   `Updating existing category: ${categoryData.categoryName}`
-              // );
-              // console.log("categoryData", categoryData)
-              newCategory = await Category.findByIdAndUpdate(
-                existingCategory._id,
-                { $set: categoryData },
-                { new: true }
-              );
-              // console.log("Updated Category:", newCategory._id);
-            } else {
-              // console.log(
-              //   `Creating new category: ${categoryData.categoryName}`
-              // );
-              // Get the last category order
-              let lastCategory = await Category.findOne().sort({ order: -1 }).lean();
-              let newOrder = lastCategory ? lastCategory.order + 1 : 1;
-
-              categoryData.order = newOrder++;
-              newCategory = new Category(categoryData);
-              await newCategory.save();
-            }
-
-            // Now, process products for the category
-            const productPromises = products.map(async (productData) => {
-              // console.log("newCategory._id", newCategory._id);
-              // console.log("oldCategory._id",  productData.categoryId);
-              productData.categoryId = newCategory._id;
-              // console.log("newCategory._id after", productData.categoryId);
-              // console.log(
-              //   "Product Data to Save/Update:",
-              //   productData.productName
-              // );
-              // console.log("productData.categoryId", productData.categoryId);
-              // console.log("productData.sku", productData.sku);
-
-              const existingProduct = await Product.findOne({
-                productName: productData.productName,
-                categoryId: productData.categoryId,
-                sku: productData.sku,
-              }).lean();
-              // console.log("Existing product:", existingProduct);
-
-              if (existingProduct) {
-                // console.log(`Updating product: ${productData.productName}`);
-                await Product.findByIdAndUpdate(
-                  existingProduct._id,
-                  { ...productData, order: existingProduct.order },
-                  { new: true }
-                );
-              } else {
-                // console.log(`Creating new product: ${productData.productName}`);
-                // Get the last product order
-                let lastProduct = await Product.findOne().sort({ order: -1 }).lean();
-                let newOrder = lastProduct ? lastProduct.order + 1 : 1;
-
-                productData.order = newOrder++;
-                const newProduct = new Product(productData);
-                await newProduct.save();
-              }
-            });
-
-            await Promise.all(productPromises);
-            // console.log("productPromises", productPromises)
-          }
-
-          // Fetch all categories after adding, ordered by the 'order' field in ascending order
-          const allCategories = await Category.find({ merchantId })
-            .select("categoryName status")
-            .sort({ order: 1 })
-            .lean();
-
-          await ActivityLog.create({
-            userId: req.userAuth,
-            userType: req.userRole,
-            description: `Uploaded Product CSV by ${req.userRole} (${req.userName} - ${req.userAuth})`,
-          });
-
-          // console.log("allCategories", allCategories)
-
-          res.status(200).json({
-            message: "Categories and products added successfully.",
-            data: allCategories,
-          });
-        } catch (err) {
-          // console.error("Error processing categories and products:", err);
-          next(appError(err.message));
-        } finally {
-          // Delete the file from Firebase after processing
-          await deleteFromFirebase(fileUrl);
+        if (!existingVariant) {
+          existingVariant = { variantName, variantTypes: [] };
+          productData.variants.push(existingVariant);
         }
-      })
-      .on("error", (error) => {
-        console.error("Error reading CSV data:", error);
-        next(appError(error.message));
-      });
+
+        existingVariant.variantTypes.push({
+          typeName: variantTypeName,
+          price: variantTypePrice,
+          costPrice: isNaN(variantTypeCostPrice) ? 0 : variantTypeCostPrice,
+        });
+      }
+    }
+
+    // Return first 20 validation errors if any
+    if (errors.length > 0) {
+      const errorMsg =
+        errors.length <= 20
+          ? errors.join("; ")
+          : errors.slice(0, 20).join("; ") +
+            `... and ${errors.length - 20} more errors`;
+      return next(appError(errorMsg, 400));
+    }
+
+    // ── 8. Fetch existing categories for this merchant in one query ──
+    const allCategoryNames = [
+      ...new Set(
+        [...categoriesMap.values()].map((e) => e.categoryData.categoryName)
+      ),
+    ];
+
+    const existingCategories = await Category.find({
+      merchantId,
+      categoryName: { $in: allCategoryNames },
+    }).lean();
+
+    const existingCategoryMap = new Map(
+      existingCategories.map((c) => [c.categoryName, c])
+    );
+
+    // Get the current max order for categories and products (one query each)
+    const [lastCategoryDoc, lastProductDoc] = await Promise.all([
+      Category.findOne().sort({ order: -1 }).select("order").lean(),
+      Product.findOne().sort({ order: -1 }).select("order").lean(),
+    ]);
+
+    let nextCategoryOrder = lastCategoryDoc ? lastCategoryDoc.order + 1 : 1;
+    let nextProductOrder = lastProductDoc ? lastProductDoc.order + 1 : 1;
+
+    // ── 9. Save categories (sequential — usually small count) ──
+    const categoryIdMap = new Map(); // categoryKey → ObjectId
+
+    for (const [categoryKey, { categoryData }] of categoriesMap.entries()) {
+      // Remove the temp field before saving
+      const saveData = { ...categoryData };
+      delete saveData.businessCategoryName;
+
+      const existing = existingCategoryMap.get(categoryData.categoryName);
+
+      if (existing) {
+        await Category.findByIdAndUpdate(
+          existing._id,
+          { $set: saveData },
+          { new: true }
+        );
+        categoryIdMap.set(categoryKey, existing._id);
+      } else {
+        saveData.order = nextCategoryOrder++;
+        const newCategory = await Category.create(saveData);
+        categoryIdMap.set(categoryKey, newCategory._id);
+        // Add to map so duplicate category names in CSV don't create duplicates
+        existingCategoryMap.set(categoryData.categoryName, newCategory);
+      }
+    }
+
+    // ── 10. Batch fetch existing products for all categories at once ──
+    const categoryIds = [...categoryIdMap.values()];
+
+    const existingProducts = await Product.find({
+      categoryId: { $in: categoryIds },
+    })
+      .select("productName categoryId sku order")
+      .lean();
+
+    // Build lookup: "categoryId|productName_lower" → existingProduct
+    // For products with SKU, also index by "categoryId|productName_lower|sku"
+    const existingProductMap = new Map();
+    for (const p of existingProducts) {
+      const baseKey = `${p.categoryId}|${p.productName.toLowerCase()}`;
+      if (p.sku) {
+        existingProductMap.set(`${baseKey}|${p.sku}`, p);
+      } else {
+        existingProductMap.set(baseKey, p);
+      }
+    }
+
+    // ── 11. Build bulkWrite operations in batches ──
+    const BULK_BATCH_SIZE = 500;
+    const bulkOps = [];
+
+    for (const [categoryKey, { products }] of categoriesMap.entries()) {
+      const categoryId = categoryIdMap.get(categoryKey);
+
+      for (const [, productData] of products) {
+        productData.categoryId = categoryId;
+
+        const baseKey = `${categoryId}|${productData.productName.toLowerCase()}`;
+        const skuKey = productData.sku ? `${baseKey}|${productData.sku}` : null;
+
+        const existing =
+          (skuKey && existingProductMap.get(skuKey)) ||
+          existingProductMap.get(baseKey);
+
+        if (existing) {
+          // Update existing product — preserve order
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: existing._id },
+              update: {
+                $set: {
+                  productName: productData.productName,
+                  price: productData.price,
+                  costPrice: productData.costPrice,
+                  minQuantityToOrder: productData.minQuantityToOrder,
+                  maxQuantityPerOrder: productData.maxQuantityPerOrder,
+                  sku: productData.sku,
+                  preparationTime: productData.preparationTime,
+                  description: productData.description,
+                  longDescription: productData.longDescription,
+                  type: productData.type,
+                  inventory: productData.inventory,
+                  productImageURL: productData.productImageURL,
+                  availableQuantity: productData.availableQuantity,
+                  alert: productData.alert,
+                  categoryId: productData.categoryId,
+                  variants: productData.variants,
+                },
+              },
+            },
+          });
+        } else {
+          // Insert new product with incremented order
+          productData.order = nextProductOrder++;
+
+          bulkOps.push({
+            insertOne: {
+              document: productData,
+            },
+          });
+        }
+      }
+    }
+
+    // Execute bulkWrite in batches to avoid memory spike on 20k+ products
+    if (bulkOps.length > 0) {
+      for (let i = 0; i < bulkOps.length; i += BULK_BATCH_SIZE) {
+        const batch = bulkOps.slice(i, i + BULK_BATCH_SIZE);
+        await Product.bulkWrite(batch, { ordered: false });
+      }
+    }
+
+    // ── 12. Response ──
+    const allCategories = await Category.find({ merchantId })
+      .select("categoryName status")
+      .sort({ order: 1 })
+      .lean();
+
+    await ActivityLog.create({
+      userId: req.userAuth,
+      userType: req.userRole,
+      description: `Uploaded Product CSV (${rawRows.length} rows) by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+    });
+
+    res.status(200).json({
+      message: `Categories and products added successfully. Processed ${rawRows.length} rows.`,
+      data: allCategories,
+    });
   } catch (err) {
-    // console.error("General error:", err);
     next(appError(err.message));
+  } finally {
+    // Always clean up Firebase file — safe if already deleted or null
+    if (fileUrl) {
+      try {
+        await deleteFromFirebase(fileUrl);
+      } catch (_) {
+        // Ignore — file may already be deleted or never uploaded
+      }
+    }
   }
 };
 

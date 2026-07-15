@@ -218,7 +218,7 @@ const filterCustomerByGeofenceController = async (req, res, next) => {
 
 const fetchAllCustomersByAdminController = async (req, res, next) => {
   try {
-    let { geofence, walletBalance, query, page = 1, limit = 50 } = req.query;
+    let { geofence, walletBalance, loyaltyPoint, subscription, query, page = 1, limit = 50 } = req.query;
 
     // Convert to integers
     page = parseInt(page, 10);
@@ -240,6 +240,14 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
 
     if (walletBalance === "true") {
       matchCriteria["customerDetails.walletBalance"] = { $gt: 0 };
+    }
+
+    if (loyaltyPoint === "true") {
+      matchCriteria["customerDetails.loyaltyPointLeftForRedemption"] = { $gt: 0 };
+    }
+
+    if (subscription === "true") {
+      matchCriteria["customerDetails.pricing.0"] = { $exists: true };
     }
 
     if (query && query.trim() !== "") {
@@ -353,7 +361,7 @@ const getSingleCustomerController = async (req, res, next) => {
 
     const customerFound = await Customer.findById(customerId)
       .select(
-        "fullName email phoneNumber lastPlatformUsed createdAt customerDetails walletTransactionDetail"
+        "fullName email phoneNumber lastPlatformUsed createdAt customerDetails walletTransactionDetail referralDetail"
       )
       .lean({ virtuals: true });
 
@@ -361,20 +369,28 @@ const getSingleCustomerController = async (req, res, next) => {
       return next(appError("Customer not found", 404));
     }
 
-    const [orders, transactions] = await Promise.all([
-      Order.find({ customerId })
-        .populate({
-          path: "merchantId",
-          select: "merchantDetail",
-        })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean(),
-      CustomerWalletTransaction.find({ customerId })
-        .sort({ date: -1 })
-        .limit(50)
-        .lean(),
-    ]);
+    const [orders, transactions, referredCustomers, referrerCustomer] =
+      await Promise.all([
+        Order.find({ customerId })
+          .populate({ path: "merchantId", select: "merchantDetail" })
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .lean(),
+        CustomerWalletTransaction.find({ customerId })
+          .sort({ date: -1 })
+          .limit(50)
+          .lean(),
+        // Customers this customer has referred (Customer B's)
+        Customer.find({ "referralDetail.referrerUserId": customerId })
+          .select("_id fullName phoneNumber email")
+          .lean(),
+        // Customer who referred this customer (Customer A)
+        customerFound.referralDetail?.referrerUserId
+          ? Customer.findById(customerFound.referralDetail.referrerUserId)
+              .select("_id fullName phoneNumber")
+              .lean()
+          : Promise.resolve(null),
+      ]);
 
     const formattedCustomerOrders = orders?.map((order) => {
       const merchantDetail = order?.merchantId?.merchantDetail;
@@ -434,6 +450,21 @@ const getSingleCustomerController = async (req, res, next) => {
       otherAddress: customerFound?.customerDetails?.otherAddress || [],
       walletDetails: formattedCustomerTransactions || [],
       orderDetails: formattedCustomerOrders || [],
+      referredBy: referrerCustomer
+        ? {
+            customerId: referrerCustomer._id,
+            name: referrerCustomer.fullName || "-",
+            phoneNumber: referrerCustomer.phoneNumber,
+          }
+        : null,
+      referralType: customerFound.referralDetail?.referralType || null,
+      referralProcessed: customerFound.referralDetail?.processed ?? null,
+      referredCustomers: referredCustomers.map((c) => ({
+        customerId: c._id,
+        name: c.fullName || "-",
+        phoneNumber: c.phoneNumber,
+        email: c.email || "-",
+      })),
     };
 
     res.status(200).json({

@@ -18,8 +18,11 @@ const {
   getCustomerCustomizationController,
   getCustomerAppAppUpdateType,
   getCustomerAppStatus,
-  createOrUpdateAppStatusImageCotroller,
 } = require("../../../controllers/admin/appCustomization/customerAppCustomization");
+const {
+  getOfferPopupController,
+  updateOfferPopupController,
+} = require("../../../controllers/admin/appCustomization/offerPopupController");
 
 const appCustomizationRoute = express.Router();
 
@@ -85,6 +88,16 @@ appCustomizationRoute.get(
 );
 
 appCustomizationRoute.get("/customer-app-status", getCustomerAppStatus);
+
+// Offer popup — public GET for apps, protected POST for admin
+appCustomizationRoute.get("/offer-popup", getOfferPopupController);
+appCustomizationRoute.post(
+  "/offer-popup",
+  upload.single("offerPopupImage"),
+  isAuthenticated,
+  isAdmin,
+  updateOfferPopupController
+);
 
 appCustomizationRoute.get("/agent-app-update-type", getAgentAppAppUpdateType);
 

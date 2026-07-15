@@ -416,6 +416,20 @@ const sendTemplateMessage = async (req, res, next) => {
   }
 };
 
+const getNotes = async (req, res, next) => {
+  try {
+    const { conversationId } = req.params;
+
+    const notes = await WhatsappNote.find({ conversationId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: notes.map(formatNote) });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
 const addNote = async (req, res, next) => {
   try {
     const { conversationId } = req.params;
@@ -443,6 +457,19 @@ const addNote = async (req, res, next) => {
   }
 };
 
+const deleteNote = async (req, res, next) => {
+  try {
+    const { noteId } = req.params;
+
+    const note = await WhatsappNote.findByIdAndDelete(noteId);
+    if (!note) return next(appError("Note not found", 404));
+
+    res.status(200).json({ success: true, message: "Note deleted" });
+  } catch (err) {
+    next(appError(err.message, 500));
+  }
+};
+
 module.exports = {
   getOverview,
   getConversations,
@@ -450,5 +477,7 @@ module.exports = {
   getMessages,
   sendMessage,
   sendTemplateMessage,
+  getNotes,
   addNote,
+  deleteNote,
 };

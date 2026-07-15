@@ -21,7 +21,7 @@ const preparePayoutForMerchant = async () => {
         $gte: startTime,
         $lte: endTime,
       },
-      "orderDetail.deliveryMode": "Home Delivery",
+      deliveryMode: { $in: ["Home Delivery", "Take Away"] },
       status: "Completed",
     })
       .select("merchantId purchasedItems")
@@ -40,16 +40,19 @@ const preparePayoutForMerchant = async () => {
 
     for (const order of allOrders) {
       const merchantId = order?.merchantId?.toString();
+
+      if (!merchantId) continue;
+
       const { purchasedItems } = order;
       let totalCostPrice = 0;
 
       for (const item of purchasedItems) {
         const { productId, variantId, quantity } = item;
-        const product = productMap.get(productId.toString());
+        const product = productMap.get(productId?.toString());
 
         if (product) {
           if (variantId) {
-            const variant = product.variants.find((v) =>
+            const variant = product.variants?.find((v) =>
               v.variantTypes.some((type) => type._id.equals(variantId))
             );
 
@@ -58,11 +61,11 @@ const preparePayoutForMerchant = async () => {
                 type._id.equals(variantId)
               );
               if (variantType) {
-                totalCostPrice += variantType.costPrice * quantity;
+                totalCostPrice += (variantType.costPrice || 0) * quantity;
               }
             }
           } else {
-            totalCostPrice += product.costPrice * quantity;
+            totalCostPrice += (product.costPrice || 0) * quantity;
           }
         }
       }
@@ -79,21 +82,6 @@ const preparePayoutForMerchant = async () => {
       payout.completedOrders += 1;
     }
 
-    // const bulkOperations = allMerchants.map((merchant) => {
-    //   const payoutData = {
-    //     merchantId: merchant._id,
-    //     merchantName: merchant?.merchantDetail?.merchantName,
-    //     geofenceId: merchant?.merchantDetail?.geofenceId,
-    //     totalCostPrice:
-    //       merchantPayouts.get(merchant._id.toString())?.totalCostPrice || 0,
-    //     completedOrders:
-    //       merchantPayouts.get(merchant._id.toString())?.completedOrders || 0,
-    //     date: startTime,
-    //   };
-    //   console.log("Payout Data:", payoutData);
-
-    //   return payoutData;
-    // });
     const bulkOperations = allMerchants
       .map((merchant) => {
         const merchantId = merchant._id.toString();
@@ -102,9 +90,8 @@ const preparePayoutForMerchant = async () => {
         const completedOrders =
           merchantPayouts.get(merchantId)?.completedOrders || 0;
 
-        // Only return data if either totalCostPrice or completedOrders is greater than zero
         if (totalCostPrice > 0 || completedOrders > 0) {
-          const payoutData = {
+          return {
             merchantId: merchant._id,
             merchantName: merchant?.merchantDetail?.merchantName,
             geofenceId: merchant?.merchantDetail?.geofenceId,
@@ -112,17 +99,25 @@ const preparePayoutForMerchant = async () => {
             completedOrders: completedOrders,
             date: startTime,
           };
-          console.log("Payout Data:", payoutData);
-
-          return payoutData;
         }
-        return null; // Skip merchants with no activity
+        return null;
       })
       .filter(Boolean);
 
     if (bulkOperations.length > 0) {
-      await MerchantPayout.insertMany(bulkOperations);
+      const bulkOps = bulkOperations.map((op) => ({
+        updateOne: {
+          filter: { merchantId: op.merchantId, date: op.date },
+          update: { $set: op },
+          upsert: true,
+        },
+      }));
+      await MerchantPayout.bulkWrite(bulkOps);
     }
+
+    console.log(
+      `Merchant payout: processed ${allOrders.length} orders, created ${bulkOperations.length} payouts`
+    );
   } catch (err) {
     console.error("Error in preparing payout:", err);
   }
@@ -131,8 +126,8 @@ const preparePayoutForMerchant = async () => {
 const resetStatusManualToggleForAllMerchants = async () => {
   try {
     const result = await Merchant.updateMany(
-      { statusManualToggle: true }, // Match merchants with statusManualToggle set to true
-      { $set: { statusManualToggle: false } } // Update the statusManualToggle to false
+      { statusManualToggle: true },
+      { $set: { statusManualToggle: false } }
     );
 
     return result;
@@ -141,7 +136,6 @@ const resetStatusManualToggleForAllMerchants = async () => {
       "Error while updating statusManualToggle for merchants:",
       error
     );
-    // throw error; // Propagate the error to handle it further if needed
   }
 };
 

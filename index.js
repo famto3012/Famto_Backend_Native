@@ -9,7 +9,8 @@ const CustomerCart = require("./models/CustomerCart");
 const Customer = require("./models/Customer");
 const Merchant = require("./models/Merchant");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
-const { sendCartReminderMessage } = require("./utils/interaktHelper");
+const { logError } = require("./utils/errorLogger");
+const { sendCartReminderMessage } = require("./utils/whatsappApi");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
 const authRoute = require("./routes/adminRoute/authRoute");
@@ -322,15 +323,73 @@ cron.schedule("*/5 * * * * *", async () => {
       }
 
       try {
-        await processOrderService(tempOrder);
-
-        // await TemporaryOrder.deleteOne({
-        //   _id: tempOrder._id,
-        // });
+        const createdOrder = await processOrderService(tempOrder);
 
         console.log(
           `✅ Order created successfully for ${tempOrder._id}`
         );
+
+        // Send notifications for the newly created order
+        try {
+          const isScheduled = tempOrder.deliveryOption === "Scheduled";
+          const populatedOrder = isScheduled
+            ? await ScheduledOrder.findById(createdOrder._id).populate("merchantId")
+            : await Order.findById(createdOrder._id).populate("merchantId");
+
+          const eventName = "newOrderCreated";
+          const { rolesToNotify, data } = await findRolesToNotify(eventName);
+
+          const notificationData = {
+            fcm: {
+              orderId: createdOrder._id,
+              customerId: createdOrder.customerId,
+            },
+          };
+
+          const socketData = {
+            ...data,
+            orderId: createdOrder._id,
+            billDetail: createdOrder.billDetail,
+            _id: createdOrder._id,
+            orderStatus: createdOrder.status,
+            merchantName:
+              populatedOrder?.merchantId?.merchantDetail?.merchantName || "-",
+            customerName:
+              populatedOrder?.drops?.[0]?.address?.fullName || "-",
+            deliveryMode: createdOrder?.deliveryMode,
+            orderDate: formatDate(createdOrder.createdAt),
+            orderTime: formatTime(createdOrder.createdAt),
+            deliveryDate: createdOrder?.deliveryTime
+              ? formatDate(createdOrder.deliveryTime)
+              : "-",
+            deliveryTime: createdOrder?.deliveryTime
+              ? formatTime(createdOrder.deliveryTime)
+              : "-",
+            paymentMethod: createdOrder.paymentMode,
+            deliveryOption: createdOrder.deliveryOption,
+            amount: createdOrder.billDetail?.grandTotal,
+          };
+
+          const userIds = {
+            admin: process.env.ADMIN_ID,
+            merchant: populatedOrder?.merchantId?._id,
+            agent: createdOrder?.agentId,
+            customer: createdOrder?.customerId,
+          };
+
+          await sendSocketDataAndNotification({
+            rolesToNotify,
+            userIds,
+            eventName,
+            notificationData,
+            socketData,
+          });
+        } catch (notifErr) {
+          console.error(
+            `⚠️ Order created but notification failed for ${tempOrder._id}:`,
+            notifErr.message
+          );
+        }
       } catch (err) {
         const retryCount =
           (tempOrder.retryCount || 0) + 1;
@@ -348,6 +407,14 @@ cron.schedule("*/5 * * * * *", async () => {
           console.error(
             `💀 Order permanently failed ${tempOrder._id}`
           );
+
+          logError(err.message, {
+            source: "OrderProcessorCron",
+            stack: err.stack,
+            orderId: tempOrder._id,
+            razorpayOrderId: tempOrder.razorpayOrderId,
+            retryCount,
+          });
         } else {
           await TemporaryOrder.findByIdAndUpdate(
             tempOrder._id,
@@ -361,6 +428,13 @@ cron.schedule("*/5 * * * * *", async () => {
           console.error(
             `⚠️ Retry ${retryCount} for ${tempOrder._id}`
           );
+
+          logError(err.message, {
+            source: "OrderProcessorCron-Retry",
+            stack: err.stack,
+            orderId: tempOrder._id,
+            retryCount,
+          });
         }
       }
     }
@@ -431,6 +505,12 @@ cron.schedule("*/5 * * * *", async () => {
           `[Reconciliation] Error checking ${tempOrder.razorpayOrderId}:`,
           err.message
         );
+
+        logError(err.message, {
+          source: "ReconciliationCron",
+          stack: err.stack,
+          razorpayOrderId: tempOrder.razorpayOrderId,
+        });
       }
     }
 
@@ -450,9 +530,26 @@ cron.schedule("*/5 * * * *", async () => {
       );
     }
 
-    // ── Dead-letter items (failed processingStatus with maxRetries reached) ──
+    // ── Retry failed orders one more time ──
+    const failedOrders = await TemporaryOrder.find({
+      processingStatus: "FAILED",
+      paymentStatus: "PAYMENT_COMPLETED",
+      retryCount: { $lt: 10 },
+    });
+
+    for (const failedOrder of failedOrders) {
+      console.log(
+        `[Reconciliation] 🔄 Retrying failed order ${failedOrder._id} (retry ${failedOrder.retryCount})`
+      );
+      await TemporaryOrder.findByIdAndUpdate(failedOrder._id, {
+        processingStatus: "PENDING",
+      });
+    }
+
+    // ── Dead-letter items (truly exhausted retries) ──
     const deadLetters = await TemporaryOrder.find({
       processingStatus: "FAILED",
+      retryCount: { $gte: 10 },
     }).lean();
 
     if (deadLetters.length) {
@@ -515,25 +612,34 @@ cron.schedule(
 
           if (!customer?.phoneNumber) continue;
 
+          const customerName =
+            cart.cartDetail?.deliveryAddress?.fullName ||
+            customer?.fullName ||
+            "Customer";
+
           const merchantName =
             cart.merchantId?.merchantName || "your favourite store";
 
-          const productNames = (cart.items || [])
+          const productItems = (cart.items || [])
             .map(
               (item) =>
                 item.productId?.productName ||
                 item.itemName ||
-                "item"
+                null
             )
-            .filter(Boolean)
-            .join(", ");
+            .filter(Boolean);
 
-          if (!productNames) continue;
+          if (productItems.length === 0) continue;
+
+          const productList = productItems
+            .map((name, i) => `${i + 1}. ${name}`)
+            .join("\n");
 
           await sendCartReminderMessage(
             customer.phoneNumber,
+            customerName,
             merchantName,
-            productNames
+            productList
           );
         } catch (innerErr) {
           console.error(
@@ -556,6 +662,37 @@ cron.schedule(
     timezone: "Asia/Kolkata",
   }
 );
+
+// ─── WhatsApp Scheduled Campaign Processor (every minute) ───────────────────
+const { processCampaignSend } = require("./controllers/whatsapp/campaignController");
+const WhatsappCampaign = require("./models/WhatsappCampaign");
+
+cron.schedule("* * * * *", async () => {
+  try {
+    const now = new Date();
+    const dueCampaigns = await WhatsappCampaign.find({
+      status: "scheduled",
+      scheduledAt: { $lte: now },
+    });
+
+    if (!dueCampaigns.length) return;
+
+    console.log(`[CampaignCron] ${dueCampaigns.length} scheduled campaign(s) due`);
+
+    for (const campaign of dueCampaigns) {
+      // Mark as sending immediately to prevent double-fire
+      campaign.status = "sending";
+      campaign.sentAt = now;
+      await campaign.save();
+
+      processCampaignSend(campaign, null).catch((err) =>
+        console.error(`[CampaignCron] Campaign ${campaign._id} failed:`, err.message)
+      );
+    }
+  } catch (err) {
+    console.error("[CampaignCron] Error:", err.message);
+  }
+});
 
 // Global errors
 app.use(globalErrorHandler);

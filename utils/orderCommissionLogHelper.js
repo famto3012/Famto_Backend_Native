@@ -42,7 +42,7 @@ const orderCommissionLogHelper = async (order) => {
       payableAmountToFamto = (totalAmount * commission.commissionValue) / 100;
       payableAmountToMerchant = totalAmount - payableAmountToFamto;
     } else {
-      payableAmountToFamto = commission.commissionValue;
+      payableAmountToFamto = Math.min(commission.commissionValue, totalAmount);
       payableAmountToMerchant = totalAmount - payableAmountToFamto;
     }
 

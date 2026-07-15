@@ -138,9 +138,16 @@ const temporaryOrderSchema = new mongoose.Schema(
       ref: "Merchant",
     },
 
+    serviceId: {
+      type: String,
+      ref: "ServiceCategory",
+      default: null,
+    },
+
     idempotencyKey: {
       type: String,
       unique: true,
+      sparse: true,
     },
     pickups: Array,
     drops: Array,
@@ -180,6 +187,7 @@ const temporaryOrderSchema = new mongoose.Schema(
         "PROCESSING",
         "ORDER_CREATED",
         "FAILED",
+        "CANCELLED",
       ],
       default: "PENDING",
       index: true,

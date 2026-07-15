@@ -1796,19 +1796,29 @@ const saveCustomerCart = async (
   instructionToMerchant,
   instructionToDeliveryAgent,
   instructionInPickup,
-  instructionInDelivery
+  instructionInDelivery,
+  businessCategoryId = null,
+  serviceId = null
 ) => {
+  // Normalize items: map variantId → variantTypeId for CustomerCart schema compatibility
+  const normalizedItems = (items || []).map((item) => ({
+    ...item,
+    variantTypeId: item.variantTypeId || item.variantId || null,
+  }));
+
   const updatedItems =
     deliveryMode === "Custom Order"
-      ? items.map((item) => ({
+      ? normalizedItems.map((item) => ({
         ...item,
         itemId: new mongoose.Types.ObjectId(),
       }))
-      : items;
+      : normalizedItems;
 
   const cartDetails = {
     customerId: customer._id,
     merchantId: merchant?._id || null,
+    businessCategoryId,
+    serviceId,
     items: updatedItems,
     cartDetail: {
       pickupLocation,

@@ -229,6 +229,10 @@ const purchasedItemsSchema = mongoose.Schema(
       type: Number,
       default: null,
     },
+    variantTypeName: {
+      type: String,
+      default: null,
+    },
     quantity: {
       type: Number,
       required: true,
@@ -245,6 +249,7 @@ const orderSchema = mongoose.Schema(
     customerId: { type: String, ref: "Customer", required: true },
     merchantId: { type: String, ref: "Merchant", default: null },
     scheduledOrderId: { type: String, ref: "ScheduledOrder", default: null },
+    serviceId: { type: String, ref: "ServiceCategory", default: null },
     agentId: { type: String, ref: "Agent", default: null },
 
     deliveryMode: {
@@ -322,7 +327,7 @@ orderSchema.index({ deliveryTime: 1, status: 1, delayAlertSent: 1 });
 orderSchema.index({ scheduledOrderId: 1 });
 
 orderSchema.pre("save", async function (next) {
-  if (this.isNew) {
+  if (this.isNew && !this._id) {
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = `0${now.getMonth() + 1}`.slice(-2);

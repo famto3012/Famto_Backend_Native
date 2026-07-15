@@ -16,6 +16,7 @@ const Message = require("../../../models/Message");
 const ScheduledOrder = require("../../../models/ScheduledOrder");
 const CustomerCart = require("../../../models/CustomerCart");
 const PickAndCustomCart = require("../../../models/PickAndCustomCart");
+const BusinessCategory = require("../../../models/BusinessCategory");
 const scheduledPickAndCustom = require("../../../models/ScheduledPickAndCustom");
 const AgentAnnouncementLogs = require("../../../models/AgentAnnouncementLog");
 const ActivityLog = require("../../../models/ActivityLog");
@@ -63,6 +64,9 @@ const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
   sendSocketDataAndNotification,
 } = require("../../../utils/socketHelper");
+const {
+  sendOrderTrackingMessage,
+} = require("../../../utils/whatsappApi");
 
 const {
   sendNotification,
@@ -117,11 +121,11 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
       const [merchantsInGeofence, customersInGeofence] = await Promise.all([
         Merchant.find(
           { "merchantDetail.geofenceId": { $in: req.geofenceId } },
-          "_id"
+          "_id",
         ).lean(),
         Customer.find(
           { "customerDetails.geofenceId": { $in: req.geofenceId } },
-          "_id"
+          "_id",
         ).lean(),
       ]);
 
@@ -250,7 +254,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
     } else if (req.geofenceId && req.geofenceId.length > 0) {
       const merchantsInGeofence = await Merchant.find(
         { "merchantDetail.geofenceId": { $in: req.geofenceId } },
-        "_id"
+        "_id",
       ).lean();
       filterCriteria.merchantId = {
         $in: merchantsInGeofence.map((m) => m._id),
@@ -362,7 +366,7 @@ const confirmOrderByAdminController = async (req, res, next) => {
 
     let orderFound = await Order.findById(orderId).populate(
       "merchantId",
-      "merchantDetail"
+      "merchantDetail",
     );
 
     console.log("orderFound", orderFound?.merchantId?.merchantDetail?.pricing);
@@ -401,23 +405,32 @@ const confirmOrderByAdminController = async (req, res, next) => {
       orderFound.commissionDetail = { famtoEarnings, merchantEarnings };
     }
 
-    console.log(`[confirmOrderByAdmin] deliveryMode: ${orderFound?.deliveryMode}`);
+    console.log(
+      `[confirmOrderByAdmin] deliveryMode: ${orderFound?.deliveryMode}`,
+    );
     if (orderFound?.deliveryMode !== "Take Away") {
       console.log(`[confirmOrderByAdmin] → calling orderCreateTaskHelper...`);
       const task = await orderCreateTaskHelper(orderId);
-      console.log(`[confirmOrderByAdmin] ← orderCreateTaskHelper returned: ${task}`);
+      console.log(
+        `[confirmOrderByAdmin] ← orderCreateTaskHelper returned: ${task}`,
+      );
 
       if (!task) return next(appError("Task not created"));
     } else {
-      console.log(`[confirmOrderByAdmin] deliveryMode is Take Away — skipping task creation`);
+      console.log(
+        `[confirmOrderByAdmin] deliveryMode is Take Away — skipping task creation`,
+      );
     }
 
     console.log("Purchased Items:", orderFound);
 
-    if (orderFound?.purchasedItems && orderFound.deliveryMode === "Take Away" || orderFound.deliveryMode === "Home Delivery") {
+    if (
+      (orderFound?.purchasedItems && orderFound.deliveryMode === "Take Away") ||
+      orderFound.deliveryMode === "Home Delivery"
+    ) {
       await reduceProductAvailableQuantity(
         orderFound.purchasedItems,
-        orderFound.merchantId
+        orderFound.merchantId,
       );
     }
 
@@ -469,6 +482,29 @@ const confirmOrderByAdminController = async (req, res, next) => {
       notificationData,
       socketData,
     });
+
+    // Send order tracking WhatsApp message (non-blocking)
+    const customer = await Customer.findById(orderFound.customerId)
+      .select("phoneNumber fullName")
+      .lean();
+
+    if (customer?.phoneNumber) {
+      const customerName =
+        orderFound.drops?.[0]?.address?.fullName ||
+        customer.fullName ||
+        "Customer";
+      const merchantName =
+        orderFound.merchantId?.merchantDetail?.merchantName ||
+        "your store";
+
+      sendOrderTrackingMessage(
+        customer.phoneNumber,
+        customerName,
+        merchantName
+      ).catch((err) =>
+        console.error("[WhatsApp] Order tracking message error:", err.message)
+      );
+    }
   } catch (err) {
     next(appError(err.message));
   }
@@ -515,8 +551,7 @@ const rejectOrderByAdminController = async (req, res, next) => {
       if (orderFound.deliveryOption === "On-demand") {
         customerFound.customerDetails.walletBalance += orderAmount;
       } else if (orderFound.deliveryOption === "Scheduled") {
-        orderAmount =
-          orderFound.billDetail.grandTotal / orderFound.numOfDays;
+        orderAmount = orderFound.billDetail.grandTotal / orderFound.numOfDays;
         customerFound.customerDetails.walletBalance += orderAmount;
       }
 
@@ -667,16 +702,16 @@ const getOrderDetailByAdminController = async (req, res, next) => {
       deliveryMode: orderFound.deliveryMode || "-",
       deliveryOption: orderFound.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.createdAt)} | ${formatTime(
-        orderFound.createdAt
+        orderFound.createdAt,
       )}`,
       deliveryTime: `${formatDate(orderFound.deliveryTime)} | ${formatTime(
-        orderFound.deliveryTime
+        orderFound.deliveryTime,
       )}`,
       customerDetail: {
         _id: orderFound.customerId._id,
         name:
           orderFound.customerId.fullName ||
-          orderFound.pickups[0]?.address?.fullName ||
+          orderFound.drops[0]?.address?.fullName ||
           "-",
         email: orderFound.customerId.email || "-",
         phone: orderFound.customerId.phoneNumber || "-",
@@ -843,11 +878,11 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       const [merchantsInGeofence, customersInGeofence] = await Promise.all([
         Merchant.find(
           { "merchantDetail.geofenceId": { $in: req.geofenceId } },
-          "_id"
+          "_id",
         ),
         Customer.find(
           { "customerDetails.geofenceId": { $in: req.geofenceId } },
-          "_id"
+          "_id",
         ),
       ]);
       const merchantIds = merchantsInGeofence.map((m) => m._id);
@@ -881,13 +916,22 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
     console.log("allOrders", allOrders);
 
     allOrders?.forEach((order) => {
+      console.log("Order:", order._id);
+      console.log(
+        "distanceCoveredByAgent:",
+        order?.detailAddedByAgent?.distanceCoveredByAgent,
+      );
+
       formattedResponse.push({
         orderId: order._id,
         status: order?.status || "-",
         merchantId: order?.merchantId?._id || "-",
         merchantName: order?.merchantId?.merchantDetail?.merchantName || "-",
         customerName: order?.customerId?.fullName || "-",
-        customerPhoneNumber: order?.drops?.[0]?.address?.phoneNumber || order?.pickups?.[0]?.address?.phoneNumber || "-",
+        customerPhoneNumber:
+          order?.drops?.[0]?.address?.phoneNumber ||
+          order?.pickups?.[0]?.address?.phoneNumber ||
+          "-",
         agentName: order?.agentId?.fullName || "-",
         agentPhoneNumber: order?.agentId?.phoneNumber || "-",
         deliveryMode: order?.deliveryMode || "-",
@@ -897,14 +941,18 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
         deliveryOption: order?.deliveryOption || "-",
         totalAmount: order?.billDetail?.grandTotal || "-",
         deliveryAddress:
-          `${order?.drops?.[0]?.address?.fullName || ""}, ${order?.drops?.[0]?.address?.flat || ""}, ${order?.drops?.[0]?.address?.area || ""}, ${order?.drops?.[0]?.address?.landmark || ""}`.trim().replace(/^,|,$/g, "").trim() || "-",
+          `${order?.drops?.[0]?.address?.fullName || ""}, ${order?.drops?.[0]?.address?.flat || ""}, ${order?.drops?.[0]?.address?.area || ""}, ${order?.drops?.[0]?.address?.landmark || ""}`
+            .trim()
+            .replace(/^,|,$/g, "")
+            .trim() || "-",
         distanceInKM: order?.distance || "-",
-        distanceTravelledByAgent: order?.distanceCoveredByAgent || "-",
+        distanceTravelledByAgent:
+          order?.detailAddedByAgent?.distanceCoveredByAgent || "-",
         agentEarning: order?.detailAddedByAgent?.agentEarning || 0,
         cancellationReason: order?.cancellationReason || "-",
         cancellationDescription: order?.cancellationDescription || "-",
-        merchantEarnings: order?.merchantEarnings || "-",
-        famtoEarnings: order?.famtoEarnings || "-",
+        merchantEarnings: order?.commissionDetail?.merchantEarnings || "-",
+        famtoEarnings: order?.commissionDetail?.famtoEarnings || "-",
         deliveryCharge: order?.billDetail?.deliveryCharge || "-",
         taxAmount: order?.billDetail?.taxAmount || "-",
         discountedAmount: order?.billDetail?.discountedAmount || "-",
@@ -915,7 +963,6 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
         transactionId: order?.paymentId || "-",
       });
     });
-
     // allOrders?.forEach((order) => {
     //   order.items.forEach((item) => {
     //     formattedResponse.push({
@@ -1039,10 +1086,10 @@ const downloadInvoiceBillController = async (req, res, next) => {
     const { cartId, deliveryMode } = req.body;
 
     const isStandardDelivery = ["Take Away", "Home Delivery"].includes(
-      deliveryMode
+      deliveryMode,
     );
     const isCustomDelivery = ["Pick and Drop", "Custom Order"].includes(
-      deliveryMode
+      deliveryMode,
     );
 
     if (!isStandardDelivery && !isCustomDelivery) {
@@ -1051,12 +1098,12 @@ const downloadInvoiceBillController = async (req, res, next) => {
 
     const cartFound = isStandardDelivery
       ? await CustomerCart.findById(cartId)
-        .populate("merchantId", "merchantDetail.merchantName")
-        .populate("customerId", "fullName phoneNumber")
+          .populate("merchantId", "merchantDetail.merchantName")
+          .populate("customerId", "fullName phoneNumber")
       : await PickAndCustomCart.findById(cartId).populate(
-        "customerId",
-        "fullName phoneNumber"
-      );
+          "customerId",
+          "fullName phoneNumber",
+        );
 
     if (!cartFound || !cartFound.billDetail) {
       return next(appError("Cart not found or no bill details available"));
@@ -1090,11 +1137,11 @@ const downloadInvoiceBillController = async (req, res, next) => {
       addedTip,
       subTotal,
       surgePrice,
-      waitingFare
+      waitingFare,
     ] = [
       billDetail.discountedDeliveryCharge ||
-      billDetail.originalDeliveryCharge ||
-      0,
+        billDetail.originalDeliveryCharge ||
+        0,
       billDetail.taxAmount || 0,
       billDetail.discountedAmount || 0,
       billDetail.discountedGrandTotal || billDetail.originalGrandTotal || 0,
@@ -1119,7 +1166,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       ].some(isNaN)
     ) {
       return next(
-        appError("One or more bill details contain invalid numbers.")
+        appError("One or more bill details contain invalid numbers."),
       );
     }
 
@@ -1263,8 +1310,8 @@ const downloadInvoiceBillController = async (req, res, next) => {
                 </div>
                 <div class="date">
                     <p>Date: <span style="color:gray;">${formatDate(
-      new Date()
-    )}</span></p>
+                      new Date(),
+                    )}</span></p>
                 </div>
             </header>
 
@@ -1279,9 +1326,10 @@ const downloadInvoiceBillController = async (req, res, next) => {
                 <div class="info-box">
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Merchant Name</p>
-                        <p>${cartFound?.merchantId?.merchantDetail?.merchantName ||
-      " "
-      }</p>
+                        <p>${
+                          cartFound?.merchantId?.merchantDetail?.merchantName ||
+                          " "
+                        }</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Phone Number</p>
@@ -1289,9 +1337,10 @@ const downloadInvoiceBillController = async (req, res, next) => {
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Address</p>
-                        <p>${cartFound?.merchantId?.merchantDetail
-        ?.displayAddress || " "
-      }</p>
+                        <p>${
+                          cartFound?.merchantId?.merchantDetail
+                            ?.displayAddress || " "
+                        }</p>
                     </div>
                 </div>
 
@@ -1304,8 +1353,8 @@ const downloadInvoiceBillController = async (req, res, next) => {
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Order Date</p>
                         <p>${formatDate(cartFound?.createdAt)} at ${formatTime(
-        cartFound.createdAt
-      )}</p>
+                          cartFound.createdAt,
+                        )}</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Delivery Mode</p>
@@ -1321,37 +1370,40 @@ const downloadInvoiceBillController = async (req, res, next) => {
             <!-- Invoice Table -->
             <table>
                  <thead> 
-      ${cartFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
+      ${
+        cartFound?.orderDetail?.deliveryMode === "Pick and Drop" ||
         cartFound?.orderDetail?.deliveryMode === "Custom Order"
-        ? `<th colspan="3">Item</th><th>Price</th>`
-        : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
+          ? `<th colspan="3">Item</th><th>Price</th>`
+          : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
       }  
             </thead> 
                 <tbody>
-                     ${cartFound?.orderDetail?.deliveryMode ===
-        "Pick and Drop" ||
-        cartFound?.orderDetail?.deliveryMode === "Custom Order"
-        ? ``
-        : `  ${(formattedItems || [])?.map((item) => {
-          let price = item?.quantity * item?.price;
-          return `
+                     ${
+                       cartFound?.orderDetail?.deliveryMode ===
+                         "Pick and Drop" ||
+                       cartFound?.orderDetail?.deliveryMode === "Custom Order"
+                         ? ``
+                         : `  ${(formattedItems || [])?.map((item) => {
+                             let price = item?.quantity * item?.price;
+                             return `
                       <tr>
-                        <td>${item?.itemName} ${item?.variantTypeName
-              ? `(${item?.variantTypeName})`
-              : ""
-            }</td>
+                        <td>${item?.itemName} ${
+                          item?.variantTypeName
+                            ? `(${item?.variantTypeName})`
+                            : ""
+                        }</td>
                         <td>${item?.price || 0}</td>
                         <td>${item?.quantity || 0}</td>
                         <td>${price?.toFixed(2) || 0}</td>
                     </tr>
                       `;
-        })}
+                           })}
                     <!-- Item Total -->
                     <tr>
                         <td colspan="3">Item Total</td>
                         <td>${itemTotal?.toFixed(2) || 0}</td>
                     </tr>`
-      }   
+                     }   
                  <tr>
                         <td colspan="3">Delivery charge</td>
                         <td>${deliveryCharge?.toFixed(2) || 0}</td>
@@ -1371,16 +1423,17 @@ const downloadInvoiceBillController = async (req, res, next) => {
                         <td colspan="3">Waiting Charge</td>
                         <td>${waitingFare?.toFixed(2) || 0}</td>
                     </tr>
-                    ${discountedAmount
-        ? `
+                    ${
+                      discountedAmount
+                        ? `
                       <!-- Discount -->
                     <tr>
                         <td colspan="3">Discount</td>
                         <td>${discountedAmount?.toFixed(2) || 0}</td>
                     </tr>
                       `
-        : ``
-      }
+                        : ``
+                    }
                     <!-- GST -->
                     <tr>
                         <td colspan="3">Taxes & Feeses</td>
@@ -1422,7 +1475,7 @@ const downloadInvoiceBillController = async (req, res, next) => {
       else
         fs.unlink(
           filePath,
-          (err) => err && console.error("Failed to delete temporary PDF:", err)
+          (err) => err && console.error("Failed to delete temporary PDF:", err),
         );
     });
   } catch (err) {
@@ -1622,8 +1675,8 @@ const downloadOrderBillController = async (req, res, next) => {
                 </div>
                 <div class="date">
                     <p>Date: <span style="color:gray;">${formatDate(
-      new Date()
-    )}</span></p>
+                      new Date(),
+                    )}</span></p>
                 </div>
             </header>
 
@@ -1638,9 +1691,10 @@ const downloadOrderBillController = async (req, res, next) => {
                 <div class="info-box">
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Merchant Name</p>
-                        <p>${orderFound?.merchantId?.merchantDetail
-        ?.merchantName || "-"
-      }</p>
+                        <p>${
+                          orderFound?.merchantId?.merchantDetail
+                            ?.merchantName || "-"
+                        }</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Customer Name</p>
@@ -1648,8 +1702,9 @@ const downloadOrderBillController = async (req, res, next) => {
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Phone Number</p>
-                        <p>${orderFound?.drops[0]?.address?.phoneNumber || "-"
-      }</p>
+                        <p>${
+                          orderFound?.drops[0]?.address?.phoneNumber || "-"
+                        }</p>
                     </div>
                     
                 </div>
@@ -1663,8 +1718,8 @@ const downloadOrderBillController = async (req, res, next) => {
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Order Date</p>
                         <p>${formatDate(orderFound?.createdAt)} at ${formatTime(
-        orderFound?.createdAt
-      )}</p>
+                          orderFound?.createdAt,
+                        )}</p>
                     </div>
                     <div style="margin-bottom: -10px;">
                         <p style="color: #919191;">Delivery Mode</p>
@@ -1680,36 +1735,39 @@ const downloadOrderBillController = async (req, res, next) => {
             <!-- Invoice Table -->
             <table>
                <thead> 
-      ${orderFound?.deliveryMode === "Pick and Drop" ||
+      ${
+        orderFound?.deliveryMode === "Pick and Drop" ||
         orderFound?.deliveryMode === "Custom Order"
-        ? `<th colspan="3">Item</th><th>Price</th>`
-        : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
+          ? `<th colspan="3">Item</th><th>Price</th>`
+          : `<th>Item</th><th>Rate</th><th>Quantity</th><th>Price</th>`
       }  
             </thead>   
                 <tbody>
-                 ${orderFound?.deliveryMode === "Pick and Drop" ||
-        orderFound?.deliveryMode === "Custom Order"
-        ? ``
-        : `  ${formattedItems?.map((item) => {
-          let price = item?.quantity * item?.price;
-          return `
+                 ${
+                   orderFound?.deliveryMode === "Pick and Drop" ||
+                   orderFound?.deliveryMode === "Custom Order"
+                     ? ``
+                     : `  ${formattedItems?.map((item) => {
+                         let price = item?.quantity * item?.price;
+                         return `
                       <tr>
-                        <td>${item?.itemName} ${item?.variantTypeName
-              ? `(${item?.variantTypeName})`
-              : ""
-            }</td>
+                        <td>${item?.itemName} ${
+                          item?.variantTypeName
+                            ? `(${item?.variantTypeName})`
+                            : ""
+                        }</td>
                         <td>${item?.price || 0}</td>
                         <td>${item?.quantity || 0}</td>
                         <td>${price?.toFixed(2) || 0}</td>
                     </tr>
                       `;
-        })}
+                       })}
                     <!-- Item Total -->
                     <tr>
                         <td colspan="3">Item Total</td>
                         <td>${itemTotal?.toFixed(2) || 0}</td>
                     </tr>`
-      }   
+                 }   
                     <tr>
                         <td colspan="3">Delivery charge</td>
                         <td>${deliveryCharge?.toFixed(2) || 0}</td>
@@ -1729,16 +1787,17 @@ const downloadOrderBillController = async (req, res, next) => {
                         <td colspan="3">Waiting Charge</td>
                         <td>${surgePrice?.toFixed(2) || 0}</td>
                     </tr>
-                    ${discountedAmount
-        ? `
+                    ${
+                      discountedAmount
+                        ? `
                       <!-- Discount -->
                     <tr>
                         <td colspan="3">Discount</td>
                         <td>${discountedAmount?.toFixed(2) || 0}</td>
                     </tr>
                       `
-        : ``
-      }
+                        : ``
+                    }
                     <!-- GST -->
                     <tr>
                         <td colspan="3">Taxes & Feeses</td>
@@ -1849,7 +1908,7 @@ const orderMarkAsReadyController = async (req, res, next) => {
             roleId,
             eventName,
             notificationData,
-            role.charAt(0).toUpperCase() + role.slice(1)
+            role.charAt(0).toUpperCase() + role.slice(1),
           );
         }
       }
@@ -1897,7 +1956,7 @@ const orderMarkAsReadyController = async (req, res, next) => {
               roleId,
               eventName,
               "",
-              role.charAt(0).toUpperCase() + role.slice(1)
+              role.charAt(0).toUpperCase() + role.slice(1),
             );
           }
         }
@@ -1999,11 +2058,20 @@ const createInvoiceByAdminController = async (req, res, next) => {
 
     console.log("Request body:", req.body);
 
+    // Derive serviceId from the business category itself rather than trusting client input
+    const businessCategoryDoc = selectedBusinessCategory
+      ? await BusinessCategory.findById(selectedBusinessCategory).select(
+          "serviceId",
+        )
+      : null;
+    const resolvedServiceId =
+      businessCategoryDoc?.serviceId?.toString() || null;
+
     const merchantFound = await fetchMerchantDetails(
       merchantId,
       deliveryMode,
       deliveryOption,
-      next
+      next,
     );
 
     console.log("Merchant found:", merchantFound);
@@ -2013,7 +2081,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       deliveryMode,
       newCustomerAddress,
       newPickupAddress,
-      newDeliveryAddress
+      newDeliveryAddress,
     );
 
     const customerAddress =
@@ -2056,7 +2124,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       deliveryAddressOtherAddressId,
       newPickupAddress,
       newDeliveryAddress,
-      customPickupLocation
+      customPickupLocation,
     );
 
     const scheduledDetails = processScheduledDelivery(deliveryOption, req);
@@ -2079,7 +2147,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       scheduledDetails,
       vehicleType,
       pickupLocation,
-      selectedBusinessCategory
+      selectedBusinessCategory,
     );
 
     let merchantDiscountAmount;
@@ -2101,10 +2169,16 @@ const createInvoiceByAdminController = async (req, res, next) => {
       merchantDiscountAmount || 0,
       taxAmount || 0,
       addedTip || 0,
-      returnCharge || 0
+      returnCharge || 0,
     );
 
     console.log("Bill detail:", billDetail);
+
+    // Normalize items: admin may send variantId but CustomerCart schema expects variantTypeId
+    const normalizedItems = (items || []).map((item) => ({
+      ...item,
+      variantTypeId: item.variantTypeId || item.variantId || null,
+    }));
 
     const cart = await saveCustomerCart(
       deliveryMode,
@@ -2119,11 +2193,13 @@ const createInvoiceByAdminController = async (req, res, next) => {
       scheduledDetails,
       billDetail,
       vehicleType,
-      items,
+      normalizedItems,
       instructionToMerchant,
       instructionToDeliveryAgent,
       instructionInPickup,
-      instructionInDrop
+      instructionInDrop,
+      selectedBusinessCategory,
+      resolvedServiceId,
     );
 
     console.log("Cart created successfully:", cart);
@@ -2510,13 +2586,13 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
 
     const merchantDetail = isScheduledOrder
       ? {
-        _id: orderFound?.merchantId?._id || "-",
-        name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
-        instructionsByCustomer: orderDetail?.instructionToMerchant || "-",
-        merchantEarnings:
-          orderFound?.commissionDetail?.merchantEarnings || "-",
-        famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
-      }
+          _id: orderFound?.merchantId?._id || "-",
+          name: orderFound?.merchantId?.merchantDetail?.merchantName || "-",
+          instructionsByCustomer: orderDetail?.instructionToMerchant || "-",
+          merchantEarnings:
+            orderFound?.commissionDetail?.merchantEarnings || "-",
+          famtoEarnings: orderFound?.commissionDetail?.famtoEarnings || "-",
+        }
       : null;
 
     const formattedResponse = {
@@ -2527,12 +2603,12 @@ const getScheduledOrderDetailByAdminController = async (req, res, next) => {
       deliveryMode: orderFound?.deliveryMode || "-",
       deliveryOption: orderFound?.deliveryOption || "-",
       orderTime: `${formatDate(orderFound.startDate)} | ${formatTime(
-        orderFound.startDate
+        orderFound.startDate,
       )} || ${formatDate(orderFound.endDate)} | ${formatTime(
-        orderFound.endDate
+        orderFound.endDate,
       )}`,
       deliveryTime: `${formatDate(orderFound.time)} | ${formatTime(
-        orderFound.time
+        orderFound.time,
       )}`,
       customerDetail: {
         _id: orderFound.customerId._id,
@@ -2674,61 +2750,62 @@ const createOrderByAdminController = async (req, res, next) => {
     const orderOptions = {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
+      serviceId: cartFound.serviceId,
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,
 
       pickups: isCustomerCart
         ? [
-          {
-            location: cartFound.cartDetail.pickupLocation,
-            address: cartFound.cartDetail.pickupAddress,
-            instructionInPickup:
-              cartFound.cartDetail.instructionToMerchant || null,
-            voiceInstructionInPickup:
-              cartFound.cartDetail.voiceInstructionToMerchant || null,
-            items: [], // Fill if needed
-          },
-        ]
+            {
+              location: cartFound.cartDetail.pickupLocation,
+              address: cartFound.cartDetail.pickupAddress,
+              instructionInPickup:
+                cartFound.cartDetail.instructionToMerchant || null,
+              voiceInstructionInPickup:
+                cartFound.cartDetail.voiceInstructionToMerchant || null,
+              items: [], // Fill if needed
+            },
+          ]
         : isPickAndCustomCart
           ? cartFound.pickups.map((p) => ({
-            location: p.location || [],
-            address: p.address || {},
-            instructionInPickup:
-              p.instructionInPickup ||
-              cartFound.cartDetail?.instructionToDeliveryAgent,
-            voiceInstructionInDrop: p.voiceInstructionInPickup || null,
-            voiceInstructionInDrop: p.voiceInstructionInDrop || null,
-            items: p.items || [],
-          }))
+              location: p.location || [],
+              address: p.address || {},
+              instructionInPickup:
+                p.instructionInPickup ||
+                cartFound.cartDetail?.instructionToDeliveryAgent,
+              voiceInstructionInDrop: p.voiceInstructionInPickup || null,
+              voiceInstructionInDrop: p.voiceInstructionInDrop || null,
+              items: p.items || [],
+            }))
           : [],
 
       drops: isCustomerCart
         ? [
-          {
-            location: cartFound.cartDetail.deliveryLocation,
-            address: cartFound.cartDetail.deliveryAddress,
-            instructionInDrop:
-              cartFound.cartDetail?.instructionToDeliveryAgent || null,
-            voiceInstructionInDrop:
-              cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
-            items: ["Take Away", "Home Delivery"].includes(deliveryMode)
-              ? orderDetails.formattedItems
-              : cartFound.items,
-            orderDetail: {
-              ...cartFound.cartDetail,
-              deliveryTime,
+            {
+              location: cartFound.cartDetail.deliveryLocation,
+              address: cartFound.cartDetail.deliveryAddress,
+              instructionInDrop:
+                cartFound.cartDetail?.instructionToDeliveryAgent || null,
+              voiceInstructionInDrop:
+                cartFound.cartDetail.voiceInstructionToDeliveryAgent || null,
+              items: ["Take Away", "Home Delivery"].includes(deliveryMode)
+                ? orderDetails.formattedItems
+                : cartFound.items,
+              orderDetail: {
+                ...cartFound.cartDetail,
+                deliveryTime,
+              },
             },
-          },
-        ]
+          ]
         : isPickAndCustomCart
           ? cartFound.drops.map((d) => ({
-            location: d.location || [],
-            address: d.address || {},
-            instructionInDrop: d.instructionInDrop || null,
-            voiceInstructionInDrop: d.voiceInstructionInDrop || null,
-            items: d.items || [],
-          }))
+              location: d.location || [],
+              address: d.address || {},
+              instructionInDrop: d.instructionInDrop || null,
+              voiceInstructionInDrop: d.voiceInstructionInDrop || null,
+              items: d.items || [],
+            }))
           : [],
 
       billDetail: orderDetails.billDetail,
@@ -2747,16 +2824,18 @@ const createOrderByAdminController = async (req, res, next) => {
       purchasedItems: ["Take Away", "Home Delivery"].includes(deliveryMode)
         ? orderDetails.purchasedItems || []
         : [
-          ...(cartFound.pickups || []).flatMap((pickup) => pickup.items || []),
-          ...(cartFound.drops || []).flatMap((drop) => drop.items || []),
-        ].map((item) => ({
-          productId: null,
-          productName: item.itemName || item.productName || null,
-          quantity: item.quantity || 1,
-          price: item.price || null,
-          costPrice: item.costPrice || null,
-          variantId: null,
-        })),
+            ...(cartFound.pickups || []).flatMap(
+              (pickup) => pickup.items || [],
+            ),
+            ...(cartFound.drops || []).flatMap((drop) => drop.items || []),
+          ].map((item) => ({
+            productId: null,
+            productName: item.itemName || item.productName || null,
+            quantity: item.quantity || 1,
+            price: item.price || null,
+            costPrice: item.costPrice || null,
+            variantId: null,
+          })),
       prescription,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
@@ -2770,7 +2849,7 @@ const createOrderByAdminController = async (req, res, next) => {
       (cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption) ===
       "Scheduled";
     const isPickOrCustomOrder = ["Pick and Drop", "Custom Order"].includes(
-      deliveryMode
+      deliveryMode,
     );
 
     let newOrderCreated;
@@ -2802,8 +2881,9 @@ const createOrderByAdminController = async (req, res, next) => {
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
-        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${newOrderCreated._id
-          }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
+        description: `New ${isScheduledOrder ? `scheduled order` : `order`} (#${
+          newOrderCreated._id
+        }) is created by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
       clearCart(customer._id, deliveryMode),
       updateCustomerTransaction(customer, orderDetails.billDetail),
@@ -2892,7 +2972,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       ["Completed", "Cancelled"].includes(orderFound?.status)
     ) {
       return next(
-        appError("Order not found or already completed / cancelled", 404)
+        appError("Order not found or already completed / cancelled", 404),
       );
     }
 
@@ -2911,7 +2991,9 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     let totalOrderDistance = 0;
 
     const [agentPricing, agentSurge] = await Promise.all([
-      AgentPricing.findById(agentFound?.workStructure?.salaryStructureId).lean(),
+      AgentPricing.findById(
+        agentFound?.workStructure?.salaryStructureId,
+      ).lean(),
       AgentSurge.findOne({
         geofenceId: agentFound.geofenceId,
         status: true,
@@ -2967,10 +3049,10 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
 
           if (pickupTimes.length > 0 && dropTimes.length > 0) {
             const firstPickup = new Date(
-              Math.min(...pickupTimes.map((d) => d.getTime()))
+              Math.min(...pickupTimes.map((d) => d.getTime())),
             );
             const lastDrop = new Date(
-              Math.max(...dropTimes.map((d) => d.getTime()))
+              Math.max(...dropTimes.map((d) => d.getTime())),
             );
 
             const durationInHours = (lastDrop - firstPickup) / (1000 * 60 * 60);
@@ -3004,24 +3086,16 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
       grandTotal: calculatedSalary,
     };
 
-    const currentDay = moment.tz(new Date(), "Asia/Kolkata");
-    const startOfDay = currentDay.startOf("day").toDate();
-    const endOfDay = currentDay.endOf("day").toDate();
-
     task.taskStatus = "Completed";
 
     await task.save();
 
-    const agentTasks = await Task.find({
+    const remainingTasks = await Task.countDocuments({
       taskStatus: "Assigned",
       agentId: agentFound._id,
-      orderId: { $ne: orderId },
-    })
-      .lean();
+    });
 
-
-    console.log("Agent tasks", agentTasks);
-    agentFound.status = agentTasks.length > 0 ? "Busy" : "Free";
+    agentFound.status = remainingTasks > 0 ? "Busy" : "Free";
     agentFound.appDetail.totalEarning += calculatedSalary;
     agentFound.appDetail.totalSurge += calculatedSurge;
     agentFound.appDetail.totalDistance += totalOrderDistance;
@@ -3057,10 +3131,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
     await Promise.all([
       orderFound.save(),
       agentFound.save(),
-      AgentNotificationLogs.updateMany(
-        { orderId },
-        { status: "Completed" },
-      ),
+      AgentNotificationLogs.updateMany({ orderId }, { status: "Completed" }),
       task.save(),
       ActivityLog.create({
         userId: req.userAuth,
@@ -3082,7 +3153,7 @@ const markPaymentCollectedFromCustomer = async (req, res, next) => {
     const updatedOrder = await Order.findByIdAndUpdate(
       orderId,
       { paymentCollectedFromCustomer: "Completed" },
-      { new: true, upsert: false }
+      { new: true, upsert: false },
     );
 
     if (!updatedOrder) {
@@ -3099,11 +3170,9 @@ const markOrderAsCancelled = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
-    const [order, task, notification, notificationCount] = await Promise.all([
+    const [order, task] = await Promise.all([
       Order.findById(orderId),
       Task.findOne({ orderId }),
-      AgentNotificationLogs.findOne({ orderId, status: "Accepted" }).lean(),
-      AgentNotificationLogs.find({ status: "Accepted" }).lean(),
     ]);
 
     if (!order) return next(appError("Order not found", 404));
@@ -3112,14 +3181,12 @@ const markOrderAsCancelled = async (req, res, next) => {
     order.status = "Cancelled";
     task.taskStatus = "Cancelled";
     task.pickupDropDetails.forEach((detail) => {
-      // Update all pickups
       detail.pickups.forEach((pickup) => {
         pickup.status = "Cancelled";
-        pickup.startTime = pickup.startTime || new Date(); // keep old if already set
+        pickup.startTime = pickup.startTime || new Date();
         pickup.completedTime = new Date();
       });
 
-      // Update all drops
       detail.drops.forEach((drop) => {
         drop.status = "Cancelled";
         drop.startTime = drop.startTime || new Date();
@@ -3130,6 +3197,10 @@ const markOrderAsCancelled = async (req, res, next) => {
     const promises = [
       order.save(),
       task.save(),
+      AgentNotificationLogs.updateMany(
+        { orderId: { $in: [orderId] } },
+        { status: "Cancelled" }
+      ),
       ActivityLog.create({
         userId: req.userAuth,
         userType: req.userRole,
@@ -3137,24 +3208,22 @@ const markOrderAsCancelled = async (req, res, next) => {
       }),
     ];
 
-    if (order?.agentId && notificationCount.length === 1) {
-      promises.push(
-        Agent.findByIdAndUpdate(
-          order.agentId,
-          { status: "Free" },
-          { new: true }
-        )
-      );
-    }
+    if (order?.agentId) {
+      const otherActiveTasks = await Task.countDocuments({
+        taskStatus: "Assigned",
+        agentId: order.agentId,
+        orderId: { $ne: orderId },
+      });
 
-    if (notification) {
-      promises.push(
-        AgentNotificationLogs.findOneAndUpdate(
-          { orderId },
-          { status: "Cancelled" },
-          { new: true }
-        )
-      );
+      if (otherActiveTasks === 0) {
+        promises.push(
+          Agent.findByIdAndUpdate(
+            order.agentId,
+            { status: "Free" },
+            { new: true }
+          )
+        );
+      }
     }
 
     await Promise.all(promises);
@@ -3297,7 +3366,6 @@ const reassignAgentController = async (req, res, next) => {
     if (oldAgentId) {
       const oldAgent = await Agent.findById(oldAgentId);
       if (oldAgent) {
-        // Check if old agent has any OTHER active tasks
         const otherActiveTasks = await Task.countDocuments({
           agentId: oldAgentId,
           taskStatus: "Assigned",
@@ -3310,29 +3378,26 @@ const reassignAgentController = async (req, res, next) => {
 
         await oldAgent.save();
 
-        // Notify old agent that order was removed
         sendSocketData(oldAgentId.toString(), "orderRemoved", {
           orderId,
           message: "Order has been reassigned to another agent",
         });
       }
+
+      // Cancel old agent's notification log
+      await AgentNotificationLogs.updateMany(
+        { orderId: { $in: [orderId] }, agentId: oldAgentId, status: { $in: ["Pending", "Accepted"] } },
+        { status: "Cancelled" }
+      );
     }
 
-    // ── Update order ──────────────────────────────────────────
-    const stepperDetail = {
-      by: newAgent.fullName,
-      userId: newAgentId,
-      date: new Date(),
-      location: getUserLocationFromSocket(newAgentId) || newAgent.location,
-    };
-
-    order.agentId = newAgentId;
+    // ── Reset order (agent must accept first) ─────────────────
+    order.agentId = null;
     order.orderDetail = order.orderDetail || {};
-    order.orderDetail.agentAcceptedAt = new Date();
+    order.orderDetail.agentAcceptedAt = null;
     order.orderDetailStepper = order.orderDetailStepper || {};
-    order.orderDetailStepper.assigned = stepperDetail;
+    order.orderDetailStepper.assigned = null;
 
-    // Reset old agent's distance data
     order.detailAddedByAgent = {
       startToPickDistance: null,
       distanceCoveredByAgent: null,
@@ -3343,20 +3408,19 @@ const reassignAgentController = async (req, res, next) => {
       shopUpdates: [],
     };
 
-    // ── Update task ───────────────────────────────────────────
-    task.agentId = newAgentId;
-    task.taskStatus = "Assigned";
+    // ── Reset task to Unassigned ──────────────────────────────
+    task.agentId = null;
+    task.taskStatus = "Unassigned";
 
-    // Reset pickup/drop statuses for new agent
     if (task.pickupDropDetails?.length) {
       for (const detail of task.pickupDropDetails) {
         for (const pickup of detail.pickups || []) {
-          pickup.status = "Accepted";
+          pickup.status = "Pending";
           pickup.startTime = null;
           pickup.completedTime = null;
         }
         for (const drop of detail.drops || []) {
-          drop.status = "Accepted";
+          drop.status = "Pending";
           drop.startTime = null;
           drop.completedTime = null;
         }
@@ -3364,8 +3428,7 @@ const reassignAgentController = async (req, res, next) => {
       task.markModified("pickupDropDetails");
     }
 
-    // ── Update new agent ──────────────────────────────────────
-    newAgent.status = "Busy";
+    // ── Update new agent pending count ────────────────────────
     if (!newAgent.appDetail) {
       newAgent.appDetail = {
         totalEarning: 0,
@@ -3377,8 +3440,45 @@ const reassignAgentController = async (req, res, next) => {
         loginDuration: 0,
       };
     }
+    newAgent.appDetail.pendingOrders = (newAgent.appDetail.pendingOrders || 0) + 1;
 
     await Promise.all([order.save(), task.save(), newAgent.save()]);
+
+    // ── Create notification log for the new agent ─────────────
+    const pickupDetail = order.pickups?.[0]?.address
+      ? {
+          name: order.pickups[0].address.fullName,
+          address: {
+            fullName: order.pickups[0].address.fullName,
+            phoneNumber: order.pickups[0].address.phoneNumber,
+            flat: order.pickups[0].address.flat,
+            area: order.pickups[0].address.area,
+            landmark: order.pickups[0].address.landmark,
+          },
+        }
+      : {};
+
+    const deliveryDetail = Array.isArray(order.drops)
+      ? order.drops.map((drop) => ({
+          name: drop?.address?.fullName,
+          address: {
+            fullName: drop?.address?.fullName,
+            phoneNumber: drop?.address?.phoneNumber,
+            flat: drop?.address?.flat,
+            area: drop?.address?.area,
+            landmark: drop?.address?.landmark,
+          },
+        }))
+      : [];
+
+    await AgentNotificationLogs.create({
+      agentId: newAgentId,
+      orderId: [orderId],
+      pickupDetail,
+      deliveryDetail,
+      orderType: order.deliveryMode || "On-demand",
+      expiresIn: autoAllocation?.expireTime || 60,
+    });
 
     // ── Notify new agent and roles ────────────────────────────
     const eventName = "newOrder";
@@ -3418,7 +3518,7 @@ const reassignAgentController = async (req, res, next) => {
           roleId,
           eventName,
           notificationData,
-          role.charAt(0).toUpperCase() + role.slice(1)
+          role.charAt(0).toUpperCase() + role.slice(1),
         );
       }
     }

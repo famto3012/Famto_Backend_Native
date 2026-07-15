@@ -172,6 +172,10 @@ const agentAppDetailSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    totalHourlyFare: {
+      type: Number,
+      default: 0,
+    },
     orderDetail: [orderDetailSchema],
     paymentSettled: {
       type: Boolean,

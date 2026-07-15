@@ -65,4 +65,6 @@ loyaltyPointRoute.get("/", isAuthenticated, isAdmin, getLoyaltyPointController);
 //Update loyalty point criteria
 loyaltyPointRoute.patch("/", isAuthenticated, isAdmin, updateStatusController);
 
+
+
 module.exports = loyaltyPointRoute;

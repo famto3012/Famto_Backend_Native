@@ -24,7 +24,7 @@ Stack: ${stack}
 URL: ${req.originalUrl}
 Method: ${req.method}
 IP: ${req.ip}
---------------------------------------------------------
+${req.body && Object.keys(req.body).length ? `Body: ${JSON.stringify(req.body).substring(0, 500)}\n` : ""}${req.params && Object.keys(req.params).length ? `Params: ${JSON.stringify(req.params)}\n` : ""}--------------------------------------------------------
 `;
 
     fs.mkdir(path.dirname(logFilePath), { recursive: true }, (dirErr) => {

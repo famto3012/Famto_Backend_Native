@@ -122,6 +122,8 @@ const isLooselyAuthenticated = require("../../middlewares/isLooselyAuthenticated
 const {
   globalSearchController,
 } = require("../../controllers/customer/globalSearchController");
+const { redeemLoyaltyPointController } = require("../../controllers/admin/loyaltyPoint/loyaltyPointController");
+const { getOfferPopupController } = require("../../controllers/admin/appCustomization/offerPopupController");
 
 const customerRoute = express.Router();
 
@@ -434,6 +436,14 @@ customerRoute.get(
   getWalletAndLoyaltyController
 );
 
+customerRoute.post(
+  "/redeem-loyalty-points",
+  isAuthenticated,
+  redeemLoyaltyPointController
+);
+
+customerRoute.get("/offer-popup", getOfferPopupController);
+
 customerRoute.get("/get-cart", isAuthenticated, getCustomerCartController);
 
 customerRoute.get("/get-cart-bill", isAuthenticated, getCartBillController);
@@ -592,7 +602,11 @@ customerRoute.get(
   getMerchantAppBannerController
 );
 
-customerRoute.get("/available-services", getAvailableServiceController);
+customerRoute.get(
+  "/available-services",
+  isLooselyAuthenticated,
+  getAvailableServiceController,
+);
 
 customerRoute.get("/generate-referral", isAuthenticated, generateReferralCode);
 
