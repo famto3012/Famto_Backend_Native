@@ -20,6 +20,7 @@ const CustomerSurge = require("../../../models/CustomerSurge");
 const Tax = require("../../../models/Tax");
 
 const appError = require("../../../utils/appError");
+const { clawbackMilestoneBonus } = require("../../../utils/firstOrderBonusHelper");
 const { formatTime, formatDate } = require("../../../utils/formatters");
 const {
   orderCommissionLogHelper,
@@ -1228,6 +1229,9 @@ const rejectOrderController = async (req, res, next) => {
 
       await Promise.all([orderFound.save(), customerFound.save()]);
     }
+
+    // Clawback bonus if this was the milestone-qualifying order
+    await clawbackMilestoneBonus(orderFound._id);
 
     await ActivityLog.create({
       userId: req.userAuth,

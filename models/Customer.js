@@ -141,6 +141,16 @@ const customerDetailSchema = new mongoose.Schema(
         },
       },
     ],
+    milestoneBonusClaimed: {
+      type: String,
+      enum: ["unclaimed", "claimed", "clawed_back"],
+      default: "unclaimed",
+    },
+    milestoneBonusOrderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
   },
   {
     _id: false,
