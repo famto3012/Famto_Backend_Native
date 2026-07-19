@@ -30,6 +30,7 @@ const AgentSurge = require("../../../models/AgentSurge");
 const AgentNotificationLogs = require("../../../models/AgentNotificationLog");
 
 const appError = require("../../../utils/appError");
+const { creditMilestoneBonus, clawbackMilestoneBonus } = require("../../../utils/firstOrderBonusHelper");
 const { formatTime, formatDate } = require("../../../utils/formatters");
 const {
   orderCommissionLogHelper,
@@ -3138,6 +3139,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
         userType: req.userRole,
         description: `Order (#${orderId}) is marked as completed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
+      creditMilestoneBonus(orderFound),
     ]);
 
     res.status(200).json({ message: "Order marked as completed" });
@@ -3225,6 +3227,8 @@ const markOrderAsCancelled = async (req, res, next) => {
         );
       }
     }
+
+    promises.push(clawbackMilestoneBonus(order));
 
     await Promise.all(promises);
 
