@@ -37,6 +37,7 @@ const {
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
+const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
 const { geoLocation } = require("../../utils/getGeoLocation");
 const {
   validateDeliveryOption,
@@ -2316,6 +2317,14 @@ const orderPaymentController = async (req, res, next) => {
           createdAt: newOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
           deliveryMode: newOrder.deliveryMode,
+          walletBalance: customer.customerDetails.walletBalance.toFixed(2),
+        });
+
+        // Fire-and-forget: credit milestone bonus — non-blocking, never throws
+        setImmediate(() => {
+          creditMilestoneBonus(newOrder._id).catch(err =>
+            console.error("[BONUS] async credit failed:", err.message)
+          );
         });
 
         // Send notifications to each role dynamically
@@ -2378,6 +2387,7 @@ const orderPaymentController = async (req, res, next) => {
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
           deliveryMode: tempOrder.deliveryMode,
+          walletBalance: customer.customerDetails.walletBalance.toFixed(2),
         });
         // NOTE: Cron worker (index.js) creates the final Order after expiresAt
         // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
@@ -2437,6 +2447,7 @@ const orderPaymentController = async (req, res, next) => {
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
         deliveryMode: tempOrder.deliveryMode,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
       // NOTE: Cron worker (index.js) creates the final Order after expiresAt
       // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
@@ -2491,6 +2502,7 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         razorpayOrderId,
         amount: orderAmount,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     }
 

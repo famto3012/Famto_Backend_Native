@@ -10,6 +10,7 @@ const ActivityLog = require("../models/ActivityLog");
 const CustomerTransaction = require("../models/CustomerTransactionDetail");
 const PickAndCustomCart = require("../models/PickAndCustomCart");
 const DatabaseCounter = require("../models/DatabaseCounter");
+const { creditMilestoneBonus } = require("./firstOrderBonusHelper");
 
 const processOrderService = async (tempOrder) => {
   const session = await mongoose.startSession();
@@ -177,6 +178,13 @@ const processOrderService = async (tempOrder) => {
     );
 
     await session.commitTransaction();
+
+    // Fire-and-forget: credit milestone bonus — non-blocking, never throws
+    setImmediate(() => {
+      creditMilestoneBonus(finalOrder._id).catch(err =>
+        console.error("[BONUS] async credit failed:", err.message)
+      );
+    });
 
     return finalOrder;
   } catch (err) {
