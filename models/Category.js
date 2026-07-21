@@ -44,5 +44,8 @@ const categorySchema = mongoose.Schema(
   }
 );
 
+// ── Indexes ─────────────────────────────────────────────────────────────────
+categorySchema.index({ businessCategoryId: 1, status: 1, categoryName: 1 });
+
 const Category = mongoose.model("Category", categorySchema);
 module.exports = Category;

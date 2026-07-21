@@ -60,6 +60,7 @@ const BusinessCategorySchema = new mongoose.Schema(
 BusinessCategorySchema.index({ status: 1, order: 1 });
 BusinessCategorySchema.index({ geofenceId: 1 });
 BusinessCategorySchema.index({ status: 1, geofenceId: 1 });
+BusinessCategorySchema.index({ serviceId: 1, status: 1, title: 1 });
 
 const BusinessCategory = mongoose.model(
   "BusinessCategory",
