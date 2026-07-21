@@ -135,6 +135,10 @@ const productSchema = mongoose.Schema(
   }
 );
 
+// ── Indexes ─────────────────────────────────────────────────────────────────
+productSchema.index({ categoryId: 1, productName: 1 });
+productSchema.index({ searchTags: 1 });
+
 // const VariantType = mongoose.model("VariantType", variantTypeSchema);
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;
