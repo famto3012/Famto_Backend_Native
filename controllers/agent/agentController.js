@@ -58,7 +58,8 @@ const AgentPricing = require("../../models/AgentPricing");
 const BatchOrder = require("../../models/BatchOrder");
 const { normalizeLatLng } = require("../../utils/createOrderHelpers");
 
-const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+// const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
 
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
