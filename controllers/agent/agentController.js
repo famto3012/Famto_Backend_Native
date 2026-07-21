@@ -58,6 +58,8 @@ const AgentPricing = require("../../models/AgentPricing");
 const BatchOrder = require("../../models/BatchOrder");
 const { normalizeLatLng } = require("../../utils/createOrderHelpers");
 
+const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
   try {
@@ -1468,6 +1470,10 @@ const getPickUpDetailController = async (req, res, next) => {
         );
       }
 
+      const isHandymanOrder =
+        (taskFound[0]?.serviceId || taskFound[0]?.orderId?.serviceId)?.toString() ===
+        HANDYMAN_SERVICE_ID;
+
       const formattedResponse = {
         taskId: taskFound[0]._id,
         orderId: taskFound[0].orderId?._id || taskFound.orderId, // handle string ID
@@ -1493,8 +1499,9 @@ const getPickUpDetailController = async (req, res, next) => {
           taskFound[0]?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound[0]?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation:
-          taskFound[0]?.deliveryMode === "Home Delivery" ||
+        pickupLocation: isHandymanOrder
+          ? normalizeLatLng(taskFound[0]?.pickupDropDetails?.[0]?.drops?.[0]?.location) || null
+          : taskFound[0]?.deliveryMode === "Home Delivery" ||
             taskFound[0]?.deliveryMode === "Take Away"
             ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
             : normalizeLatLng(pickupDetail?.location) || null,
@@ -1533,6 +1540,10 @@ const getPickUpDetailController = async (req, res, next) => {
         );
       }
 
+      const isHandymanOrder =
+        (taskFound?.serviceId || taskFound?.orderId?.serviceId)?.toString() ===
+        HANDYMAN_SERVICE_ID;
+
       const formattedResponse = {
         taskId: taskFound._id,
         orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
@@ -1558,8 +1569,9 @@ const getPickUpDetailController = async (req, res, next) => {
           taskFound?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation:
-          taskFound?.deliveryMode === "Home Delivery" ||
+        pickupLocation: isHandymanOrder
+          ? normalizeLatLng(taskFound?.pickupDropDetails?.[0]?.drops?.[0]?.location) || null
+          : taskFound?.deliveryMode === "Home Delivery" ||
             taskFound?.deliveryMode === "Take Away"
             ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
             : normalizeLatLng(pickupDetail?.location) || null,
