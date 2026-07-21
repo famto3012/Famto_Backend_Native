@@ -1206,6 +1206,7 @@ const {
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
+const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
 const {
   uploadToFirebase,
   deleteFromFirebase,
@@ -1721,6 +1722,14 @@ const confirmPickAndDropController = async (req, res, next) => {
           success: true,
           orderId: newOrder._id,
           createdAt: null,
+          walletBalance: customer.customerDetails.walletBalance.toFixed(2),
+        });
+
+        // Fire-and-forget: credit milestone bonus — non-blocking, never throws
+        setImmediate(() => {
+          creditMilestoneBonus(newOrder._id).catch(err =>
+            console.error("[BONUS] async credit failed:", err.message)
+          );
         });
 
         await sendSocketDataAndNotification({
@@ -1782,6 +1791,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         success: true,
         orderId,
         createdAt: tempOrder.createdAt,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     } else if (paymentMode === "Online-payment") {
       const { success, orderId: razorpayOrderId, error } =
@@ -1842,6 +1852,7 @@ const confirmPickAndDropController = async (req, res, next) => {
         orderId,
         razorpayOrderId,
         amount: orderAmount,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     }
   } catch (err) {
