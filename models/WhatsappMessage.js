@@ -71,6 +71,12 @@ const whatsappMessageSchema = new mongoose.Schema(
     },
     failureReason: String,
     senderName: String,
+    campaignId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "WhatsappCampaign",
+      index: true,
+      sparse: true,
+    },
     timestamp: {
       type: Date,
       default: Date.now,
