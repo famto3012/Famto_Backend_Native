@@ -1490,12 +1490,21 @@ const getPickUpDetailController = async (req, res, next) => {
         date: formatDate(taskFound[0]?.orderId?.createdAt) || null,
         time: formatTime(taskFound[0]?.orderId?.createdAt) || null,
         taskStatus: pickupDetail?.status || null,
-        pickupName: pickupDetail?.address?.fullName || null,
-        items: pickupDetail?.items || [],
-        pickupAddress: pickupDetail?.address?.area || null,
-        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
-        instructions:
-          taskFound[0]?.orderId?.pickups?.[0]?.instructionInPickup || null,
+        pickupName: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.fullName || null
+          : pickupDetail?.address?.fullName || null,
+        items: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.items || []
+          : pickupDetail?.items || [],
+        pickupAddress: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.area || null
+          : pickupDetail?.address?.area || null,
+        pickupPhoneNumber: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.phoneNumber || null
+          : pickupDetail?.address?.phoneNumber || null,
+        instructions: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.instructionInDrop || null
+          : taskFound[0]?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
           taskFound[0]?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound[0]?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
@@ -1560,12 +1569,21 @@ const getPickUpDetailController = async (req, res, next) => {
         date: formatDate(taskFound?.orderId?.createdAt) || null,
         time: formatTime(taskFound?.orderId?.createdAt) || null,
         taskStatus: pickupDetail?.status || null,
-        pickupName: pickupDetail?.address?.fullName || null,
-        items: pickupDetail?.items || [],
-        pickupAddress: pickupDetail?.address?.area || null,
-        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
-        instructions:
-          taskFound?.orderId?.pickups?.[0]?.instructionInPickup || null,
+        pickupName: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.fullName || null
+          : pickupDetail?.address?.fullName || null,
+        items: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.items || []
+          : pickupDetail?.items || [],
+        pickupAddress: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.area || null
+          : pickupDetail?.address?.area || null,
+        pickupPhoneNumber: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.phoneNumber || null
+          : pickupDetail?.address?.phoneNumber || null,
+        instructions: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.instructionInDrop || null
+          : taskFound?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
           taskFound?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
