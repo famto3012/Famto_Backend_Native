@@ -1150,7 +1150,12 @@ const getOftenBoughtTogetherController = async (req, res, next) => {
 const searchProductsInMerchantToOrderController = async (req, res, next) => {
   try {
     const { merchantId, businessCategoryId } = req.params;
-    const { query } = req.query;
+    const { query, page = 1, limit = 20 } = req.query;
+
+    // Coerce pagination params
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (safePage - 1) * safeLimit;
 
     const categoryFilter = { merchantId };
 
@@ -1163,27 +1168,36 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     }
 
     // Find all categories belonging to the merchant with the given business category
-    const categories = await Category.find(categoryFilter);
+    const categories = await Category.find(categoryFilter).lean();
 
     // Extract all category ids to search products within all these categories
     const categoryIds = categories.map((category) => category._id.toString());
 
-    // Search products within the found categoryIds
-    const products = await Product.find({
+    // Shared filter for count + data queries
+    const productFilter = {
       categoryId: { $in: categoryIds },
       $or: [
         { productName: { $regex: query, $options: "i" } },
         { searchTags: { $elemMatch: { $regex: query, $options: "i" } } },
       ],
-    })
-      .populate(
-        "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
-      )
-      .select(
-        "_id productName price description discountId productImageURL inventory variants",
-      )
-      .sort({ order: 1 });
+    };
+
+    // Fire count + paginated data in parallel
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(productFilter),
+      Product.find(productFilter)
+        .populate(
+          "discountId",
+          "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
+        )
+        .select(
+          "_id productName price description discountId productImageURL inventory variants",
+        )
+        .sort({ order: 1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+    ]);
 
     const currentDate = new Date();
 
@@ -1287,6 +1301,12 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     res.status(200).json({
       message: "Products found in merchant",
       data: formattedResponse,
+      pagination: {
+        total: totalProducts,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(totalProducts / safeLimit) || 1,
+      },
     });
   } catch (err) {
     next(appError(err.message));
@@ -1297,7 +1317,12 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
 const filterAndSortAndSearchProductsController = async (req, res, next) => {
   try {
     const { merchantId } = req.params;
-    const { filter, sort, productName } = req.query;
+    const { filter, sort, productName, page = 1, limit = 20 } = req.query;
+
+    // Coerce pagination params
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (safePage - 1) * safeLimit;
 
     const customerId = req.userAuth;
 
@@ -1312,7 +1337,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
     }
 
     // Get category IDs associated with the merchant
-    const categories = await Category.find({ merchantId }).select("_id");
+    const categories = await Category.find({ merchantId }).select("_id").lean();
     const categoryIds = categories.map((category) => category._id);
 
     // Build the query object
@@ -1341,16 +1366,22 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       }
     }
 
-    // Fetch the filtered and sorted products
-    const products = await Product.find(query)
-      .select(
-        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId",
-      )
-      .populate(
-        "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
-      )
-      .sort(sortObj);
+    // Fire count + paginated data in parallel
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .select(
+          "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId",
+        )
+        .populate(
+          "discountId",
+          "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
+        )
+        .sort(sortObj)
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+    ]);
 
     const currentDate = new Date();
 
@@ -1404,7 +1435,15 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       };
     });
 
-    res.status(200).json(formattedResponse);
+    res.status(200).json({
+      data: formattedResponse,
+      pagination: {
+        total: totalProducts,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(totalProducts / safeLimit) || 1,
+      },
+    });
   } catch (err) {
     next(appError(err.message));
   }
