@@ -18,6 +18,8 @@ const NotificationSetting = require("../../models/NotificationSetting");
 const AgentNotificationLogs = require("../../models/AgentNotificationLog");
 const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
 const AgentAppCustomization = require("../../models/AgentAppCustomization");
+const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
+const Tax = require("../../models/Tax");
 
 const {
   sendSocketData,
@@ -1728,11 +1730,25 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
 
     const updatedSubTotal = updatedItemTotal + deliveryCharge + surgePrice;
 
-    // Grand total is recalculated based on adjusted totals
-    const updatedGrandTotal = updatedSubTotal;
+    // ── Recalculate tax on the full base ──
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "customOrderCustomization"
+    );
+    const taxId = appCustomization?.customOrderCustomization?.taxId;
+    let taxAmount = 0;
+    if (taxId) {
+      const taxFound = await Tax.findById(taxId);
+      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
+        const taxableBase = updatedItemTotal + deliveryCharge + surgePrice;
+        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      }
+    }
+
+    const updatedGrandTotal = updatedSubTotal + taxAmount;
 
     // Update the order's billing details
     orderFound.billDetail.itemTotal = parseFloat(updatedItemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = taxAmount;
     orderFound.billDetail.subTotal = parseFloat(updatedSubTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(updatedGrandTotal.toFixed(2));
 
