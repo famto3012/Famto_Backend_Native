@@ -16,6 +16,7 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const SubscriptionLog = require("../../models/SubscriptionLog");
+const CustomerSubscription = require("../../models/CustomerSubscription");
 const BusinessCategory = require("../../models/BusinessCategory");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
@@ -2008,12 +2009,50 @@ const confirmOrderDetailController = async (req, res, next) => {
       if (subscriptionLog) {
         const now = new Date();
 
+        // FIXED: Changed || to && — both startDate < now AND endDate > now
+        // must be true for the subscription to be active
         if (
-          (new Date(subscriptionLog?.startDate) < now ||
-            new Date(subscriptionLog?.endDate) > now) &&
+          new Date(subscriptionLog?.startDate) < now &&
+          new Date(subscriptionLog?.endDate) > now &&
           subscriptionLog?.currentNumberOfOrders < subscriptionLog?.maxOrders
         ) {
-          actualDeliveryCharge = 0;
+          // Fetch the plan definition to get delivery benefit settings
+          const subscriptionPlan = await CustomerSubscription.findById(
+            subscriptionLog.planId,
+          ).lean();
+
+          if (subscriptionPlan) {
+            const benefitType = subscriptionPlan.deliveryBenefitType || "free";
+            const benefitValue = subscriptionPlan.deliveryBenefitValue || 0;
+
+            if (benefitType === "percentage") {
+              // Reduce delivery charge by X%
+              const discount = (oneTimeDeliveryCharge * benefitValue) / 100;
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - discount,
+              );
+            } else if (benefitType === "fixed") {
+              // Reduce delivery charge by ₹X (floor 0)
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - benefitValue,
+              );
+            } else {
+              // "free" — no delivery charge
+              // Check if a distance cap is set; if so, only free when distance ≤ cap
+              const freeKm = subscriptionPlan.freeDeliveryUpToKm || 0;
+              if (freeKm > 0 && distance > freeKm) {
+                // Distance exceeds free-delivery cap — charge full price
+                actualDeliveryCharge = oneTimeDeliveryCharge;
+              } else {
+                actualDeliveryCharge = 0;
+              }
+            }
+          } else {
+            // Plan not found — fall back to free to avoid breaking existing subs
+            actualDeliveryCharge = 0;
+          }
         }
       }
     } else {

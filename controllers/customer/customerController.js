@@ -1113,7 +1113,7 @@ const getCustomerSubscriptionDetailController = async (req, res, next) => {
     // Fetch both all subscription plans and the current customer subscription in one step
     const [allSubscriptionPlans, customer] = await Promise.all([
       CustomerSubscription.find().select(
-        "title name amount duration taxId renewalReminder noOfOrder description",
+        "title name amount duration taxId renewalReminder noOfOrder deliveryBenefitType deliveryBenefitValue freeDeliveryUpToKm description",
       ),
       Customer.findById(currentCustomer)
         .select("customerDetails.pricing")
@@ -1124,7 +1124,7 @@ const getCustomerSubscriptionDetailController = async (req, res, next) => {
           populate: {
             path: "planId",
             model: "CustomerSubscription",
-            select: "name duration amount description",
+            select: "name duration amount description deliveryBenefitType deliveryBenefitValue freeDeliveryUpToKm",
           },
         }),
     ]);
