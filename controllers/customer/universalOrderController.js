@@ -1961,6 +1961,33 @@ const confirmOrderDetailController = async (req, res, next) => {
       newDeliveryAddress,
     );
 
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Verify the delivery address falls inside at least one defined geofence.
+    // This blocks Home Delivery orders where the user's delivery address is
+    // outside the service area, even if they registered from a valid location.
+    if (deliveryMode === "Home Delivery") {
+      if (
+        !Array.isArray(deliveryLocation) ||
+        deliveryLocation.length < 2
+      ) {
+        return next(appError("Delivery location coordinates are missing", 400));
+      }
+
+      const deliveryGeofence = await geoLocation(
+        deliveryLocation[0],
+        deliveryLocation[1],
+      );
+
+      if (!deliveryGeofence) {
+        return next(
+          appError(
+            "Delivery address is outside our service area. Please choose a different address.",
+            400,
+          ),
+        );
+      }
+    }
+
     const cartItems = cart.items;
 
     const booleanSuperMarketOrder = isSuperMarketOrder === "true";

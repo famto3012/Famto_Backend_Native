@@ -1207,6 +1207,7 @@ const {
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
+const { geoLocation } = require("../../utils/getGeoLocation");
 const {
   uploadToFirebase,
   deleteFromFirebase,
@@ -1396,10 +1397,38 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
     );
     const uniqueVehicleTypes = [...new Set(vehicleTypes)];
 
+    // ── Geofence validation ─────────────────────────────────────────
+    // Resolve the customer's service area from the FIRST pickup location
+    // (the coordinates the user entered, not a stale registration value).
+    // This both validates the address is in service and correctly scopes
+    // pricing/surge lookups to the right geofence.
+    const firstPickup = cartFound.pickups?.[0];
+    if (
+      !firstPickup?.location ||
+      !Array.isArray(firstPickup.location) ||
+      firstPickup.location.length < 2
+    ) {
+      return next(
+        appError("Pickup location coordinates are missing or invalid", 400),
+      );
+    }
+
+    const [pickupLat, pickupLng] = firstPickup.location;
+    const resolvedGeofence = await geoLocation(pickupLat, pickupLng);
+
+    if (!resolvedGeofence) {
+      return next(
+        appError(
+          "Pickup location is outside our service area. Please choose a different pickup address.",
+          400,
+        ),
+      );
+    }
+
     // Fetch the customer pricing details for all vehicle types
     const customerPricingArray = await CustomerPricing.find({
       deliveryMode: "Pick and Drop",
-      geofenceId: customer.customerDetails.geofenceId,
+      geofenceId: resolvedGeofence._id,
       status: true,
       vehicleType: { $in: uniqueVehicleTypes },
     });
@@ -1409,7 +1438,7 @@ const getVehiclePricingDetailsController = async (req, res, next) => {
     }
 
     const customerSurge = await CustomerSurge.findOne({
-      geofenceId: customer.customerDetails.geofenceId,
+      geofenceId: resolvedGeofence._id,
       status: true,
     });
 
