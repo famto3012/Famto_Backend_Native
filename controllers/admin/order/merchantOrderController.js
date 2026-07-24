@@ -2339,6 +2339,7 @@ const createInvoiceController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargesHelper({
@@ -2370,6 +2371,7 @@ const createInvoiceController = async (req, res, next) => {
       taxAmount || 0,
       addedTip,
       returnCharge || 0,
+      taxComponents
     );
 
     let customerCart;
@@ -2696,6 +2698,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
     }, 0);
 
     let taxAmount = 0;
+    let taxComponents = [];
     if (customerTax) {
       const taxPercentage = customerTax.tax;
 
@@ -2703,6 +2706,12 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         (parseFloat(deliveryCharge + surgeCharge) * taxPercentage) / 100;
 
       taxAmount = parseFloat(tax.toFixed(2));
+      taxComponents = [{
+        taxName: customerTax.taxName,
+        taxRate: customerTax.tax,
+        taxType: customerTax.taxType,
+        amount: taxAmount,
+      }];
     }
 
     const deliveryTime = new Date(
@@ -2730,6 +2739,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         deliveryChargePerDay: deliveryCharge,
         deliveryCharge,
         taxAmount,
+        taxComponents,
         grandTotal: itemTotal + deliveryCharge + surgeCharge + taxAmount,
         itemTotal,
         subTotal: itemTotal + deliveryCharge + surgeCharge,

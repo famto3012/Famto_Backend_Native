@@ -1509,9 +1509,16 @@ const confirmPickAndDropVehicleType = async (req, res, next) => {
     const taxFound = await Tax.findById(taxId);
 
     let taxAmount = 0;
+    let taxComponents = [];
     if (taxFound && taxFound.status) {
       const calculatedTax = (deliveryCharges * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
+      taxComponents = [{
+        taxName: taxFound.taxName,
+        taxRate: taxFound.tax,
+        taxType: taxFound.taxType,
+        amount: taxAmount,
+      }];
     }
 
     const originalDeliveryCharge = Math.round(deliveryCharges - surgeCharges);
@@ -1519,6 +1526,7 @@ const confirmPickAndDropVehicleType = async (req, res, next) => {
 
     cart.billDetail = {
       taxAmount,
+      taxComponents,
       originalDeliveryCharge,
       vehicleType,
       originalGrandTotal,
@@ -1561,6 +1569,7 @@ const getPickAndDropBill = async (req, res, next) => {
       discountedAmount: cart?.billDetail?.discountedAmount || null,
       promoCodeUsed: cart?.billDetail?.promoCodeUsed || null,
       taxAmount: cart?.billDetail?.taxAmount || null,
+      taxComponents: cart?.billDetail?.taxComponents || [],
       grandTotal: cart?.billDetail?.discountedAmount
         ? cart.billDetail.discountedGrandTotal
         : cart?.billDetail?.originalGrandTotal,

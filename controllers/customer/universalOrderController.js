@@ -1970,6 +1970,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargesHelper({
@@ -2029,6 +2030,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       taxAmount || 0,
       cart?.billDetail?.addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     const customerCart = await CustomerCart.findOneAndUpdate(
@@ -2192,6 +2194,7 @@ const orderPaymentController = async (req, res, next) => {
         cart.billDetail.discountedDeliveryCharge ||
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
+      taxComponents: cart.billDetail.taxComponents || [],
       discountedAmount: cart.billDetail.discountedAmount,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       grandTotal:
