@@ -91,8 +91,14 @@ const searchCustomerByNameController = async (req, res, next) => {
     // Calculate the number of documents to skip
     const skip = (page - 1) * limit;
 
+    const trimmedQuery = query.trim();
+
     const searchCriteria = {
-      fullName: { $regex: query.trim(), $options: "i" },
+      $or: [
+        { fullName: { $regex: trimmedQuery, $options: "i" } },
+        { phoneNumber: { $regex: trimmedQuery, $options: "i" } },
+        { _id: { $regex: trimmedQuery, $options: "i" } },
+      ],
       "customerDetails.isBlocked": false,
     };
 
@@ -105,7 +111,7 @@ const searchCustomerByNameController = async (req, res, next) => {
       .lean({ virtuals: true });
 
     // Count total documents
-    const totalDocuments = (await Customer.countDocuments(searchCriteria)) || 1;
+    const totalDocuments = await Customer.countDocuments(searchCriteria);
 
     // Calculate averageRating and format registrationDate for each customer
     const formattedCustomers = searchResults.map((customer) => {
@@ -264,6 +270,12 @@ const fetchAllCustomersByAdminController = async (req, res, next) => {
             $options: "i",
           },
         },
+        {
+          _id: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
       ];
     }
 
@@ -315,6 +327,7 @@ const searchCustomerByNameForOrderController = async (req, res, next) => {
       $or: [
         { fullName: { $regex: query.trim(), $options: "i" } },
         { phoneNumber: { $regex: query.trim(), $options: "i" } },
+        { _id: { $regex: query.trim(), $options: "i" } },
       ],
       "customerDetails.isBlocked": false,
     };
@@ -1056,7 +1069,11 @@ const searchCustomerByNameForMerchantController = async (req, res, next) => {
 
     const searchCriteria = {
       _id: { $in: uniqueCustomerIds },
-      fullName: { $regex: query.trim(), $options: "i" },
+      $or: [
+        { fullName: { $regex: query.trim(), $options: "i" } },
+        { phoneNumber: { $regex: query.trim(), $options: "i" } },
+        { _id: { $regex: query.trim(), $options: "i" } },
+      ],
     };
 
     // Find customers by name who belong to this merchant (parallel count)
@@ -1226,11 +1243,27 @@ const fetchCustomersOfMerchantController = async (req, res, next) => {
         mongoose.Types.ObjectId.createFromHexString(geofence.trim());
     }
 
-    if (query && query.trim !== "") {
-      matchCriteria.fullName = {
-        $regex: query.trim(),
-        $options: "i",
-      };
+    if (query && query.trim() !== "") {
+      matchCriteria.$or = [
+        {
+          fullName: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
+        {
+          phoneNumber: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
+        {
+          _id: {
+            $regex: query.trim(),
+            $options: "i",
+          },
+        },
+      ];
     }
 
     const [result, totalCount] = await Promise.all([
@@ -1295,7 +1328,11 @@ const searchCustomerByNameForMerchantToOrderController = async (
     // Find customers by name who belong to this merchant
     const searchResults = await Customer.find({
       _id: { $in: uniqueCustomerIds },
-      fullName: { $regex: query.trim(), $options: "i" },
+      $or: [
+        { fullName: { $regex: query.trim(), $options: "i" } },
+        { phoneNumber: { $regex: query.trim(), $options: "i" } },
+        { _id: { $regex: query.trim(), $options: "i" } },
+      ],
     })
       .select(
         "fullName email phoneNumber lastPlatformUsed createdAt customerDetails"
