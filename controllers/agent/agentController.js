@@ -18,6 +18,8 @@ const NotificationSetting = require("../../models/NotificationSetting");
 const AgentNotificationLogs = require("../../models/AgentNotificationLog");
 const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
 const AgentAppCustomization = require("../../models/AgentAppCustomization");
+const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
+const Tax = require("../../models/Tax");
 
 const {
   sendSocketData,
@@ -1728,11 +1730,25 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
 
     const updatedSubTotal = updatedItemTotal + deliveryCharge + surgePrice;
 
-    // Grand total is recalculated based on adjusted totals
-    const updatedGrandTotal = updatedSubTotal;
+    // ── Recalculate tax on the full taxable base ──
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "customOrderCustomization"
+    );
+    const taxId = appCustomization?.customOrderCustomization?.taxId;
+    let taxAmount = 0;
+    if (taxId) {
+      const taxFound = await Tax.findById(taxId);
+      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
+        const taxableBase = updatedItemTotal + deliveryCharge + surgePrice;
+        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      }
+    }
+
+    const updatedGrandTotal = updatedSubTotal + taxAmount;
 
     // Update the order's billing details
     orderFound.billDetail.itemTotal = parseFloat(updatedItemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = taxAmount;
     orderFound.billDetail.subTotal = parseFloat(updatedSubTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(updatedGrandTotal.toFixed(2));
 
@@ -1767,18 +1783,109 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
         },
       };
 
-      const eventName = "customOrderItemPriceUpdated";
+      const eventName = "billUpdate";
 
       await sendNotification(
         orderFound?.customerId,
         eventName,
         notificationData
       );
+
+      sendSocketData(orderFound.customerId, eventName, {
+        orderId: orderFound._id,
+        changeType: "price_changed",
+        changeDescription: `Handyman updated price of ${itemFound?.itemName} to ₹${price}`,
+        billSummary: {
+          itemTotal: orderFound.billDetail.itemTotal,
+          subTotal: orderFound.billDetail.subTotal,
+          grandTotal: orderFound.billDetail.grandTotal,
+        },
+      });
     }
 
     res.status(200).json({
       message: "Item price updated successfully",
       data: newPrice,
+    });
+  } catch (err) {
+    next(appError(err.message));
+  }
+};
+
+// Record item picked up from customer by handyman (e.g. TV for repair)
+const addPickupItemController = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { itemName, description, estimatedValue, condition } = req.body;
+    const agentId = req.userAuth;
+
+    if (!itemName) {
+      return next(appError("itemName is required", 400));
+    }
+
+    const orderFound = await Order.findById(orderId);
+    if (!orderFound) return next(appError("Order not found", 404));
+
+    if (!orderFound.agentId || orderFound.agentId.toString() !== agentId.toString()) {
+      return next(appError("Agent access denied", 403));
+    }
+
+    if (orderFound.status === "Completed" || orderFound.status === "Cancelled") {
+      return next(appError("Cannot modify a completed or cancelled order", 400));
+    }
+
+    const newItem = {
+      productId: null,
+      variantId: null,
+      productName: itemName,
+      quantity: 1,
+      price: 0,
+      costPrice: null,
+      variantTypeName: null,
+      lineItemType: "customer_pickup",
+      addedAt: new Date(),
+    };
+
+    orderFound.purchasedItems.push(newItem);
+    await orderFound.save();
+
+    // Notify customer
+    if (orderFound.customerId) {
+      const notificationData = {
+        fcm: {
+          title: "Item picked up by handyman",
+          body: `Handyman picked up: ${itemName}${description ? ` (${description})` : ""}`,
+          sendToCustomer: true,
+        },
+      };
+
+      const eventName = "billUpdate";
+
+      await sendNotification(
+        orderFound.customerId,
+        eventName,
+        notificationData
+      );
+
+      sendSocketData(orderFound.customerId, eventName, {
+        orderId: orderFound._id,
+        changeType: "item_picked_up",
+        changeDescription: `Handyman picked up: ${itemName}`,
+        billSummary: {
+          itemTotal: orderFound.billDetail?.itemTotal || 0,
+          subTotal: orderFound.billDetail?.subTotal || 0,
+          grandTotal: orderFound.billDetail?.grandTotal || 0,
+        },
+      });
+    }
+
+    res.status(200).json({
+      message: "Pickup item recorded successfully",
+      data: {
+        itemId: newItem._id,
+        itemName,
+        lineItemType: "customer_pickup",
+      },
     });
   } catch (err) {
     next(appError(err.message));
@@ -1814,7 +1921,7 @@ const addHomeDeliveryItemController = async (req, res, next) => {
     const addedItems = [];
 
     for (const item of items) {
-      const { productName, quantity, price } = item;
+      const { productName, quantity, price, lineItemType } = item;
 
       if (!productName || !quantity || quantity <= 0) {
         return next(appError(`Invalid item: productName and quantity are required`, 400));
@@ -1830,6 +1937,8 @@ const addHomeDeliveryItemController = async (req, res, next) => {
         price: itemPrice,
         costPrice: null,
         variantTypeName: null,
+        lineItemType: lineItemType || "handyman_added",
+        addedAt: new Date(),
       };
 
       orderFound.purchasedItems.push(newItem);
@@ -1856,13 +1965,28 @@ const addHomeDeliveryItemController = async (req, res, next) => {
     const deliveryCharge = orderFound.billDetail.deliveryCharge || 0;
     const surgePrice = orderFound.billDetail.surgePrice || 0;
     const addedTip = orderFound.billDetail.addedTip || 0;
-    const taxAmount = orderFound.billDetail.taxAmount || 0;
     const discountedAmount = orderFound.billDetail.discountedAmount || 0;
 
-    const subTotal = itemTotal + deliveryCharge + surgePrice + taxAmount;
-    const grandTotal = subTotal + addedTip - discountedAmount;
+    const subTotal = itemTotal + deliveryCharge + surgePrice;
+
+    // ── Recalculate tax on the full taxable base ──
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "customOrderCustomization"
+    );
+    const taxId = appCustomization?.customOrderCustomization?.taxId;
+    let taxAmount = 0;
+    if (taxId) {
+      const taxFound = await Tax.findById(taxId);
+      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
+        const taxableBase = itemTotal + deliveryCharge + surgePrice;
+        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      }
+    }
+
+    const grandTotal = subTotal + addedTip - discountedAmount + taxAmount;
 
     orderFound.billDetail.itemTotal = parseFloat(itemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = taxAmount;
     orderFound.billDetail.subTotal = parseFloat(subTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(grandTotal.toFixed(2));
 
@@ -1898,7 +2022,7 @@ const addHomeDeliveryItemController = async (req, res, next) => {
         },
       };
 
-      const eventName = "orderItemsUpdatedByAgent";
+      const eventName = "billUpdate";
 
       await sendNotification(
         orderFound.customerId,
@@ -1908,8 +2032,13 @@ const addHomeDeliveryItemController = async (req, res, next) => {
 
       sendSocketData(orderFound.customerId, eventName, {
         orderId: orderFound._id,
-        addedItems,
-        billDetail: orderFound.billDetail,
+        changeType: "items_added",
+        changeDescription: `Handyman added: ${itemNames}`,
+        billSummary: {
+          itemTotal: orderFound.billDetail.itemTotal,
+          subTotal: orderFound.billDetail.subTotal,
+          grandTotal: orderFound.billDetail.grandTotal,
+        },
       });
     }
 
@@ -3254,6 +3383,7 @@ module.exports = {
   getDeliveryDetailController,
   addCustomOrderItemPriceController,
   addHomeDeliveryItemController,
+  addPickupItemController,
   addOrderDetailsController,
   confirmCashReceivedController,
   completeOrderController,
