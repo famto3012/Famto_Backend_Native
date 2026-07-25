@@ -1795,11 +1795,7 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
         orderId: orderFound._id,
         changeType: "price_changed",
         changeDescription: `Handyman updated price of ${itemFound?.itemName} to ₹${price}`,
-        billSummary: {
-          itemTotal: orderFound.billDetail.itemTotal,
-          subTotal: orderFound.billDetail.subTotal,
-          grandTotal: orderFound.billDetail.grandTotal,
-        },
+        billDetail: orderFound.billDetail,
       });
     }
 
@@ -1871,11 +1867,7 @@ const addPickupItemController = async (req, res, next) => {
         orderId: orderFound._id,
         changeType: "item_picked_up",
         changeDescription: `Handyman picked up: ${itemName}`,
-        billSummary: {
-          itemTotal: orderFound.billDetail?.itemTotal || 0,
-          subTotal: orderFound.billDetail?.subTotal || 0,
-          grandTotal: orderFound.billDetail?.grandTotal || 0,
-        },
+        billDetail: orderFound.billDetail || {},
       });
     }
 
@@ -2034,11 +2026,7 @@ const addHomeDeliveryItemController = async (req, res, next) => {
         orderId: orderFound._id,
         changeType: "items_added",
         changeDescription: `Handyman added: ${itemNames}`,
-        billSummary: {
-          itemTotal: orderFound.billDetail.itemTotal,
-          subTotal: orderFound.billDetail.subTotal,
-          grandTotal: orderFound.billDetail.grandTotal,
-        },
+        billDetail: orderFound.billDetail,
       });
     }
 
