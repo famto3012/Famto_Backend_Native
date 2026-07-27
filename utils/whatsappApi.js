@@ -178,9 +178,10 @@ const getTemplateLanguage = async (templateName) => {
 
 const sendWelcomeMessage = async (phoneNumber, name = "") => {
   const templateName =
-    process.env.WHATSAPP_WELCOME_TEMPLATE || "customer_welcome";
+    process.env.WHATSAPP_WELCOME_TEMPLATE || "welcome_famto";
   const lang = await getTemplateLanguage(templateName);
-  const bodyParams = name ? [name] : [];
+  // welcome_famto is a static template with no body placeholders
+  const bodyParams = [];
   const headerImage = process.env.WHATSAPP_WELCOME_HEADER_IMAGE || null;
   await sendTemplateMessage(phoneNumber, templateName, bodyParams, lang, headerImage);
 };
