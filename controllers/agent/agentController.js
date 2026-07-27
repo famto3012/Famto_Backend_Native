@@ -253,7 +253,7 @@ const agentLoginController = async (req, res, next) => {
     await Promise.all([
       FcmToken.findOneAndUpdate(
         { userId: agentFound._id },
-        { token: fcmToken },
+        { token: [fcmToken] },  // Store as array to match schema [String]
         { upsert: true, new: true }
       ),
       agentFound.save(),

@@ -479,10 +479,12 @@ const populateUserSocketMap = async () => {
   try {
     const tokens = await FcmToken.find({});
     tokens.forEach((token) => {
+      // Cap tokens at 3 to prevent stale-token explosion from pre-cap DB records
+      const tokenArray = Array.isArray(token.token) ? token.token.slice(-3) : [];
       if (userSocketMap[token.userId]) {
-        userSocketMap[token.userId].fcmToken = token.token;
+        userSocketMap[token.userId].fcmToken = tokenArray;
       } else {
-        userSocketMap[token.userId] = { socketId: null, fcmToken: token.token };
+        userSocketMap[token.userId] = { socketId: null, fcmToken: tokenArray };
       }
     });
 
@@ -1031,7 +1033,11 @@ io.on("connection", async (socket) => {
         location: [],
       };
     } else {
+      // On reconnect: refresh token array from DB (capped at 3) to replace any stale memory state
       userSocketMap[userId].socketId = socket.id;
+      if (Array.isArray(user?.token)) {
+        userSocketMap[userId].fcmToken = user.token.slice(-3);
+      }
     }
   } catch (error) {
     console.log("Error handling socket connection:", error);
