@@ -808,6 +808,7 @@ const calculateDeliveryChargesHelper = async ({
   let surgeCharges = null;
   let deliveryChargeForScheduledOrder = null;
   let taxAmount = null;
+  let taxComponents = [];
   let returnCharge = null;
 
   const itemTotal = ["Take Away", "Home Delivery"].includes(deliveryMode)
@@ -904,12 +905,15 @@ const calculateDeliveryChargesHelper = async ({
     }
 
     console.log("🧾 Calculating Tax...");
-    taxAmount = await getTaxAmount(
+    const taxResult = await getTaxAmount(
       businessCategoryId,
       merchant.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
     );
+    const { taxComponents: homeDeliveryTaxComponents, totalTax: homeDeliveryTotalTax } = taxResult;
+    taxAmount = homeDeliveryTotalTax;
+    taxComponents = homeDeliveryTaxComponents;
 
     console.log("💸 Tax Amount:", taxAmount);
   }
@@ -1006,8 +1010,15 @@ const calculateDeliveryChargesHelper = async ({
     if (taxFound) {
       const calculatedTax = (charge * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
-
+      taxComponents = [{
+        taxName: taxFound.taxName,
+        taxRate: taxFound.tax,
+        taxType: taxFound.taxType,
+        amount: taxAmount,
+      }];
       console.log("💸 Tax Amount:", taxAmount);
+    } else {
+      taxComponents = [];
     }
   }
 
@@ -1026,6 +1037,12 @@ const calculateDeliveryChargesHelper = async ({
       if (taxFound) {
         const calculatedTax = (itemTotal * taxFound.tax) / 100;
         taxAmount = parseFloat(calculatedTax.toFixed(2));
+        taxComponents = [{
+          taxName: taxFound.taxName,
+          taxRate: taxFound.tax,
+          taxType: taxFound.taxType,
+          amount: taxAmount,
+        }];
         console.log("💸 Take Away Tax Amount:", taxAmount);
       }
     }
@@ -1047,6 +1064,7 @@ const calculateDeliveryChargesHelper = async ({
     surgeCharges,
     deliveryChargeForScheduledOrder,
     taxAmount,
+    taxComponents,
     itemTotal,
     returnCharge,
   };
@@ -1115,7 +1133,8 @@ const calculateBill = (
   merchantDiscountAmount,
   taxAmount,
   addedTip = 0,
-  returnCharge = 0
+  returnCharge = 0,
+  taxComponents = []
 ) => {
   // Calculate total discount amount once
   const totalDiscountAmount =
@@ -1150,6 +1169,7 @@ const calculateBill = (
     addedTip,
     subTotal: parseFloat(subTotal).toFixed(2),
     taxAmount: parseFloat(taxAmount).toFixed(2),
+    taxComponents,
     surgePrice: surgeCharges || null,
     discountedAmount: totalDiscountAmount > 0 ? totalDiscountAmount : null,
     originalGrandTotal: Math.round(grandTotal),
@@ -1476,6 +1496,7 @@ const calculateDeliveryChargeHelperForAdmin = async (
       const takeAwayItemTotal = calculateItemTotal(items, scheduledDetails?.numOfDays);
 
       let takeAwayTaxAmount = 0;
+      let takeAwayTaxComponents = [];
 
       const appCustomization = await CustomerAppCustomization.findOne({}).select(
         "takeAwayOrderCustomization"
@@ -1488,6 +1509,12 @@ const calculateDeliveryChargeHelperForAdmin = async (
           takeAwayTaxAmount = parseFloat(
             ((takeAwayItemTotal * taxFound.tax) / 100).toFixed(2)
           );
+          takeAwayTaxComponents = [{
+            taxName: taxFound.taxName,
+            taxRate: taxFound.tax,
+            taxType: taxFound.taxType,
+            amount: takeAwayTaxAmount,
+          }];
         }
       }
 
@@ -1496,6 +1523,7 @@ const calculateDeliveryChargeHelperForAdmin = async (
         surgeCharges: 0,
         deliveryChargeForScheduledOrder: 0,
         taxAmount: takeAwayTaxAmount,
+        taxComponents: takeAwayTaxComponents,
         itemTotal: takeAwayItemTotal,
       };
     }
@@ -1668,9 +1696,16 @@ const pickAndDropCharges = async (
   const charge = deliveryChargeForScheduledOrder ?? oneTimeDeliveryCharge;
 
   let taxAmount = 0;
+  let taxComponents = [];
   if (taxFound) {
     const calculatedTax = (charge * taxFound.tax) / 100;
     taxAmount = parseFloat(calculatedTax.toFixed(2));
+    taxComponents = [{
+      taxName: taxFound.taxName,
+      taxRate: taxFound.tax,
+      taxType: taxFound.taxType,
+      amount: taxAmount,
+    }];
   }
 
   return {
@@ -1678,6 +1713,7 @@ const pickAndDropCharges = async (
     surgeCharges: surgeCharges || null,
     deliveryChargeForScheduledOrder: deliveryChargeForScheduledOrder || null,
     taxAmount,
+    taxComponents,
     itemTotal: null,
     returnCharge,
   };
@@ -1764,9 +1800,16 @@ const customOrderCharges = async (
   const charge = deliveryChargeForScheduledOrder || oneTimeDeliveryCharge;
 
   let taxAmount = 0;
+  let taxComponents = [];
   if (taxFound) {
     const calculatedTax = (charge * taxFound.tax) / 100;
     taxAmount = parseFloat(calculatedTax.toFixed(2));
+    taxComponents = [{
+      taxName: taxFound.taxName,
+      taxRate: taxFound.tax,
+      taxType: taxFound.taxType,
+      amount: taxAmount,
+    }];
   }
 
   return {
@@ -1776,6 +1819,7 @@ const customOrderCharges = async (
       ? deliveryChargeForScheduledOrder
       : 0,
     taxAmount,
+    taxComponents,
     itemTotal: 0,
   };
 };

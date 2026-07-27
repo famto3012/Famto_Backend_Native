@@ -2143,6 +2143,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargeHelperForAdmin(
@@ -2177,6 +2178,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       taxAmount || 0,
       addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     console.log("Bill detail:", billDetail);
