@@ -41,8 +41,8 @@ const {
 } = require("../libs/automatic");
 const BatchOrder = require("../models/BatchOrder");
 
-// const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
-const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
+const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+// const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
 
 const serviceAccount1 = {
   type: process.env.TYPE_1,
