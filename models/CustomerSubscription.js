@@ -31,6 +31,10 @@ const customerSubscriptionSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    maxFreeDistanceKm: {
+      type: Number,
+      default: null,
+    },
     description: {
       type: String,
       required: true,

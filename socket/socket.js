@@ -22,6 +22,9 @@ const {
   updateAgentDetails,
   updateBillOfCustomOrderInDelivery,
 } = require("../utils/agentAppHelpers");
+const {
+  decrementSubscriptionOrderCount,
+} = require("../utils/createOrderHelpers");
 const NotificationSetting = require("../models/NotificationSetting");
 const admin1 = require("firebase-admin");
 const admin2 = require("firebase-admin");
@@ -4898,6 +4901,11 @@ io.on("connection", async (socket) => {
         orderFound.timeTaken =
           currentTime - new Date(orderFound.agentAcceptedAt);
         orderFound.delayedBy = delayedBy;
+
+        // Release free-delivery subscription slot if applicable
+        decrementSubscriptionOrderCount(orderFound).catch((err) =>
+          console.error("decrementSubscriptionOrderCount error:", err.message)
+        );
 
         orderFound.detailAddedByAgent.shopUpdates.push(dataByAgent);
         orderFound.status = "Cancelled";

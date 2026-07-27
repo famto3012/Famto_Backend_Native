@@ -49,6 +49,7 @@ const {
   clearCart,
   updateCustomerTransaction,
   locationArraysEqual,
+  decrementSubscriptionOrderCount,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -1170,6 +1171,11 @@ const rejectOrderController = async (req, res, next) => {
       order.status = "Cancelled";
       order.orderDetailStepper.cancelled = stepperData;
     };
+
+    // Release free-delivery subscription slot if applicable
+    decrementSubscriptionOrderCount(orderFound).catch((err) =>
+      console.error("decrementSubscriptionOrderCount error:", err.message)
+    );
 
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;

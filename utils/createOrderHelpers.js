@@ -10,6 +10,7 @@ const Merchant = require("../models/Merchant");
 const MerchantDiscount = require("../models/MerchantDiscount");
 const PickAndCustomCart = require("../models/PickAndCustomCart");
 const Product = require("../models/Product");
+const SubscriptionLog = require("../models/SubscriptionLog");
 const appError = require("./appError");
 
 const { convertISTToUTC } = require("./formatters");
@@ -2161,7 +2162,45 @@ const locationArraysEqual = (a, b) => {
   );
 };
 
+/**
+ * Decrement subscription order count when a free-delivery order is cancelled.
+ */
+const decrementSubscriptionOrderCount = async (order) => {
+  // Only Home Delivery can have free delivery via subscription
+  if (order.deliveryMode !== "Home Delivery") return;
+
+  const customer = await Customer.findById(order.customerId).select(
+    "customerDetails.pricing"
+  );
+  if (!customer?.customerDetails?.pricing?.length) return;
+
+  const subscriptionLog = await SubscriptionLog.findById(
+    customer.customerDetails.pricing[0]
+  );
+  if (!subscriptionLog) return;
+
+  const now = new Date();
+  const withinValidity =
+    new Date(subscriptionLog.startDate) <= now &&
+    new Date(subscriptionLog.endDate) >= now;
+
+  if (!withinValidity) return;
+
+  // Only decrement if this order actually used a free-delivery slot
+  const deliveryCharge = order.billDetail?.deliveryCharge ?? 0;
+  const deliveryChargePerDay = order.billDetail?.deliveryChargePerDay ?? 0;
+  const wasFreeDelivery = deliveryCharge === 0 || deliveryChargePerDay === 0;
+  
+  if (!wasFreeDelivery) return;
+
+  if (subscriptionLog.currentNumberOfOrders > 0) {
+    subscriptionLog.currentNumberOfOrders -= 1;
+    await subscriptionLog.save();
+  }
+};
+
 module.exports = {
+  decrementSubscriptionOrderCount,
   // Invoice
   findOrCreateCustomer,
   processSchedule,
