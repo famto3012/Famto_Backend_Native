@@ -11,8 +11,8 @@ const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
+const mapService = require("../../services/MapService");
 const {
-  getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
 } = require("../../utils/customerAppHelpers");
 const {
@@ -50,7 +50,7 @@ const addShopController = async (req, res, next) => {
       deliveryLocation = customer.customerDetails.location;
 
       const { distanceInKM, durationInMinutes } =
-        await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
+        await mapService.getDistance(pickupLocation, deliveryLocation);
 
       distance = distanceInKM;
       duration = durationInMinutes;
@@ -402,7 +402,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       deliveryLocation = deliveryCoordinates;
 
       const { distanceInKM, durationInMinutes } =
-        await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
+        await mapService.getDistance(pickupLocation, deliveryLocation);
 
       distance = parseFloat(distanceInKM);
       duration = parseInt(durationInMinutes);

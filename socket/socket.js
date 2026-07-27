@@ -13,8 +13,8 @@ const Conversation = require("../models/Conversation");
 const CustomerNotificationLogs = require("../models/CustomerNotificationLog");
 const AdminNotificationLogs = require("../models/AdminNotificationLog");
 const MerchantNotificationLogs = require("../models/MerchantNotificationLog");
+const mapService = require("../services/MapService");
 const {
-  getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
 } = require("../utils/customerAppHelpers");
 const {
@@ -2083,7 +2083,7 @@ io.on("connection", async (socket) => {
               // ADD: Calculate start-to-pick distance for batch order
               const pickupStartedLoc = order.orderDetailStepper?.pickupStarted?.location;
               if (pickupStartedLoc?.length === 2 && agentLocation?.length === 2) {
-                const { distanceInKM } = await getDistanceFromPickupToDelivery(
+                const { distanceInKM } = await mapService.getDistance(
                   pickupStartedLoc,
                   agentLocation
                 );
@@ -2241,7 +2241,7 @@ io.on("connection", async (socket) => {
           // Calculate start-to-pick distance (agent's travel from start to merchant)
           const pickupStartLocation = orderFound.orderDetailStepper?.pickupStarted?.location;
           if (pickupStartLocation?.length === 2 && agentLocation?.length === 2) {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+            const { distanceInKM } = await mapService.getDistance(
               pickupStartLocation,   // where agent was when they tapped "Start Pickup"
               agentLocation          // where agent is now (at the merchant)
             );
@@ -2392,7 +2392,7 @@ io.on("connection", async (socket) => {
   //       !orderFound?.detailAddedByAgent?.distanceCoveredByAgent &&
   //       orderFound?.detailAddedByAgent?.distanceCoveredByAgent !== 0
   //     ) {
-  //       const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //       const { distanceInKM } = await mapService.getDistance(
   //         agentLocation,
   //         pickupLocation
   //       );
@@ -3200,7 +3200,7 @@ io.on("connection", async (socket) => {
           let distanceCoveredByAgent = 0;
           try {
             if (orderFound?.deliveryMode === "Custom Order") {
-              const { distanceInKM } = await getDistanceFromPickupToDelivery(
+              const { distanceInKM } = await mapService.getDistance(
                 location,
                 delivery.location
               );
@@ -3510,7 +3510,7 @@ io.on("connection", async (socket) => {
               agentLocation?.length === 2
             ) {
               const { distanceInKM } =
-                await getDistanceFromPickupToDelivery(
+                await mapService.getDistance(
                   deliveryStartedLocation,
                   agentLocation
                 );
@@ -3725,7 +3725,7 @@ io.on("connection", async (socket) => {
             agentLocation?.length === 2
           ) {
             const { distanceInKM } =
-              await getDistanceFromPickupToDelivery(
+              await mapService.getDistance(
                 deliveryStartedLocation,
                 agentLocation
               );
@@ -3960,7 +3960,7 @@ io.on("connection", async (socket) => {
   //           // ADD: Calculate pick-to-delivery distance for batch order
   //           const delivStartLoc = orderFound.orderDetailStepper?.deliveryStarted?.location;
   //           if (delivStartLoc?.length === 2 && agentLocation?.length === 2) {
-  //             const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //             const { distanceInKM } = await mapService.getDistance(
   //               delivStartLoc,
   //               agentLocation
   //             );
@@ -4074,7 +4074,7 @@ io.on("connection", async (socket) => {
   //         // Calculate pick-to-delivery distance (agent's actual travel from merchant to customer)
   //         const deliveryStartedLocation = orderFound.orderDetailStepper?.deliveryStarted?.location;
   //         if (deliveryStartedLocation?.length === 2 && agentLocation?.length === 2) {
-  //           const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //           const { distanceInKM } = await mapService.getDistance(
   //             deliveryStartedLocation,  // where agent was when they left the merchant
   //             agentLocation             // where agent is now (at customer)
   //           );
@@ -4224,7 +4224,7 @@ io.on("connection", async (socket) => {
   //         let distanceCoveredByAgent = 0;
 
   //         if (orderFound?.deliveryMode === "Custom Order") {
-  //           const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //           const { distanceInKM } = await mapService.getDistance(
   //             location,
   //             delivery.location
   //           );
@@ -4407,7 +4407,7 @@ io.on("connection", async (socket) => {
   //     let distanceCoveredByAgent = 0;
 
   //     if (orderFound.orderDetail.deliveryMode === "Custom Order") {
-  //       const { distanceInKM } = await getDistanceFromPickupToDelivery(
+  //       const { distanceInKM } = await mapService.getDistance(
   //         location,
   //         orderFound.orderDetail.deliveryLocation
   //       );
@@ -4857,7 +4857,7 @@ io.on("connection", async (socket) => {
           orderFound.detailAddedByAgent?.shopUpdates?.slice(-1)?.[0]
             ?.location || null;
 
-        const { distanceInKM } = await getDistanceFromPickupToDelivery(
+        const { distanceInKM } = await mapService.getDistance(
           dataByAgent.location,
           lastLocation
         );

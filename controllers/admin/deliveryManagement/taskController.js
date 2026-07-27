@@ -18,9 +18,7 @@ const {
 } = require("../../../socket/socket");
 
 const appError = require("../../../utils/appError");
-const {
-  getDistanceFromPickupToDelivery,
-} = require("../../../utils/customerAppHelpers");
+const mapService = require("../../../services/MapService");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const BatchOrder = require("../../../models/BatchOrder");
 const {
@@ -257,7 +255,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
         // Only calculate distance for Free/Busy agents; Inactive agents default to 0
         if (agent.status === "Free" || agent.status === "Busy") {
           if (deliveryMode === "Pick and Drop" && deliveryLocation?.length === 2) {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+            const { distanceInKM } = await mapService.getDistance(
               agentLocation,
               deliveryLocation
             );
@@ -266,7 +264,7 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
             deliveryMode !== "Custom Order" &&
             merchantLocation?.length === 2
           ) {
-            const { distanceInKM } = await getDistanceFromPickupToDelivery(
+            const { distanceInKM } = await mapService.getDistance(
               agentLocation,
               merchantLocation
             );
@@ -659,7 +657,7 @@ const testSocket = async (req, res, next) => {
     let distanceCoveredByAgent = 0;
 
     if (orderFound?.deliveryMode === "Custom Order") {
-      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      const { distanceInKM } = await mapService.getDistance(
         location,
         delivery.location
       );

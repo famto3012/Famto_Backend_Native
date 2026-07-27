@@ -1,3 +1,4 @@
+const mapService = require("../../../services/MapService");
 const { validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
@@ -522,16 +523,18 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
       !arraysAreEqual(newLocation, existingCoords)
     ) {
       const [lng, lat] = newLocation;
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
 
       try {
-        const response = await axios.get(url, { responseType: "arraybuffer" });
+        // Use MapService for static map image (handles provider swap, env key)
+        const buffer = await mapService.getStaticMapImage(lat, lng, {
+          size: "400x500",
+          zoom: 15,
+        });
         const uniqueName = uuidv4();
         const fileName = path.join(
           __dirname,
           `../../../${uniqueName}-location.jpeg`,
         );
-        const buffer = Buffer.from(response.data);
         const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
 
         locationImage = await uploadToFirebase(
@@ -1485,17 +1488,20 @@ const updateMerchantDetailsController = async (req, res, next) => {
       !arraysAreEqual(newLocation, existingCoords)
     ) {
       const [lng, lat] = newLocation;
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
 
       try {
-        console.log(url);
-        const response = await axios.get(url, { responseType: "arraybuffer" });
+        console.log("Generating location image via MapService");
+
+        // Use MapService for static map image (handles provider swap, env key)
+        const buffer = await mapService.getStaticMapImage(lat, lng, {
+          size: "400x500",
+          zoom: 15,
+        });
         const uniqueName = uuidv4();
         const fileName = path.join(
           __dirname,
           `../../../${uniqueName}-location.jpeg`,
         );
-        const buffer = Buffer.from(response.data);
         const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
 
         locationImage = await uploadToFirebase(

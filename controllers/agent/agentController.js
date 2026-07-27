@@ -45,10 +45,8 @@ const {
   updateCustomerSubscriptionCount,
   updateAgentDetailsForBatch,
 } = require("../../utils/agentAppHelpers");
+const mapService = require("../../services/MapService");
 const { formatDate, formatTime } = require("../../utils/formatters");
-const {
-  getDistanceFromPickupToDelivery,
-} = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
   verifyPayment,
@@ -2773,7 +2771,7 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     //   shopUpdates?.length !== 1 &&
     //   orderFound?.orderDetail?.pickupLocation?.length === 2
     // ) {
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
+    const { distanceInKM } = await mapService.getDistance(
       lastLocation,
       location
     );
