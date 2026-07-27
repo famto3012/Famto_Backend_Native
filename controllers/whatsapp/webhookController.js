@@ -280,10 +280,6 @@ const handleStatusUpdate = async (status) => {
       { "events.metaMessageId": metaMessageId },
       {
         $set: { "events.$.status": mapped },
-        $inc: {
-          [`stats.${mapped}`]: 1,
-          ...(mapped !== "failed" ? {} : {}),
-        },
       }
     );
   }
