@@ -902,15 +902,12 @@ const calculateDeliveryChargesHelper = async ({
       console.log("📅 Scheduled Delivery Charge:", deliveryChargeForScheduledOrder);
     }
 
-    console.log("🧾 Calculating Tax...");
     taxAmount = await getTaxAmount(
       businessCategoryId,
       merchant.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
     );
-
-    console.log("💸 Tax Amount:", taxAmount);
   }
 
   if (deliveryMode === "Pick and Drop") {
@@ -1143,7 +1140,7 @@ const calculateBill = (
       ? (grandTotal - totalDiscountAmount).toFixed(2)
       : grandTotal.toFixed(2);
 
-  return {
+  const result = {
     itemTotal,
     originalDeliveryCharge: deliveryCharges,
     addedTip,
@@ -1155,6 +1152,8 @@ const calculateBill = (
     discountedGrandTotal: Math.round(discountedGrandTotal),
     returnCharge: returnCharge ? parseFloat(returnCharge.toFixed(2)) : null,
   };
+
+  return result;
 };
 
 // =====================

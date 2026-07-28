@@ -269,7 +269,7 @@ const getTaxAmount = async (
       assignToBusinessCategory: businessCategoryId,
       geofences: { $in: [geofenceId] },
       status: true,
-    });
+    }).lean();
 
     if (!taxesFound.length) throw new Error("Tax not found");
 

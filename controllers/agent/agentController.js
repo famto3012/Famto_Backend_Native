@@ -1730,7 +1730,7 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
 
     const updatedSubTotal = updatedItemTotal + deliveryCharge + surgePrice;
 
-    // ── Recalculate tax on the full base ──
+    // ── Recalculate tax on items only (not delivery or surge) ──
     const appCustomization = await CustomerAppCustomization.findOne({}).select(
       "customOrderCustomization"
     );
@@ -1738,9 +1738,13 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
     let taxAmount = 0;
     if (taxId) {
       const taxFound = await Tax.findById(taxId);
-      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
-        const taxableBase = updatedItemTotal + deliveryCharge + surgePrice;
-        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      if (taxFound && taxFound.status) {
+        if (taxFound.taxType === "Fixed-amount") {
+          taxAmount = taxFound.tax;
+        } else {
+          // Percentage — applies to item total only
+          taxAmount = parseFloat(((updatedItemTotal * taxFound.tax) / 100).toFixed(2));
+        }
       }
     }
 
@@ -1872,13 +1876,28 @@ const addHomeDeliveryItemController = async (req, res, next) => {
     const deliveryCharge = orderFound.billDetail.deliveryCharge || 0;
     const surgePrice = orderFound.billDetail.surgePrice || 0;
     const addedTip = orderFound.billDetail.addedTip || 0;
-    const taxAmount = orderFound.billDetail.taxAmount || 0;
     const discountedAmount = orderFound.billDetail.discountedAmount || 0;
+
+    // Recalculate tax based on new item total
+    const { getTaxAmount } = require("../../utils/customerAppHelpers");
+    let taxAmount = orderFound.billDetail.taxAmount || 0;
+    try {
+      const merchantId = orderFound.merchantId;
+      const merchant = await Merchant.findById(merchantId).lean();
+      const geofenceId = merchant?.merchantDetail?.geofenceId;
+      const businessCategoryId = orderFound.businessCategoryId || merchant?.merchantDetail?.businessCategoryId?.[0];
+      if (geofenceId && businessCategoryId) {
+        taxAmount = await getTaxAmount(businessCategoryId, geofenceId, itemTotal, deliveryCharge);
+      }
+    } catch (taxErr) {
+      console.error("⚠️ [addItems] Tax recalculation failed, keeping existing:", taxErr.message);
+    }
 
     const subTotal = itemTotal + deliveryCharge + surgePrice + taxAmount;
     const grandTotal = subTotal + addedTip - discountedAmount;
 
     orderFound.billDetail.itemTotal = parseFloat(itemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = parseFloat(taxAmount.toFixed(2));
     orderFound.billDetail.subTotal = parseFloat(subTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(grandTotal.toFixed(2));
 
