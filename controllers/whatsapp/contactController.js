@@ -283,6 +283,7 @@ const importContactsCsv = async (req, res, next) => {
 
     let created = 0;
     let updated = 0;
+    let skipped = 0;
     const errors = [];
 
     for (const row of rows) {
@@ -290,6 +291,7 @@ const importContactsCsv = async (req, res, next) => {
         const phone = String(row.phone || row.Phone || "").replace(/\D/g, "");
         if (!phone) {
           errors.push(`Row skipped: missing phone (name: ${row.name || row.Name || "unknown"})`);
+          skipped++;
           continue;
         }
 
