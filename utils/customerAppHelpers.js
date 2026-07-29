@@ -270,15 +270,30 @@ const getTaxAmount = async (
       geofences: { $in: [geofenceId] },
       status: true,
     }).lean();
+    if (!taxesFound.length) {
+      return { taxComponents: [], totalTax: 0 };
+    }
 
-    if (!taxesFound.length) throw new Error("Tax not found");
+    const taxComponents = taxesFound.map((t) => {
+      let amount = 0;
+      if (t.taxType === "Fixed-amount") {
+        amount = t.tax;
+      } else {
+        amount = (parseFloat(itemTotal) * t.tax) / 100;
+      }
+      return {
+        taxName: t.taxName,
+        taxRate: t.tax,
+        taxType: t.taxType,
+        amount: parseFloat(amount.toFixed(2)),
+      };
+    });
 
-    const taxAmount = taxesFound.reduce((sum, t) => {
-      if (t.taxType === "Fixed-amount") return sum + t.tax;
-      return sum + (parseFloat(itemTotal) * t.tax) / 100;
-    }, 0);
+    const totalTax = parseFloat(
+      taxComponents.reduce((sum, c) => sum + c.amount, 0).toFixed(2)
+    );
 
-    return parseFloat(taxAmount.toFixed(2));
+    return { taxComponents, totalTax };
   } catch (err) {
     throw new Error(err.message);
   }

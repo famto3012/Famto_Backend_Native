@@ -43,6 +43,22 @@ const billSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    taxComponents: {
+      type: [
+        {
+          taxName: { type: String, required: true },
+          taxRate: { type: Number, required: true },
+          taxType: {
+            type: String,
+            enum: ["Fixed-amount", "Percentage"],
+            required: true,
+          },
+          amount: { type: Number, required: true },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
     discountedAmount: {
       type: Number,
       default: null,

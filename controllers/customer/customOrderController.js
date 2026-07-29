@@ -459,9 +459,16 @@ const addDeliveryAddressController = async (req, res, next) => {
     }
 
     let taxAmount = 0;
+    let taxComponents = [];
     if (taxFound && taxFound.status) {
       const calculatedTax = (updatedDeliveryCharges * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
+      taxComponents = [{
+        taxName: taxFound.taxName,
+        taxRate: taxFound.tax,
+        taxType: taxFound.taxType,
+        amount: taxAmount,
+      }];
     }
 
     updatedBillDetail = {
@@ -478,6 +485,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       subTotal: null,
       vehicleType: null,
       taxAmount,
+      taxComponents,
       surgePrice: Math.round(updatedSurgeCharges) || null,
     };
 
@@ -565,6 +573,7 @@ const confirmCustomOrderController = async (req, res, next) => {
         cart.billDetail.discountedDeliveryCharge ||
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
+      taxComponents: cart.billDetail.taxComponents || [],
       discountedAmount: cart.billDetail.discountedAmount,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       surgePrice: cart.billDetail.surgePrice,

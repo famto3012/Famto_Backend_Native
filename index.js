@@ -97,7 +97,8 @@ const {
   deleteOldActivityLogs,
 } = require("./controllers/admin/activityLogs/activityLogController.js");
 const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
-const { deleteOldLogs, deleteOldTasks } = require("./libs/automatic.js");
+const { deleteOldLogs, deleteOldTasks, removeOldNotifications } = require("./libs/automatic.js");
+const { removeExpiredMerchantDiscounts, removeExpiredProductDiscount, removeExpiredPromoCode } = require("./libs/removeExpired.js");
 const {
   distanceCache,
 } = require("./controllers/customer/universalOrderController.js");

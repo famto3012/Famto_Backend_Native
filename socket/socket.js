@@ -22,6 +22,9 @@ const {
   updateAgentDetails,
   updateBillOfCustomOrderInDelivery,
 } = require("../utils/agentAppHelpers");
+const {
+  decrementSubscriptionOrderCount,
+} = require("../utils/createOrderHelpers");
 const NotificationSetting = require("../models/NotificationSetting");
 const admin1 = require("firebase-admin");
 const admin2 = require("firebase-admin");
@@ -41,8 +44,8 @@ const {
 } = require("../libs/automatic");
 const BatchOrder = require("../models/BatchOrder");
 
-// const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
-const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
+const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+// const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
 
 const serviceAccount1 = {
   type: process.env.TYPE_1,
@@ -476,10 +479,12 @@ const populateUserSocketMap = async () => {
   try {
     const tokens = await FcmToken.find({});
     tokens.forEach((token) => {
+      // Cap tokens at 3 to prevent stale-token explosion from pre-cap DB records
+      const tokenArray = Array.isArray(token.token) ? token.token.slice(-3) : [];
       if (userSocketMap[token.userId]) {
-        userSocketMap[token.userId].fcmToken = token.token;
+        userSocketMap[token.userId].fcmToken = tokenArray;
       } else {
-        userSocketMap[token.userId] = { socketId: null, fcmToken: token.token };
+        userSocketMap[token.userId] = { socketId: null, fcmToken: tokenArray };
       }
     });
 
@@ -1028,7 +1033,11 @@ io.on("connection", async (socket) => {
         location: [],
       };
     } else {
+      // On reconnect: refresh token array from DB (capped at 3) to replace any stale memory state
       userSocketMap[userId].socketId = socket.id;
+      if (Array.isArray(user?.token)) {
+        userSocketMap[userId].fcmToken = user.token.slice(-3);
+      }
     }
   } catch (error) {
     console.log("Error handling socket connection:", error);
@@ -4898,6 +4907,11 @@ io.on("connection", async (socket) => {
         orderFound.timeTaken =
           currentTime - new Date(orderFound.agentAcceptedAt);
         orderFound.delayedBy = delayedBy;
+
+        // Release free-delivery subscription slot if applicable
+        decrementSubscriptionOrderCount(orderFound).catch((err) =>
+          console.error("decrementSubscriptionOrderCount error:", err.message)
+        );
 
         orderFound.detailAddedByAgent.shopUpdates.push(dataByAgent);
         orderFound.status = "Cancelled";

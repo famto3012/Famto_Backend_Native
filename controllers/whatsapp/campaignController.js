@@ -1,6 +1,7 @@
 const WhatsappCampaign = require("../../models/WhatsappCampaign");
 const WhatsappTemplate = require("../../models/WhatsappTemplate");
 const WhatsappContact = require("../../models/WhatsappContact");
+const WhatsappMessage = require("../../models/WhatsappMessage");
 const appError = require("../../utils/appError");
 
 const BUILTIN_AUDIENCES = [
@@ -309,6 +310,22 @@ const processCampaignSend = async (campaign, userId) => {
       const metaResponse = await sendMetaMessage(payload);
       const metaMessageId = metaResponse.messages?.[0]?.id;
       console.log(`[Campaign] Success for ${waId}:`, metaMessageId);
+
+      // Create a message record so analytics/billing can count this campaign message
+      await WhatsappMessage.create({
+        waId,
+        metaMessageId,
+        direction: "outbound",
+        messageType: "template",
+        body: `[Template: ${template.name}]`,
+        templateName: template.name,
+        deliveryStatus: "sent",
+        senderName: "Campaign",
+        campaignId: campaign._id,
+        timestamp: new Date(),
+      }).catch((err) => {
+        console.error(`[Campaign] Failed to save message record for ${waId}:`, err.message);
+      });
 
       campaign.events.push({
         waId,

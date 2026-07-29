@@ -27,6 +27,10 @@ const subscriptionLogSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    maxFreeDistanceKm: {
+      type: Number,
+      default: null,
+    },
     paymentMode: {
       type: String,
       enum: ["Online", "Cash"],
