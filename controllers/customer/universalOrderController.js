@@ -2195,6 +2195,30 @@ const orderPaymentController = async (req, res, next) => {
 
     if (!merchant) return next(appError("Merchant not found", 404));
 
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Re-validate the delivery address against active geofences at the
+    // final order-creation gateway. The coordinates were validated earlier
+    // in confirmOrderDetailController (checkpoint), but the geofence could
+    // have been deleted/resized, or the cart data could have been tampered
+    // with between that step and this one.
+    // Home Delivery → validate cart.cartDetail.deliveryLocation
+    const deliveryLocation = cart.cartDetail?.deliveryLocation;
+    if (!Array.isArray(deliveryLocation) || deliveryLocation.length < 2) {
+      return next(appError("Delivery location coordinates are missing", 400));
+    }
+    const orderGeofence = await geoLocation(
+      deliveryLocation[0],
+      deliveryLocation[1],
+    );
+    if (!orderGeofence) {
+      return next(
+        appError(
+          "Delivery address is outside our service area. Please choose a different address.",
+          400,
+        ),
+      );
+    }
+
     const deliveryTimeMinutes = parseInt(
       merchant.merchantDetail.deliveryTime,
       10,

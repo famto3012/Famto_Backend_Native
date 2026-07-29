@@ -1626,6 +1626,35 @@ const confirmPickAndDropController = async (req, res, next) => {
     if (!customer) return next(appError("Customer not found", 404));
     if (!cart) return next(appError("Cart not found", 404));
 
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Re-validate the pickup location against active geofences at the final
+    // order-creation gateway. The pricing step (getVehiclePricingDetailsCtrl)
+    // checks this, but it's a checkpoint — this gateway must re-validate
+    // to catch tampered cart data or deleted/resized geofences.
+    // Pick & Drop → validate the first pickup address coordinates.
+    const firstPickup = cart.pickups?.[0];
+    if (
+      !firstPickup?.location ||
+      !Array.isArray(firstPickup.location) ||
+      firstPickup.location.length < 2
+    ) {
+      return next(
+        appError("Pickup location coordinates are missing or invalid", 400),
+      );
+    }
+    const orderGeofence = await geoLocation(
+      firstPickup.location[0],
+      firstPickup.location[1],
+    );
+    if (!orderGeofence) {
+      return next(
+        appError(
+          "Pickup location is outside our service area. Please choose a different pickup address.",
+          400,
+        ),
+      );
+    }
+
     const orderAmount = parseFloat(
       cart.billDetail.discountedGrandTotal || cart.billDetail.originalGrandTotal
     );
@@ -1920,6 +1949,35 @@ const verifyPickAndDropPaymentController = async (req, res, next) => {
 
     if (!cart) {
       return next(appError("Cart not found", 404));
+    }
+
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Re-validate the pickup location against active geofences at this
+    // payment-verification gateway. This catches the same tamper window
+    // as confirmPickAndDropController — the user could have modified cart
+    // data or geofence boundaries could have changed between the pricing
+    // checkpoint and the payment-confirmed order creation.
+    const firstPickup = cart.pickups?.[0];
+    if (
+      !firstPickup?.location ||
+      !Array.isArray(firstPickup.location) ||
+      firstPickup.location.length < 2
+    ) {
+      return next(
+        appError("Pickup location coordinates are missing or invalid", 400),
+      );
+    }
+    const orderGeofence = await geoLocation(
+      firstPickup.location[0],
+      firstPickup.location[1],
+    );
+    if (!orderGeofence) {
+      return next(
+        appError(
+          "Pickup location is outside our service area. Please choose a different pickup address.",
+          400,
+        ),
+      );
     }
 
     const orderAmount =
