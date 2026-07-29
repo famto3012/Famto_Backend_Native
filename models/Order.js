@@ -71,6 +71,22 @@ const billSchema = mongoose.Schema(
     promoCodeUsed: { type: String, default: null },
     promoCodeDiscount: { type: Number, default: null },
     returnCharge: { type: Number, default: null },
+    taxComponents: {
+      type: [
+        {
+          taxName: { type: String, required: true },
+          taxRate: { type: Number, required: true },
+          taxType: {
+            type: String,
+            enum: ["Fixed-amount", "Percentage"],
+            required: true,
+          },
+          amount: { type: Number, required: true },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
   },
   { _id: false }
 );

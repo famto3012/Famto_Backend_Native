@@ -10,6 +10,7 @@ const Merchant = require("../models/Merchant");
 const MerchantDiscount = require("../models/MerchantDiscount");
 const PickAndCustomCart = require("../models/PickAndCustomCart");
 const Product = require("../models/Product");
+const SubscriptionLog = require("../models/SubscriptionLog");
 const appError = require("./appError");
 
 const { convertISTToUTC } = require("./formatters");
@@ -807,6 +808,7 @@ const calculateDeliveryChargesHelper = async ({
   let surgeCharges = null;
   let deliveryChargeForScheduledOrder = null;
   let taxAmount = null;
+  let taxComponents = [];
   let returnCharge = null;
 
   const itemTotal = ["Take Away", "Home Delivery"].includes(deliveryMode)
@@ -903,12 +905,15 @@ const calculateDeliveryChargesHelper = async ({
     }
 
     console.log("🧾 Calculating Tax...");
-    taxAmount = await getTaxAmount(
+    const taxResult = await getTaxAmount(
       businessCategoryId,
       merchant.merchantDetail.geofenceId,
       itemTotal,
       deliveryChargeForScheduledOrder || oneTimeDeliveryCharge
     );
+    const { taxComponents: homeDeliveryTaxComponents, totalTax: homeDeliveryTotalTax } = taxResult;
+    taxAmount = homeDeliveryTotalTax;
+    taxComponents = homeDeliveryTaxComponents;
 
     console.log("💸 Tax Amount:", taxAmount);
   }
@@ -1005,8 +1010,15 @@ const calculateDeliveryChargesHelper = async ({
     if (taxFound) {
       const calculatedTax = (charge * taxFound.tax) / 100;
       taxAmount = parseFloat(calculatedTax.toFixed(2));
-
+      taxComponents = [{
+        taxName: taxFound.taxName,
+        taxRate: taxFound.tax,
+        taxType: taxFound.taxType,
+        amount: taxAmount,
+      }];
       console.log("💸 Tax Amount:", taxAmount);
+    } else {
+      taxComponents = [];
     }
   }
 
@@ -1025,6 +1037,12 @@ const calculateDeliveryChargesHelper = async ({
       if (taxFound) {
         const calculatedTax = (itemTotal * taxFound.tax) / 100;
         taxAmount = parseFloat(calculatedTax.toFixed(2));
+        taxComponents = [{
+          taxName: taxFound.taxName,
+          taxRate: taxFound.tax,
+          taxType: taxFound.taxType,
+          amount: taxAmount,
+        }];
         console.log("💸 Take Away Tax Amount:", taxAmount);
       }
     }
@@ -1046,6 +1064,7 @@ const calculateDeliveryChargesHelper = async ({
     surgeCharges,
     deliveryChargeForScheduledOrder,
     taxAmount,
+    taxComponents,
     itemTotal,
     returnCharge,
   };
@@ -1114,7 +1133,8 @@ const calculateBill = (
   merchantDiscountAmount,
   taxAmount,
   addedTip = 0,
-  returnCharge = 0
+  returnCharge = 0,
+  taxComponents = []
 ) => {
   // Calculate total discount amount once
   const totalDiscountAmount =
@@ -1149,6 +1169,7 @@ const calculateBill = (
     addedTip,
     subTotal: parseFloat(subTotal).toFixed(2),
     taxAmount: parseFloat(taxAmount).toFixed(2),
+    taxComponents,
     surgePrice: surgeCharges || null,
     discountedAmount: totalDiscountAmount > 0 ? totalDiscountAmount : null,
     originalGrandTotal: Math.round(grandTotal),
@@ -1475,6 +1496,7 @@ const calculateDeliveryChargeHelperForAdmin = async (
       const takeAwayItemTotal = calculateItemTotal(items, scheduledDetails?.numOfDays);
 
       let takeAwayTaxAmount = 0;
+      let takeAwayTaxComponents = [];
 
       const appCustomization = await CustomerAppCustomization.findOne({}).select(
         "takeAwayOrderCustomization"
@@ -1487,6 +1509,12 @@ const calculateDeliveryChargeHelperForAdmin = async (
           takeAwayTaxAmount = parseFloat(
             ((takeAwayItemTotal * taxFound.tax) / 100).toFixed(2)
           );
+          takeAwayTaxComponents = [{
+            taxName: taxFound.taxName,
+            taxRate: taxFound.tax,
+            taxType: taxFound.taxType,
+            amount: takeAwayTaxAmount,
+          }];
         }
       }
 
@@ -1495,6 +1523,7 @@ const calculateDeliveryChargeHelperForAdmin = async (
         surgeCharges: 0,
         deliveryChargeForScheduledOrder: 0,
         taxAmount: takeAwayTaxAmount,
+        taxComponents: takeAwayTaxComponents,
         itemTotal: takeAwayItemTotal,
       };
     }
@@ -1667,9 +1696,16 @@ const pickAndDropCharges = async (
   const charge = deliveryChargeForScheduledOrder ?? oneTimeDeliveryCharge;
 
   let taxAmount = 0;
+  let taxComponents = [];
   if (taxFound) {
     const calculatedTax = (charge * taxFound.tax) / 100;
     taxAmount = parseFloat(calculatedTax.toFixed(2));
+    taxComponents = [{
+      taxName: taxFound.taxName,
+      taxRate: taxFound.tax,
+      taxType: taxFound.taxType,
+      amount: taxAmount,
+    }];
   }
 
   return {
@@ -1677,6 +1713,7 @@ const pickAndDropCharges = async (
     surgeCharges: surgeCharges || null,
     deliveryChargeForScheduledOrder: deliveryChargeForScheduledOrder || null,
     taxAmount,
+    taxComponents,
     itemTotal: null,
     returnCharge,
   };
@@ -1763,9 +1800,16 @@ const customOrderCharges = async (
   const charge = deliveryChargeForScheduledOrder || oneTimeDeliveryCharge;
 
   let taxAmount = 0;
+  let taxComponents = [];
   if (taxFound) {
     const calculatedTax = (charge * taxFound.tax) / 100;
     taxAmount = parseFloat(calculatedTax.toFixed(2));
+    taxComponents = [{
+      taxName: taxFound.taxName,
+      taxRate: taxFound.tax,
+      taxType: taxFound.taxType,
+      amount: taxAmount,
+    }];
   }
 
   return {
@@ -1775,6 +1819,7 @@ const customOrderCharges = async (
       ? deliveryChargeForScheduledOrder
       : 0,
     taxAmount,
+    taxComponents,
     itemTotal: 0,
   };
 };
@@ -2161,7 +2206,45 @@ const locationArraysEqual = (a, b) => {
   );
 };
 
+/**
+ * Decrement subscription order count when a free-delivery order is cancelled.
+ */
+const decrementSubscriptionOrderCount = async (order) => {
+  // Only Home Delivery can have free delivery via subscription
+  if (order.deliveryMode !== "Home Delivery") return;
+
+  const customer = await Customer.findById(order.customerId).select(
+    "customerDetails.pricing"
+  );
+  if (!customer?.customerDetails?.pricing?.length) return;
+
+  const subscriptionLog = await SubscriptionLog.findById(
+    customer.customerDetails.pricing[0]
+  );
+  if (!subscriptionLog) return;
+
+  const now = new Date();
+  const withinValidity =
+    new Date(subscriptionLog.startDate) <= now &&
+    new Date(subscriptionLog.endDate) >= now;
+
+  if (!withinValidity) return;
+
+  // Only decrement if this order actually used a free-delivery slot
+  const deliveryCharge = order.billDetail?.deliveryCharge ?? 0;
+  const deliveryChargePerDay = order.billDetail?.deliveryChargePerDay ?? 0;
+  const wasFreeDelivery = deliveryCharge === 0 || deliveryChargePerDay === 0;
+  
+  if (!wasFreeDelivery) return;
+
+  if (subscriptionLog.currentNumberOfOrders > 0) {
+    subscriptionLog.currentNumberOfOrders -= 1;
+    await subscriptionLog.save();
+  }
+};
+
 module.exports = {
+  decrementSubscriptionOrderCount,
   // Invoice
   findOrCreateCustomer,
   processSchedule,

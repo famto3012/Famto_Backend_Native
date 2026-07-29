@@ -39,10 +39,6 @@ const getActiveMerchantPricingPipeline = () => {
     // ─────────────────────────────────────────────────────────────────
     // Stage 0: EARLY FILTER - Drop merchants without sub/commission plans
     // ─────────────────────────────────────────────────────────────────
-    // Checks if pricing array contains at least one entry with modelType
-    // "Subscription" or "Commission". This pre-filter significantly improves
-    // performance by eliminating merchants that would fail anyway, avoiding
-    // expensive $lookup operations on documents with no pricing.
     {
       $match: {
         "merchantDetail.pricing.modelType": {
@@ -54,53 +50,40 @@ const getActiveMerchantPricingPipeline = () => {
     // ─────────────────────────────────────────────────────────────────
     // Stage 1: EXTRACT MODEL IDs - Separate subscription & commission IDs
     // ─────────────────────────────────────────────────────────────────
-    // Creates two temporary arrays by filtering merchantDetail.pricing:
-    // - subscriptionModelIds: IDs of SubscriptionLog documents
-    // - commissionModelIds: IDs of Commission documents
-    // These IDs will be used in subsequent $lookup stages for validation.
-      {
-        $addFields: {
-          subscriptionModelIds: {
-            $map: {
-              input: {
-                $filter: {
-                  input: { $ifNull: ["$merchantDetail.pricing", []] },
-                  as: "pricing",
-                  cond: { $eq: ["$$pricing.modelType", "Subscription"] },
-                },
+    {
+      $addFields: {
+        subscriptionModelIds: {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ["$merchantDetail.pricing", []] },
+                as: "pricing",
+                cond: { $eq: ["$$pricing.modelType", "Subscription"] },
               },
-              as: "pricing",
-              in: "$$pricing.modelId",
             },
+            as: "pricing",
+            in: "$$pricing.modelId",
           },
-          commissionModelIds: {
-            $map: {
-              input: {
-                $filter: {
-                  input: { $ifNull: ["$merchantDetail.pricing", []] },
-                  as: "pricing",
-                  cond: { $eq: ["$$pricing.modelType", "Commission"] },
-                },
+        },
+        commissionModelIds: {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ["$merchantDetail.pricing", []] },
+                as: "pricing",
+                cond: { $eq: ["$$pricing.modelType", "Commission"] },
               },
-              as: "pricing",
-              in: "$$pricing.modelId",
             },
+            as: "pricing",
+            in: "$$pricing.modelId",
           },
         },
       },
+    },
 
     // ─────────────────────────────────────────────────────────────────
     // Stage 2: LOOKUP ACTIVE SUBSCRIPTIONS - Validate subscription plans
     // ─────────────────────────────────────────────────────────────────
-    // Joins with subscriptionlogs collection using correlated subquery.
-    // A subscription is considered ACTIVE only if ALL conditions are met:
-    // 1. SubscriptionLog._id is IN the merchant's subscriptionModelIds array
-    // 2. SubscriptionLog.userId matches the merchant's _id
-    // 3. SubscriptionLog.typeOfUser is "Merchant" (not Customer)
-    // 4. SubscriptionLog.paymentStatus is "Paid" (not Pending/Unpaid)
-    // 5. SubscriptionLog.endDate >= current date (not expired)
-    //
-    // Result: activeSubscriptions array contains matching docs (0 or more)
     {
       $lookup: {
         from: "subscriptionlogs",
@@ -113,11 +96,11 @@ const getActiveMerchantPricingPipeline = () => {
             $match: {
               $expr: {
                 $and: [
-                  { $in: ["$_id", "$$pricingIds"] }, // ID matches pricing array
-                  { $eq: ["$userId", "$$merchantId"] }, // Belongs to merchant
-                  { $eq: ["$typeOfUser", "Merchant"] }, // Is merchant subscription
-                  { $eq: ["$paymentStatus", "Paid"] }, // Payment completed
-                  { $gte: ["$endDate", now] }, // Not expired
+                  { $in: ["$_id", "$$pricingIds"] },
+                  { $eq: ["$userId", "$$merchantId"] },
+                  { $eq: ["$typeOfUser", "Merchant"] },
+                  { $eq: ["$paymentStatus", "Paid"] },
+                  { $gte: ["$endDate", now] },
                 ],
               },
             },
@@ -130,13 +113,6 @@ const getActiveMerchantPricingPipeline = () => {
     // ─────────────────────────────────────────────────────────────────
     // Stage 3: LOOKUP COMMISSIONS - Validate commission plans
     // ─────────────────────────────────────────────────────────────────
-    // Joins with commissions collection using correlated subquery.
-    // A commission is considered ACTIVE if:
-    // 1. Commission._id is IN the merchant's commissionModelIds array
-    // 2. Commission.merchantId matches the merchant's _id
-    //
-    // No date/status validation needed - commission plans are perpetual
-    // once configured. Result: activeCommissions array (0 or more docs)
     {
       $lookup: {
         from: "commissions",
@@ -149,8 +125,8 @@ const getActiveMerchantPricingPipeline = () => {
             $match: {
               $expr: {
                 $and: [
-                  { $in: ["$_id", "$$commissionIds"] }, // ID matches pricing array
-                  { $eq: ["$merchantId", "$$merchantId"] }, // Belongs to merchant
+                  { $in: ["$_id", "$$commissionIds"] },
+                  { $eq: ["$merchantId", "$$merchantId"] },
                 ],
               },
             },
@@ -163,12 +139,6 @@ const getActiveMerchantPricingPipeline = () => {
     // ─────────────────────────────────────────────────────────────────
     // Stage 4: OR FILTER - Keep merchants with EITHER active plan
     // ─────────────────────────────────────────────────────────────────
-    // Applies OR logic: merchant passes if they have:
-    // - At least 1 active subscription (array size > 0)
-    // - OR at least 1 commission plan (array size > 0)
-    // - OR both
-    //
-    // Merchants with only expired subscriptions and no commission are filtered out
     {
       $match: {
         $expr: {
@@ -183,8 +153,6 @@ const getActiveMerchantPricingPipeline = () => {
     // ─────────────────────────────────────────────────────────────────
     // Stage 5: CLEANUP - Remove temporary fields
     // ─────────────────────────────────────────────────────────────────
-    // Removes temporary arrays added during pipeline processing to keep
-    // the output document clean and matching expected schema
     {
       $project: {
         subscriptionModelIds: 0,
@@ -196,9 +164,31 @@ const getActiveMerchantPricingPipeline = () => {
   ];
 };
 
+/**
+ * Builds a merchant aggregate pipeline for search with the given $match stage,
+ * active pricing validation, field projection, and pagination.
+ *
+ * @param {Object} matchStage - The $match stage for filtering merchants
+ * @param {number} skip - Number of docs to skip
+ * @param {number} limit - Max docs to return
+ * @returns {Array} Aggregation pipeline
+ */
+const buildMerchantSearchPipeline = (matchStage, skip, limit) => [
+  { $match: matchStage },
+  ...getActiveMerchantPricingPipeline(),
+  { $project: { _id: 1, "merchantDetail.merchantName": 1, "merchantDetail.merchantImageURL": 1, "merchantDetail.displayAddress": 1, "merchantDetail.averageRating": 1, "merchantDetail.businessCategoryId": 1, status: 1, openedToday: 1 } },
+  { $skip: skip },
+  { $limit: limit },
+];
+
 const globalSearchController = async (req, res, next) => {
   try {
-    let { query = "", serviceId } = req.query;
+    let { query = "", serviceId, page = 1, limit = 20 } = req.query;
+
+    // Coerce pagination params
+    page = Math.max(1, parseInt(page, 10) || 1);
+    limit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (page - 1) * limit;
 
     query = query.trim();
 
@@ -249,54 +239,33 @@ const globalSearchController = async (req, res, next) => {
 
     const searchRegex = { $regex: query, $options: "i" };
 
-    const [merchants, businessCategories, products, merchantCategories] =
+    // ── Build common match stages for merchants ──────────────────────
+    const merchantMatch = {
+      isApproved: "Approved",
+      isBlocked: false,
+      "merchantDetail.merchantName": { $exists: true, $ne: null },
+      ...(businessCategoryIds.length > 0 && {
+        "merchantDetail.businessCategoryId": {
+          $in: businessCategoryIds,
+        },
+      }),
+      $or: [
+        { "merchantDetail.merchantName": searchRegex },
+        { "merchantDetail.description": searchRegex },
+      ],
+    };
+
+    // ── Fire all queries in parallel ─────────────────────────────────
+    const [merchants, businessCategories, products, merchantCategories, merchantCount, businessCategoryCount, productCount, merchantCategoryCount] =
       await Promise.all([
         // ═══════════════════════════════════════════════════════════════
-        // MAIN MERCHANT SEARCH - Now filters by active pricing (Subscription/Commission)
+        // PAGINATED MERCHANT SEARCH
         // ═══════════════════════════════════════════════════════════════
-        // Converted from .find() to .aggregate() to apply pricing validation pipeline.
-        // This ensures only merchants with active subscriptions OR commission plans appear
-        // in search results, preventing customers from seeing inactive merchants.
-        //
-        // Pipeline flow:
-        // 1. $match: Apply original search/filter criteria
-        // 2. getActiveMerchantPricingPipeline(): Validate subscription/commission
-        // 3. $project: Select only required fields (replaces .select())
-        Merchant.aggregate([
-          // Stage 1: Original search criteria (replaces .find() filter)
-          {
-            $match: {
-              isApproved: "Approved",
-              isBlocked: false,
-              "merchantDetail.merchantName": { $exists: true, $ne: null },
-              ...(businessCategoryIds.length > 0 && {
-                "merchantDetail.businessCategoryId": {
-                  $in: businessCategoryIds,
-                },
-              }),
-              $or: [
-                { "merchantDetail.merchantName": searchRegex },
-                { "merchantDetail.description": searchRegex },
-              ],
-            },
-          },
-          // Stage 2-6: Active pricing validation pipeline
-          ...getActiveMerchantPricingPipeline(),
-          // Stage 7: Field selection (replaces .select())
-          {
-            $project: {
-              _id: 1,
-              "merchantDetail.merchantName": 1,
-              "merchantDetail.merchantImageURL": 1,
-              "merchantDetail.displayAddress": 1,
-              "merchantDetail.averageRating": 1,
-              "merchantDetail.businessCategoryId": 1,
-              status: 1,
-              openedToday: 1,
-            },
-          },
-        ]),
+        Merchant.aggregate(buildMerchantSearchPipeline(merchantMatch, skip, limit)),
 
+        // ═══════════════════════════════════════════════════════════════
+        // PAGINATED BUSINESS CATEGORY SEARCH
+        // ═══════════════════════════════════════════════════════════════
         BusinessCategory.find({
           status: true,
           title: searchRegex,
@@ -305,8 +274,13 @@ const globalSearchController = async (req, res, next) => {
           }),
         })
           .select("_id title bannerImageURL")
+          .skip(skip)
+          .limit(limit)
           .lean(),
 
+        // ═══════════════════════════════════════════════════════════════
+        // PAGINATED PRODUCT SEARCH
+        // ═══════════════════════════════════════════════════════════════
         Product.find({
           ...(validCategoryIds.length > 0 && {
             categoryId: { $in: validCategoryIds },
@@ -317,8 +291,13 @@ const globalSearchController = async (req, res, next) => {
           ],
         })
           .select("_id productName productImageURL price type categoryId")
+          .skip(skip)
+          .limit(limit)
           .lean(),
 
+        // ═══════════════════════════════════════════════════════════════
+        // PAGINATED CATEGORY SEARCH
+        // ═══════════════════════════════════════════════════════════════
         Category.find({
           status: true,
           categoryName: searchRegex,
@@ -329,10 +308,90 @@ const globalSearchController = async (req, res, next) => {
           .select(
             "_id categoryName categoryImageURL merchantId businessCategoryId type"
           )
+          .skip(skip)
+          .limit(limit)
           .lean(),
+
+        // ═══════════════════════════════════════════════════════════════
+        // MERCHANT COUNT
+        // ═══════════════════════════════════════════════════════════════
+        Merchant.aggregate([
+          { $match: merchantMatch },
+          ...getActiveMerchantPricingPipeline(),
+          { $count: "total" },
+        ]),
+
+        // ═══════════════════════════════════════════════════════════════
+        // BUSINESS CATEGORY COUNT
+        // ═══════════════════════════════════════════════════════════════
+        BusinessCategory.countDocuments({
+          status: true,
+          title: searchRegex,
+          ...(businessCategoryIds.length > 0 && {
+            _id: { $in: businessCategoryIds },
+          }),
+        }),
+
+        // ═══════════════════════════════════════════════════════════════
+        // PRODUCT COUNT
+        // ═══════════════════════════════════════════════════════════════
+        Product.countDocuments({
+          ...(validCategoryIds.length > 0 && {
+            categoryId: { $in: validCategoryIds },
+          }),
+          $or: [
+            { productName: searchRegex },
+            { searchTags: searchRegex },
+          ],
+        }),
+
+        // ═══════════════════════════════════════════════════════════════
+        // CATEGORY COUNT
+        // ═══════════════════════════════════════════════════════════════
+        Category.countDocuments({
+          status: true,
+          categoryName: searchRegex,
+          ...(businessCategoryIds.length > 0 && {
+            businessCategoryId: { $in: businessCategoryIds },
+          }),
+        }),
       ]);
 
-    // ── Enrich products with merchant + category info ────────────────────────
+    // ── Parse counts ─────────────────────────────────────────────────
+    const totalMerchants = merchantCount.length > 0 ? merchantCount[0].total : 0;
+    const totalBusinessCategories = businessCategoryCount;
+    const totalProducts = productCount;
+    const totalCategories = merchantCategoryCount;
+
+    // ── Pagination metadata ──────────────────────────────────────────
+    const pagination = {
+      merchants: {
+        total: totalMerchants,
+        page,
+        limit,
+        totalPages: Math.ceil(totalMerchants / limit) || 1,
+      },
+      businessCategories: {
+        total: totalBusinessCategories,
+        page,
+        limit,
+        totalPages: Math.ceil(totalBusinessCategories / limit) || 1,
+      },
+      products: {
+        total: totalProducts,
+        page,
+        limit,
+        totalPages: Math.ceil(totalProducts / limit) || 1,
+      },
+      categories: {
+        total: totalCategories,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCategories / limit) || 1,
+      },
+    };
+
+    // ── Enrich products with merchant + category info ────────────────
     let enrichedProducts = [];
     if (products.length) {
       const catIds = [
@@ -351,14 +410,7 @@ const globalSearchController = async (req, res, next) => {
         ...new Set(catDocs.map((c) => c.merchantId?.toString())),
       ].filter(Boolean);
 
-      // ═══════════════════════════════════════════════════════════════
-      // PRODUCT ENRICHMENT - Fetch merchants with active pricing validation
-      // ═══════════════════════════════════════════════════════════════
-      // Ensures product results only show merchants with active subscriptions
-      // or commission plans. Without this, products from inactive merchants
-      // would appear in search results, creating poor user experience.
       const merchantDocs = await Merchant.aggregate([
-        // Stage 1: Filter by merchant IDs from products
         {
           $match: {
             _id: { $in: merchantIds },
@@ -366,9 +418,7 @@ const globalSearchController = async (req, res, next) => {
             isBlocked: false,
           },
         },
-        // Stage 2-6: Active pricing validation
         ...getActiveMerchantPricingPipeline(),
-        // Stage 7: Select required fields
         {
           $project: {
             _id: 1,
@@ -421,21 +471,14 @@ const globalSearchController = async (req, res, next) => {
         .filter(Boolean);
     }
 
-    // ── Enrich merchant categories with their merchant info ──────────────────
+    // ── Enrich merchant categories with their merchant info ──────────
     let enrichedCategories = [];
     if (merchantCategories.length) {
       const catMerchantIds = [
         ...new Set(merchantCategories.map((c) => c.merchantId)),
       ].filter(Boolean);
 
-      // ═══════════════════════════════════════════════════════════════
-      // CATEGORY ENRICHMENT - Fetch merchants with active pricing validation
-      // ═══════════════════════════════════════════════════════════════
-      // Ensures category results only show merchants with active subscriptions
-      // or commission plans. This prevents showing categories from merchants
-      // who no longer have active pricing, improving search result quality.
       const catMerchantDocs = await Merchant.aggregate([
-        // Stage 1: Filter by merchant IDs from categories
         {
           $match: {
             _id: { $in: catMerchantIds },
@@ -443,9 +486,7 @@ const globalSearchController = async (req, res, next) => {
             isBlocked: false,
           },
         },
-        // Stage 2-6: Active pricing validation
         ...getActiveMerchantPricingPipeline(),
-        // Stage 7: Select required fields
         {
           $project: {
             _id: 1,
@@ -495,7 +536,7 @@ const globalSearchController = async (req, res, next) => {
         .filter(Boolean);
     }
 
-    // ── Shape merchant results ───────────────────────────────────────────────
+    // ── Shape merchant results ───────────────────────────────────────
     const formattedMerchants = merchants.map((m) => ({
       type: "merchant",
       merchantId: m._id,
@@ -514,7 +555,7 @@ const globalSearchController = async (req, res, next) => {
       },
     }));
 
-    // ── Shape business category results ──────────────────────────────────────
+    // ── Shape business category results ──────────────────────────────
     const formattedBusinessCategories = businessCategories.map((bc) => ({
       type: "businessCategory",
       businessCategoryId: bc._id,
@@ -528,9 +569,10 @@ const globalSearchController = async (req, res, next) => {
       },
     }));
 
-    // ── Build response ───────────────────────────────────────────────────────
+    // ── Build response ───────────────────────────────────────────────
     return res.status(200).json({
       query,
+      pagination,
       merchants: formattedMerchants,
       products: enrichedProducts,
       categories: enrichedCategories,

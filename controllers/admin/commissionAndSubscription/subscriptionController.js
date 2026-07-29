@@ -302,6 +302,9 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
       noOfOrder,
       renewalReminder,
       description,
+      deliveryBenefitType,
+      deliveryBenefitValue,
+      freeDeliveryUpToKm,
     } = req.body;
     let totalAmount = amount;
     if (taxId) {
@@ -317,6 +320,9 @@ const addCustomerSubscriptionPlanController = async (req, res, next) => {
         taxId: taxId || null,
         renewalReminder,
         noOfOrder,
+        deliveryBenefitType: deliveryBenefitType || "free",
+        deliveryBenefitValue: deliveryBenefitValue || 0,
+        freeDeliveryUpToKm: freeDeliveryUpToKm || 0,
         description,
       }),
       ActivityLog.create({
@@ -350,6 +356,9 @@ const getAllCustomerSubscriptionPlansController = async (req, res, next) => {
       taxName: plan?.taxId?.taxName || null,
       renewalReminder: plan.renewalReminder || null,
       noOfOrder: plan.noOfOrder || null,
+      deliveryBenefitType: plan.deliveryBenefitType || "free",
+      deliveryBenefitValue: plan.deliveryBenefitValue || 0,
+      freeDeliveryUpToKm: plan.freeDeliveryUpToKm || 0,
     }));
 
     res.status(200).json(formattedResponse);
@@ -379,6 +388,9 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
       noOfOrder,
       renewalReminder,
       description,
+      deliveryBenefitType,
+      deliveryBenefitValue,
+      freeDeliveryUpToKm,
     } = req.body;
 
     const subscriptionPlan = await CustomerSubscription.findById(id).lean();
@@ -420,6 +432,9 @@ const editCustomerSubscriptionPlanController = async (req, res, next) => {
           taxId: taxId || null,
           renewalReminder,
           noOfOrder,
+          deliveryBenefitType: deliveryBenefitType || "free",
+          deliveryBenefitValue: deliveryBenefitValue || 0,
+          freeDeliveryUpToKm: freeDeliveryUpToKm || 0,
           description,
         },
         { new: true }
@@ -457,6 +472,11 @@ const getSingleCustomerSubscriptionPlanController = async (req, res, next) => {
       duration: plan.duration || null,
       taxId: plan.taxId || null,
       renewalReminder: plan.renewalReminder || null,
+      noOfOrder: plan.noOfOrder || null,
+      deliveryBenefitType: plan.deliveryBenefitType || "free",
+      deliveryBenefitValue: plan.deliveryBenefitValue || 0,
+      freeDeliveryUpToKm: plan.freeDeliveryUpToKm || 0,
+      description: plan.description || null,
     };
 
     res.status(200).json(formattedResponse);

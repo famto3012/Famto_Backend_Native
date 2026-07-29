@@ -739,6 +739,13 @@ merchantSchema.index({
 });
 
 merchantSchema.index({
+  isApproved: 1,
+  isBlocked: 1,
+  "merchantDetail.businessCategoryId": 1,
+  "merchantDetail.merchantName": 1,
+});
+
+merchantSchema.index({
   "merchantDetail.servingArea": 1,
   "merchantDetail.servingRadius": 1,
 });

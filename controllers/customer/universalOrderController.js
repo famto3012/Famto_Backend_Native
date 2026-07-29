@@ -16,6 +16,7 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const SubscriptionLog = require("../../models/SubscriptionLog");
+const CustomerSubscription = require("../../models/CustomerSubscription");
 const BusinessCategory = require("../../models/BusinessCategory");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
@@ -37,6 +38,7 @@ const {
 } = require("../../utils/razorpayPayment");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
+const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
 const { geoLocation } = require("../../utils/getGeoLocation");
 const {
   validateDeliveryOption,
@@ -1149,7 +1151,12 @@ const getOftenBoughtTogetherController = async (req, res, next) => {
 const searchProductsInMerchantToOrderController = async (req, res, next) => {
   try {
     const { merchantId, businessCategoryId } = req.params;
-    const { query } = req.query;
+    const { query, page = 1, limit = 20 } = req.query;
+
+    // Coerce pagination params
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (safePage - 1) * safeLimit;
 
     const categoryFilter = { merchantId };
 
@@ -1162,27 +1169,36 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     }
 
     // Find all categories belonging to the merchant with the given business category
-    const categories = await Category.find(categoryFilter);
+    const categories = await Category.find(categoryFilter).lean();
 
     // Extract all category ids to search products within all these categories
     const categoryIds = categories.map((category) => category._id.toString());
 
-    // Search products within the found categoryIds
-    const products = await Product.find({
+    // Shared filter for count + data queries
+    const productFilter = {
       categoryId: { $in: categoryIds },
       $or: [
         { productName: { $regex: query, $options: "i" } },
         { searchTags: { $elemMatch: { $regex: query, $options: "i" } } },
       ],
-    })
-      .populate(
-        "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
-      )
-      .select(
-        "_id productName price description discountId productImageURL inventory variants",
-      )
-      .sort({ order: 1 });
+    };
+
+    // Fire count + paginated data in parallel
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(productFilter),
+      Product.find(productFilter)
+        .populate(
+          "discountId",
+          "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
+        )
+        .select(
+          "_id productName price description discountId productImageURL inventory variants",
+        )
+        .sort({ order: 1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+    ]);
 
     const currentDate = new Date();
 
@@ -1286,6 +1302,12 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
     res.status(200).json({
       message: "Products found in merchant",
       data: formattedResponse,
+      pagination: {
+        total: totalProducts,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(totalProducts / safeLimit) || 1,
+      },
     });
   } catch (err) {
     next(appError(err.message));
@@ -1296,7 +1318,12 @@ const searchProductsInMerchantToOrderController = async (req, res, next) => {
 const filterAndSortAndSearchProductsController = async (req, res, next) => {
   try {
     const { merchantId } = req.params;
-    const { filter, sort, productName } = req.query;
+    const { filter, sort, productName, page = 1, limit = 20 } = req.query;
+
+    // Coerce pagination params
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (safePage - 1) * safeLimit;
 
     const customerId = req.userAuth;
 
@@ -1311,7 +1338,7 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
     }
 
     // Get category IDs associated with the merchant
-    const categories = await Category.find({ merchantId }).select("_id");
+    const categories = await Category.find({ merchantId }).select("_id").lean();
     const categoryIds = categories.map((category) => category._id);
 
     // Build the query object
@@ -1340,16 +1367,22 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       }
     }
 
-    // Fetch the filtered and sorted products
-    const products = await Product.find(query)
-      .select(
-        "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId",
-      )
-      .populate(
-        "discountId",
-        "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
-      )
-      .sort(sortObj);
+    // Fire count + paginated data in parallel
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .select(
+          "productName price longDescription type productImageURL inventory variants minQuantityToOrder maxQuantityPerOrder preparationTime description discountId",
+        )
+        .populate(
+          "discountId",
+          "discountName maxAmount discountType discountValue validFrom validTo onAddOn status",
+        )
+        .sort(sortObj)
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+    ]);
 
     const currentDate = new Date();
 
@@ -1403,7 +1436,15 @@ const filterAndSortAndSearchProductsController = async (req, res, next) => {
       };
     });
 
-    res.status(200).json(formattedResponse);
+    res.status(200).json({
+      data: formattedResponse,
+      pagination: {
+        total: totalProducts,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(totalProducts / safeLimit) || 1,
+      },
+    });
   } catch (err) {
     next(appError(err.message));
   }
@@ -1921,6 +1962,33 @@ const confirmOrderDetailController = async (req, res, next) => {
       newDeliveryAddress,
     );
 
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Verify the delivery address falls inside at least one defined geofence.
+    // This blocks Home Delivery orders where the user's delivery address is
+    // outside the service area, even if they registered from a valid location.
+    if (deliveryMode === "Home Delivery") {
+      if (
+        !Array.isArray(deliveryLocation) ||
+        deliveryLocation.length < 2
+      ) {
+        return next(appError("Delivery location coordinates are missing", 400));
+      }
+
+      const deliveryGeofence = await geoLocation(
+        deliveryLocation[0],
+        deliveryLocation[1],
+      );
+
+      if (!deliveryGeofence) {
+        return next(
+          appError(
+            "Delivery address is outside our service area. Please choose a different address.",
+            400,
+          ),
+        );
+      }
+    }
+
     const cartItems = cart.items;
 
     const booleanSuperMarketOrder = isSuperMarketOrder === "true";
@@ -1930,6 +1998,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargesHelper({
@@ -1956,11 +2025,11 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
-    let actualDeliveryCharge = 0;
+    let actualDeliveryCharge = oneTimeDeliveryCharge;
 
     const subscriptionOfCustomer = customer.customerDetails.pricing;
 
-    if (subscriptionOfCustomer?.length > 0) {
+    if (subscriptionOfCustomer?.length > 0 && deliveryMode === "Home Delivery") {
       const subscriptionLog = await SubscriptionLog.findById(
         subscriptionOfCustomer[0],
       );
@@ -1968,12 +2037,53 @@ const confirmOrderDetailController = async (req, res, next) => {
       if (subscriptionLog) {
         const now = new Date();
 
+        // Check subscription is active (inclusive date range, within order limit)
         if (
-          (new Date(subscriptionLog?.startDate) < now ||
-            new Date(subscriptionLog?.endDate) > now) &&
-          subscriptionLog?.currentNumberOfOrders < subscriptionLog?.maxOrders
+          new Date(subscriptionLog.startDate) <= now &&
+          new Date(subscriptionLog.endDate) >= now &&
+          (subscriptionLog.maxOrders === null ||
+            subscriptionLog.currentNumberOfOrders < subscriptionLog.maxOrders)
         ) {
-          actualDeliveryCharge = 0;
+          // Fetch the plan definition to get delivery benefit settings
+          const subscriptionPlan = await CustomerSubscription.findById(
+            subscriptionLog.planId,
+          ).lean();
+
+          if (subscriptionPlan) {
+            const benefitType = subscriptionPlan.deliveryBenefitType || "free";
+            const benefitValue = subscriptionPlan.deliveryBenefitValue || 0;
+
+            if (benefitType === "percentage") {
+              // Reduce delivery charge by X%
+              const discount = (oneTimeDeliveryCharge * benefitValue) / 100;
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - discount,
+              );
+            } else if (benefitType === "fixed") {
+              // Reduce delivery charge by ₹X (floor 0)
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - benefitValue,
+              );
+            } else {
+              // "free" — no delivery charge
+              // Check if a distance cap is set; if so, only free when distance ≤ cap
+              const freeKm = subscriptionPlan.freeDeliveryUpToKm || 0;
+              if (freeKm > 0 && distance > freeKm) {
+                // Distance exceeds free-delivery cap — charge full price
+                actualDeliveryCharge = oneTimeDeliveryCharge;
+              } else {
+                // Free delivery applies — also consume a slot
+                actualDeliveryCharge = 0;
+                subscriptionLog.currentNumberOfOrders += 1;
+                await subscriptionLog.save();
+              }
+            }
+          } else {
+            // Plan not found — fall back to free to avoid breaking existing subs
+            actualDeliveryCharge = 0;
+          }
         }
       }
     } else {
@@ -1989,6 +2099,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       taxAmount || 0,
       cart?.billDetail?.addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     const customerCart = await CustomerCart.findOneAndUpdate(
@@ -2152,6 +2263,7 @@ const orderPaymentController = async (req, res, next) => {
         cart.billDetail.discountedDeliveryCharge ||
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
+      taxComponents: cart.billDetail.taxComponents || [],
       discountedAmount: cart.billDetail.discountedAmount,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       grandTotal:
@@ -2316,6 +2428,14 @@ const orderPaymentController = async (req, res, next) => {
           createdAt: newOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
           deliveryMode: newOrder.deliveryMode,
+          walletBalance: customer.customerDetails.walletBalance.toFixed(2),
+        });
+
+        // Fire-and-forget: credit milestone bonus — non-blocking, never throws
+        setImmediate(() => {
+          creditMilestoneBonus(newOrder._id).catch(err =>
+            console.error("[BONUS] async credit failed:", err.message)
+          );
         });
 
         // Send notifications to each role dynamically
@@ -2378,6 +2498,7 @@ const orderPaymentController = async (req, res, next) => {
           createdAt: tempOrder.createdAt,
           merchantName: merchant.merchantDetail.merchantName,
           deliveryMode: tempOrder.deliveryMode,
+          walletBalance: customer.customerDetails.walletBalance.toFixed(2),
         });
         // NOTE: Cron worker (index.js) creates the final Order after expiresAt
         // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
@@ -2437,6 +2558,7 @@ const orderPaymentController = async (req, res, next) => {
         createdAt: tempOrder.createdAt,
         merchantName: merchant.merchantDetail.merchantName,
         deliveryMode: tempOrder.deliveryMode,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
       // NOTE: Cron worker (index.js) creates the final Order after expiresAt
       // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
@@ -2491,6 +2613,7 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         razorpayOrderId,
         amount: orderAmount,
+        walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     }
 

@@ -58,6 +58,9 @@ const AgentPricing = require("../../models/AgentPricing");
 const BatchOrder = require("../../models/BatchOrder");
 const { normalizeLatLng } = require("../../utils/createOrderHelpers");
 
+const HANDYMAN_SERVICE_ID = "6a2f9c30d2dc04585cc1ce55";
+// const HANDYMAN_SERVICE_ID = "678600357f5215e35f05696c";
+
 // Update location on entering APP
 const updateLocationController = async (req, res, next) => {
   try {
@@ -250,7 +253,7 @@ const agentLoginController = async (req, res, next) => {
     await Promise.all([
       FcmToken.findOneAndUpdate(
         { userId: agentFound._id },
-        { token: fcmToken },
+        { token: [fcmToken] },  // Store as array to match schema [String]
         { upsert: true, new: true }
       ),
       agentFound.save(),
@@ -1468,6 +1471,10 @@ const getPickUpDetailController = async (req, res, next) => {
         );
       }
 
+      const isHandymanOrder =
+        (taskFound[0]?.serviceId || taskFound[0]?.orderId?.serviceId)?.toString() ===
+        HANDYMAN_SERVICE_ID;
+
       const formattedResponse = {
         taskId: taskFound[0]._id,
         orderId: taskFound[0].orderId?._id || taskFound.orderId, // handle string ID
@@ -1483,18 +1490,28 @@ const getPickUpDetailController = async (req, res, next) => {
         date: formatDate(taskFound[0]?.orderId?.createdAt) || null,
         time: formatTime(taskFound[0]?.orderId?.createdAt) || null,
         taskStatus: pickupDetail?.status || null,
-        pickupName: pickupDetail?.address?.fullName || null,
-        items: pickupDetail?.items || [],
-        pickupAddress: pickupDetail?.address?.area || null,
-        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
-        instructions:
-          taskFound[0]?.orderId?.pickups?.[0]?.instructionInPickup || null,
+        pickupName: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.fullName || null
+          : pickupDetail?.address?.fullName || null,
+        items: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.items || []
+          : pickupDetail?.items || [],
+        pickupAddress: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.area || null
+          : pickupDetail?.address?.area || null,
+        pickupPhoneNumber: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.address?.phoneNumber || null
+          : pickupDetail?.address?.phoneNumber || null,
+        instructions: isHandymanOrder
+          ? taskFound[0]?.orderId?.drops?.[0]?.instructionInDrop || null
+          : taskFound[0]?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
           taskFound[0]?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound[0]?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation:
-          taskFound[0]?.deliveryMode === "Home Delivery" ||
+        pickupLocation: isHandymanOrder
+          ? normalizeLatLng(taskFound[0]?.pickupDropDetails?.[0]?.drops?.[0]?.location) || null
+          : taskFound[0]?.deliveryMode === "Home Delivery" ||
             taskFound[0]?.deliveryMode === "Take Away"
             ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
             : normalizeLatLng(pickupDetail?.location) || null,
@@ -1533,6 +1550,10 @@ const getPickUpDetailController = async (req, res, next) => {
         );
       }
 
+      const isHandymanOrder =
+        (taskFound?.serviceId || taskFound?.orderId?.serviceId)?.toString() ===
+        HANDYMAN_SERVICE_ID;
+
       const formattedResponse = {
         taskId: taskFound._id,
         orderId: taskFound.orderId?._id || taskFound.orderId, // handle string ID
@@ -1548,18 +1569,28 @@ const getPickUpDetailController = async (req, res, next) => {
         date: formatDate(taskFound?.orderId?.createdAt) || null,
         time: formatTime(taskFound?.orderId?.createdAt) || null,
         taskStatus: pickupDetail?.status || null,
-        pickupName: pickupDetail?.address?.fullName || null,
-        items: pickupDetail?.items || [],
-        pickupAddress: pickupDetail?.address?.area || null,
-        pickupPhoneNumber: pickupDetail?.address?.phoneNumber || null,
-        instructions:
-          taskFound?.orderId?.pickups?.[0]?.instructionInPickup || null,
+        pickupName: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.fullName || null
+          : pickupDetail?.address?.fullName || null,
+        items: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.items || []
+          : pickupDetail?.items || [],
+        pickupAddress: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.area || null
+          : pickupDetail?.address?.area || null,
+        pickupPhoneNumber: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.address?.phoneNumber || null
+          : pickupDetail?.address?.phoneNumber || null,
+        instructions: isHandymanOrder
+          ? taskFound?.orderId?.drops?.[0]?.instructionInDrop || null
+          : taskFound?.orderId?.pickups?.[0]?.instructionInPickup || null,
         voiceInstructions:
           taskFound?.orderId?.pickups?.[0]?.voiceInstructionInPickup ||
           taskFound?.orderId?.drops?.[0]?.voiceInstructionInDrop ||
           null,
-        pickupLocation:
-          taskFound?.deliveryMode === "Home Delivery" ||
+        pickupLocation: isHandymanOrder
+          ? normalizeLatLng(taskFound?.pickupDropDetails?.[0]?.drops?.[0]?.location) || null
+          : taskFound?.deliveryMode === "Home Delivery" ||
             taskFound?.deliveryMode === "Take Away"
             ? normalizeLatLng(merchantFound?.merchantDetail?.geoLocation.coordinates) || null
             : normalizeLatLng(pickupDetail?.location) || null,

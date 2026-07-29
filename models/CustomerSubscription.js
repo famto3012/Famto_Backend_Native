@@ -31,6 +31,27 @@ const customerSubscriptionSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    // Controls what delivery discount subscribers get
+    // "free" → delivery charge = ₹0 (current behavior)
+    // "percentage" → delivery charge reduced by deliveryBenefitValue%
+    // "fixed" → delivery charge reduced by deliveryBenefitValue rupees
+    deliveryBenefitType: {
+      type: String,
+      enum: ["free", "percentage", "fixed"],
+      default: "free",
+    },
+    // Used when deliveryBenefitType is "percentage" or "fixed"
+    deliveryBenefitValue: {
+      type: Number,
+      default: 0,
+    },
+    // When deliveryBenefitType is "free", caps free delivery distance.
+    // 0 means unlimited (free at any distance).
+    // When distance exceeds this value, full delivery charge applies.
+    freeDeliveryUpToKm: {
+      type: Number,
+      default: 0,
+    },
     description: {
       type: String,
       required: true,

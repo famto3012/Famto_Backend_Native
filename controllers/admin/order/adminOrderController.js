@@ -30,6 +30,7 @@ const AgentSurge = require("../../../models/AgentSurge");
 const AgentNotificationLogs = require("../../../models/AgentNotificationLog");
 
 const appError = require("../../../utils/appError");
+const { creditMilestoneBonus, clawbackMilestoneBonus } = require("../../../utils/firstOrderBonusHelper");
 const { formatTime, formatDate } = require("../../../utils/formatters");
 const {
   orderCommissionLogHelper,
@@ -59,6 +60,7 @@ const {
   clearCart,
   updateCustomerTransaction,
   normalizeLatLng,
+  decrementSubscriptionOrderCount,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -544,6 +546,11 @@ const rejectOrderByAdminController = async (req, res, next) => {
       order.status = "Cancelled";
       order.orderDetailStepper.cancelled = stepperData;
     };
+
+    // Release free-delivery subscription slot if applicable
+    decrementSubscriptionOrderCount(orderFound).catch((err) =>
+      console.error("decrementSubscriptionOrderCount error:", err.message)
+    );
 
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;
@@ -2136,6 +2143,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargeHelperForAdmin(
@@ -2170,6 +2178,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       taxAmount || 0,
       addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     console.log("Bill detail:", billDetail);
@@ -3138,6 +3147,7 @@ const markOrderAsCompletedByAdminController = async (req, res, next) => {
         userType: req.userRole,
         description: `Order (#${orderId}) is marked as completed by ${req.userRole} (${req.userName} - ${req.userAuth})`,
       }),
+      creditMilestoneBonus(orderFound),
     ]);
 
     res.status(200).json({ message: "Order marked as completed" });
@@ -3225,6 +3235,8 @@ const markOrderAsCancelled = async (req, res, next) => {
         );
       }
     }
+
+    promises.push(clawbackMilestoneBonus(order));
 
     await Promise.all(promises);
 

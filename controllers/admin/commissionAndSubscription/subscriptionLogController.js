@@ -57,6 +57,8 @@ const createSubscriptionLog = async (req, res, next) => {
     if (!subscriptionPlan) return next(appError("Subscription not found", 404));
 
     const { amount, duration, taxId } = subscriptionPlan;
+    const maxOrders = merchant ? null : subscriptionPlan.noOfOrder;
+    const maxFreeDistanceKm = subscriptionPlan.maxFreeDistanceKm || null;
     const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
@@ -106,6 +108,8 @@ const createSubscriptionLog = async (req, res, next) => {
       startDate,
       endDate,
       typeOfUser: "Merchant",
+      maxOrders,
+      maxFreeDistanceKm,
       paymentStatus: "Unpaid",
       razorpayOrderId: null,
     });
@@ -149,7 +153,8 @@ const verifyRazorpayPayment = async (req, res, next) => {
     const user = merchant || customer;
     if (!user) return next(appError(`${typeOfUser} not found`, 404));
 
-    const { amount, duration, maxOrders, taxId } = subscriptionPlan;
+    const { amount, duration, taxId } = subscriptionPlan;
+    const maxOrders = typeOfUser === "Customer" ? subscriptionPlan.noOfOrder : null;
     const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     const calculateStartDate = (pricingDetails) => {
@@ -243,6 +248,8 @@ const createSubscriptionLogUser = async (req, res, next) => {
     }
 
     const { amount, duration, taxId } = subscriptionPlan;
+    const maxOrders = merchant ? null : subscriptionPlan.noOfOrder;
+    const maxFreeDistanceKm = subscriptionPlan.maxFreeDistanceKm || null;
     const { totalAmount } = await computeTotalWithTax(amount, taxId);
 
     if (paymentMode === "Online") {
@@ -286,6 +293,8 @@ const createSubscriptionLogUser = async (req, res, next) => {
         startDate,
         endDate,
         typeOfUser: "Merchant",
+        maxOrders,
+        maxFreeDistanceKm,
         paymentStatus: "Unpaid",
         razorpayOrderId: null,
       });
