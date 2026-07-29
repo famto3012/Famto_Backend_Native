@@ -1195,9 +1195,9 @@ const CustomerWalletTransaction = require("../../models/CustomerWalletTransactio
 const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
+const mapService = require("../../services/MapService");
 const {
   calculateDeliveryCharges,
-  getDistanceFromMultipleCoordinates,
   filterCoordinatesFromData,
 } = require("../../utils/customerAppHelpers");
 const {
@@ -1252,7 +1252,7 @@ const addPickUpAddressController = async (req, res, next) => {
 
     console.log(coordinates);
 
-    const { distanceInKM, duration } = await getDistanceFromMultipleCoordinates(
+    const { distanceInKM, duration } = await mapService.getDistanceMulti(
       coordinates
     );
 

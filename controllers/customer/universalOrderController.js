@@ -22,9 +22,10 @@ const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 const WebhookEvent = require("../../models/WebhookEvent");
 
+const mapService = require("../../services/MapService");
+
 const {
   sortMerchantsBySponsorship,
-  getDistanceFromPickupToDelivery,
   calculateDiscountedPrice,
   filterProductIdAndQuantity,
   fetchCustomerAndMerchantAndCart,
@@ -518,7 +519,7 @@ const getMerchantData = async (req, res, next) => {
 
         const customerLocation = [Number(latitude), Number(longitude)];
 
-        const distance = await getDistanceFromPickupToDelivery(
+        const distance = await mapService.getDistance(
           merchantLocation,
           customerLocation,
         );

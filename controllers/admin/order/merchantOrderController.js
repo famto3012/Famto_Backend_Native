@@ -29,10 +29,10 @@ const {
 const {
   orderCreateTaskHelper,
 } = require("../../../utils/orderCreateTaskHelper");
+const mapService = require("../../../services/MapService");
 const { razorpayRefund } = require("../../../utils/razorpayPayment");
 const {
   reduceProductAvailableQuantity,
-  getDistanceFromPickupToDelivery,
   calculateDeliveryCharges,
 } = require("../../../utils/customerAppHelpers");
 const {
@@ -2677,7 +2677,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
       });
     }
 
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
+    const { distanceInKM } = await mapService.getDistance(
       merchant.merchantDetail.geoLocation.coordinates,
       address.coordinates,
     );
