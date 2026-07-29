@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const csvParser = require("csv-parser");
 const axios = require("axios");
+const MapService = require("../../../services/MapService");
 const { createObjectCsvWriter } = require("csv-writer");
 const { createTransport } = require("nodemailer");
 const ejs = require("ejs");
@@ -18,6 +19,34 @@ const {
   deleteFromFirebase,
   changeBufferToImage,
 } = require("../../../utils/imageOperation");
+
+// ---------------------------------------------------------------------------
+// Shared helper — fetch static map image from MapService, save to disk,
+// upload to Firebase, return the Firebase URL or empty string on failure.
+// ---------------------------------------------------------------------------
+const fetchStaticMapAndUpload = async (lat, lng, oldImageUrl) => {
+  try {
+    const buffer = await MapService.getStaticMapImage([lat, lng], {
+      size: "400x500",
+      zoom: 15,
+    });
+    const uniqueName = uuidv4();
+    const fileName = path.join(__dirname, `../../../${uniqueName}-location.jpeg`);
+    const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
+
+    const newUrl = await uploadToFirebase(imageBuffer, "MerchantLocationImage");
+
+    if (oldImageUrl) {
+      await deleteFromFirebase(oldImageUrl);
+    }
+
+    if (newUrl) await fs.unlink(fileName);
+    return newUrl || oldImageUrl;
+  } catch (err) {
+    console.error("Failed to fetch static map image:", err.message);
+    return oldImageUrl || "";
+  }
+};
 const Merchant = require("../../../models/Merchant");
 const {
   createRazorpayOrderId,
@@ -522,31 +551,7 @@ const updateMerchantDetailsByMerchantController = async (req, res, next) => {
       !arraysAreEqual(newLocation, existingCoords)
     ) {
       const [lng, lat] = newLocation;
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
-
-      try {
-        const response = await axios.get(url, { responseType: "arraybuffer" });
-        const uniqueName = uuidv4();
-        const fileName = path.join(
-          __dirname,
-          `../../../${uniqueName}-location.jpeg`,
-        );
-        const buffer = Buffer.from(response.data);
-        const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
-
-        locationImage = await uploadToFirebase(
-          imageBuffer,
-          "MerchantLocationImage",
-        );
-
-        if (merchantFound?.merchantDetail?.locationImage) {
-          await deleteFromFirebase(merchantFound.merchantDetail.locationImage);
-        }
-
-        if (locationImage) await fs.unlink(fileName);
-      } catch (err) {
-        console.error("Failed to fetch Mappls Location image", err);
-      }
+      locationImage = await fetchStaticMapAndUpload(lat, lng, merchantFound?.merchantDetail?.locationImage);
     }
 
     merchantDetail.locationImage = locationImage;
@@ -1485,32 +1490,7 @@ const updateMerchantDetailsController = async (req, res, next) => {
       !arraysAreEqual(newLocation, existingCoords)
     ) {
       const [lng, lat] = newLocation;
-      const url = `https://apis.mapmyindia.com/advancedmaps/v1/9a632cda78b871b3a6eb69bddc470fef/still_image?center=${lng},${lat}&size=400x500&markers=${lng},${lat}&zoom=15`;
-
-      try {
-        console.log(url);
-        const response = await axios.get(url, { responseType: "arraybuffer" });
-        const uniqueName = uuidv4();
-        const fileName = path.join(
-          __dirname,
-          `../../../${uniqueName}-location.jpeg`,
-        );
-        const buffer = Buffer.from(response.data);
-        const imageBuffer = await changeBufferToImage(buffer, fileName, "jpeg");
-
-        locationImage = await uploadToFirebase(
-          imageBuffer,
-          "MerchantLocationImage",
-        );
-
-        if (merchantFound?.merchantDetail?.locationImage) {
-          await deleteFromFirebase(merchantFound.merchantDetail.locationImage);
-        }
-
-        if (locationImage) await fs.unlink(fileName);
-      } catch (err) {
-        console.error("Failed to fetch data from Mappls API:", err);
-      }
+      locationImage = await fetchStaticMapAndUpload(lat, lng, merchantFound?.merchantDetail?.locationImage);
     }
 
     if (merchantDetail) {

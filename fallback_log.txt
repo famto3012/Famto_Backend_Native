@@ -1,0 +1,16 @@
+[2026-07-29T10:14:54.696Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:14:54.932Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:14:55.035Z] V2 OK:routePolyline
+[2026-07-29T10:14:55.129Z] V2 OK:routePolyline
+[2026-07-29T10:15:43.708Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:15:44.021Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:15:44.207Z] V2 OK:routePolyline
+[2026-07-29T10:15:44.273Z] V2 OK:routePolyline
+[2026-07-29T10:16:33.434Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:16:33.436Z] BOTH FAILED:routePolyline — v1:MapMyIndiaAPIKey not set in environment v2:MAPPLS_ACCESS_TOKEN not set in environment
+[2026-07-29T10:16:33.603Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:16:33.603Z] BOTH FAILED:routePolyline — v1:MapMyIndiaAPIKey not set in environment v2:MAPPLS_ACCESS_TOKEN not set in environment
+[2026-07-29T10:25:47.910Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:25:48.199Z] V1 FAILED:routePolyline — MapMyIndiaAPIKey not set in environment
+[2026-07-29T10:25:48.467Z] V2 OK:routePolyline
+[2026-07-29T10:25:48.471Z] V2 OK:routePolyline
