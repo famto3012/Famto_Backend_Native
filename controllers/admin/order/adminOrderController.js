@@ -60,6 +60,7 @@ const {
   clearCart,
   updateCustomerTransaction,
   normalizeLatLng,
+  decrementSubscriptionOrderCount,
 } = require("../../../utils/createOrderHelpers");
 const { formatToHours } = require("../../../utils/agentAppHelpers");
 const {
@@ -545,6 +546,11 @@ const rejectOrderByAdminController = async (req, res, next) => {
       order.status = "Cancelled";
       order.orderDetailStepper.cancelled = stepperData;
     };
+
+    // Release free-delivery subscription slot if applicable
+    decrementSubscriptionOrderCount(orderFound).catch((err) =>
+      console.error("decrementSubscriptionOrderCount error:", err.message)
+    );
 
     if (orderFound.paymentMode === "Famto-cash") {
       let orderAmount = orderFound.billDetail.grandTotal;
@@ -2137,6 +2143,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargeHelperForAdmin(
@@ -2171,6 +2178,7 @@ const createInvoiceByAdminController = async (req, res, next) => {
       taxAmount || 0,
       addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     console.log("Bill detail:", billDetail);

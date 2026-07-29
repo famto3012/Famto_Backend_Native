@@ -283,6 +283,7 @@ const importContactsCsv = async (req, res, next) => {
 
     let created = 0;
     let updated = 0;
+    let skipped = 0;
     const errors = [];
 
     for (const row of rows) {

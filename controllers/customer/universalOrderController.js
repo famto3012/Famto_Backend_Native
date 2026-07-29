@@ -1962,6 +1962,33 @@ const confirmOrderDetailController = async (req, res, next) => {
       newDeliveryAddress,
     );
 
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Verify the delivery address falls inside at least one defined geofence.
+    // This blocks Home Delivery orders where the user's delivery address is
+    // outside the service area, even if they registered from a valid location.
+    if (deliveryMode === "Home Delivery") {
+      if (
+        !Array.isArray(deliveryLocation) ||
+        deliveryLocation.length < 2
+      ) {
+        return next(appError("Delivery location coordinates are missing", 400));
+      }
+
+      const deliveryGeofence = await geoLocation(
+        deliveryLocation[0],
+        deliveryLocation[1],
+      );
+
+      if (!deliveryGeofence) {
+        return next(
+          appError(
+            "Delivery address is outside our service area. Please choose a different address.",
+            400,
+          ),
+        );
+      }
+    }
+
     const cartItems = cart.items;
 
     const booleanSuperMarketOrder = isSuperMarketOrder === "true";
@@ -1971,6 +1998,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       surgeCharges,
       deliveryChargeForScheduledOrder,
       taxAmount,
+      taxComponents,
       itemTotal,
       returnCharge,
     } = await calculateDeliveryChargesHelper({
@@ -1997,11 +2025,11 @@ const confirmOrderDetailController = async (req, res, next) => {
 
     const discountTotal = merchantDiscountAmount + loyaltyDiscount;
 
-    let actualDeliveryCharge = 0;
+    let actualDeliveryCharge = oneTimeDeliveryCharge;
 
     const subscriptionOfCustomer = customer.customerDetails.pricing;
 
-    if (subscriptionOfCustomer?.length > 0) {
+    if (subscriptionOfCustomer?.length > 0 && deliveryMode === "Home Delivery") {
       const subscriptionLog = await SubscriptionLog.findById(
         subscriptionOfCustomer[0],
       );
@@ -2009,12 +2037,12 @@ const confirmOrderDetailController = async (req, res, next) => {
       if (subscriptionLog) {
         const now = new Date();
 
-        // FIXED: Changed || to && — both startDate < now AND endDate > now
-        // must be true for the subscription to be active
+        // Check subscription is active (inclusive date range, within order limit)
         if (
-          new Date(subscriptionLog?.startDate) < now &&
-          new Date(subscriptionLog?.endDate) > now &&
-          subscriptionLog?.currentNumberOfOrders < subscriptionLog?.maxOrders
+          new Date(subscriptionLog.startDate) <= now &&
+          new Date(subscriptionLog.endDate) >= now &&
+          (subscriptionLog.maxOrders === null ||
+            subscriptionLog.currentNumberOfOrders < subscriptionLog.maxOrders)
         ) {
           // Fetch the plan definition to get delivery benefit settings
           const subscriptionPlan = await CustomerSubscription.findById(
@@ -2046,7 +2074,10 @@ const confirmOrderDetailController = async (req, res, next) => {
                 // Distance exceeds free-delivery cap — charge full price
                 actualDeliveryCharge = oneTimeDeliveryCharge;
               } else {
+                // Free delivery applies — also consume a slot
                 actualDeliveryCharge = 0;
+                subscriptionLog.currentNumberOfOrders += 1;
+                await subscriptionLog.save();
               }
             }
           } else {
@@ -2068,6 +2099,7 @@ const confirmOrderDetailController = async (req, res, next) => {
       taxAmount || 0,
       cart?.billDetail?.addedTip || 0,
       returnCharge || 0,
+      taxComponents
     );
 
     const customerCart = await CustomerCart.findOneAndUpdate(
@@ -2231,6 +2263,7 @@ const orderPaymentController = async (req, res, next) => {
         cart.billDetail.discountedDeliveryCharge ||
         cart.billDetail.originalDeliveryCharge,
       taxAmount: cart.billDetail.taxAmount,
+      taxComponents: cart.billDetail.taxComponents || [],
       discountedAmount: cart.billDetail.discountedAmount,
       promoCodeUsed: cart.billDetail.promoCodeUsed,
       grandTotal:
