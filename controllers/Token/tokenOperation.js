@@ -1,45 +1,49 @@
 const axios = require("axios");
-
 const Token = require("../../models/Token");
 
-const appError = require("../../utils/appError");
-
-const generateMapplsAuthToken = async () => {
-  try {
-    const response = await axios.post(
-      `https://outpost.mappls.com/api/security/oauth/token?grant_type=client_credentials&client_id=${process.env.MAPPLS_CLIENT_ID}&client_secret=${process.env.MAPPLS_CLIENT_SECRET}`
-    );
-
-    if (response.status === 200) {
-      const { access_token } = response.data;
-
-      await Token.findOneAndUpdate(
-        {},
-        { mapplsAuthToken: access_token },
-        { new: true, upsert: true }
-      );
-    } else {
-      console.error("Failed to retrieve access token");
-    }
-  } catch (error) {
-    console.error("Error generating access token:", error);
-  }
-};
+// Legacy OAuth token generator — kept as fallback
+// const generateMapplsAuthToken = async () => {
+//   try {
+//     const response = await axios.post(
+//       `https://outpost.mappls.com/api/security/oauth/token?grant_type=client_credentials&client_id=${process.env.MAPPLS_CLIENT_ID}&client_secret=${process.env.MAPPLS_CLIENT_SECRET}`
+//     );
+//     const { access_token } = response.data;
+//     if (access_token) {
+//       await Token.findOneAndUpdate(
+//         {},
+//         { mapplsAuthToken: access_token },
+//         { upsert: true }
+//       );
+//     }
+//     return access_token;
+//   } catch (error) {
+//     console.error("Failed to retrieve access token");
+//   }
+// };
 
 const getAuthToken = async (req, res, next) => {
   try {
-    const tokenFound = await Token.findOne({});
-
-    if (!tokenFound.mapplsAuthToken) {
-      return next(appError("Token not found", 404));
+    // NEW AUTH: return static MAPPLS_ACCESS_TOKEN from .env
+    const staticToken = process.env.MAPPLS_ACCESS_TOKEN;
+    if (staticToken) {
+      return res.json({ success: true, data: staticToken });
     }
 
-    res.status(200).json({
+    // FALLBACK: legacy OAuth token from DB
+    const tokenFound = await Token.findOne({});
+    if (!tokenFound || !tokenFound.mapplsAuthToken) {
+      return next(require("../../utils/appError")("Token not found", 404));
+    }
+
+    return res.json({
+      success: true,
       data: tokenFound.mapplsAuthToken,
     });
-  } catch (err) {
-    next(appError(err.message));
+  } catch (error) {
+    return next(error);
   }
 };
 
-module.exports = { generateMapplsAuthToken, getAuthToken };
+// Legacy export — kept for reference, not called anywhere
+// module.exports = { generateMapplsAuthToken, getAuthToken };
+module.exports = { getAuthToken };

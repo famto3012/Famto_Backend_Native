@@ -76,9 +76,8 @@ const {
   moveAppDetailToWorkHistoryAndResetForAllAgents,
 } = require("./utils/agentAppHelpers.js");
 const tokenRoute = require("./routes/tokenRoute/tokenRoute.js");
-const {
-  generateMapplsAuthToken,
-} = require("./controllers/Token/tokenOperation.js");
+// Legacy mappls OAuth token generation — migrated to static token in .env
+// const { generateMapplsAuthToken } = require("./controllers/Token/tokenOperation.js");
 const messageRoute = require("./routes/customerRoute/messageRoute.js");
 const deleteExpiredConversationsAndMessages = require("./utils/deleteChatDataHelper.js");
 const scheduledPickAndCustom = require("./models/ScheduledPickAndCustom.js");
@@ -220,7 +219,7 @@ cron.schedule("30 18 * * *", async () => {
     updateOneDayLoyaltyPointEarning(),
     fetchPerDayRevenue(now),
     fetchMerchantDailyRevenue(now),
-    generateMapplsAuthToken(),
+    // generateMapplsAuthToken(),  // migrated to static .env token
     resetStatusManualToggleForAllMerchants(),
     deleteOldLoyaltyPoints(),
     deleteOldActivityLogs(),
