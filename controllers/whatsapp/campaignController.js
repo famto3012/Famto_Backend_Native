@@ -267,7 +267,63 @@ const sendCampaign = async (req, res, next) => {
 };
 
 const buildComponentsFromTemplate = (template) => {
-  return [];
+  const components = template?.components || [];
+  if (!components.length) return [];
+
+  const sendComponents = [];
+
+  for (const comp of components) {
+    if (comp.type === 'HEADER') {
+      // Header with image or text
+      if (comp.format === 'IMAGE') {
+        // Use example image handle from Meta, or image_url if available
+        const imageLink = comp.example?.header_handle?.[0] || comp.image_url || '';
+        if (imageLink) {
+          sendComponents.push({
+            type: 'header',
+            parameters: [{ type: 'image', image: { link: imageLink } }],
+          });
+        }
+      } else if (comp.format === 'TEXT' || comp.text) {
+        const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
+        sendComponents.push({
+          type: 'header',
+          parameters: paramNames.map(name => ({
+            type: 'text',
+            text: '',
+            ...(name && { parameter_name: name }),
+          })),
+        });
+      }
+    } else if (comp.type === 'BODY') {
+      const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
+      if (paramNames.length > 0) {
+        sendComponents.push({
+          type: 'body',
+          parameters: paramNames.map(name => ({
+            type: 'text',
+            text: '',
+            parameter_name: name,
+          })),
+        });
+      }
+    } else if (comp.type === 'FOOTER') {
+      const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
+      if (paramNames.length > 0) {
+        sendComponents.push({
+          type: 'footer',
+          parameters: paramNames.map(name => ({
+            type: 'text',
+            text: '',
+            parameter_name: name,
+          })),
+        });
+      }
+    }
+    // BUTTONS are not sent as components in template messages - they're defined in the template itself
+  }
+
+  return sendComponents;
 };
 
 const processCampaignSend = async (campaign, userId) => {

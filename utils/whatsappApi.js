@@ -110,29 +110,37 @@ const sendTemplateMessage = async (
   let cleanPhone = String(phoneNumber).replace(/^\+/, "");
   if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
-  const components = [];
+  // Load template once for header + body param names
+  const template = await WhatsappTemplate.findOne({ name: templateName }).select("components").lean();
+  const components = template?.components || [];
+  const headerComp = components.find((c) => c.type === "HEADER");
+  const bodyComp = components.find((c) => c.type === "BODY");
+  const paramNames = (bodyComp?.text?.match(/\{\{([^}]+)\}\}/g) || []).map(
+    (m) => m.replace(/\{\{|\}\}/g, "").trim()
+  );
 
-  if (headerImageUrl) {
-    components.push({
+  const sendComponents = [];
+
+  // 1. Header component - use provided headerImageUrl, or auto-populate from template
+  let finalHeaderImageUrl = headerImageUrl;
+  if (!finalHeaderImageUrl && headerComp && headerComp.format === "IMAGE") {
+    finalHeaderImageUrl = headerComp.example?.header_handle?.[0] || headerComp.image_url || null;
+  }
+  if (finalHeaderImageUrl) {
+    sendComponents.push({
       type: "header",
       parameters: [
         {
           type: "image",
-          image: { link: headerImageUrl },
+          image: { link: finalHeaderImageUrl },
         },
       ],
     });
   }
 
+  // 2. Body component - use param names from template
   if (bodyParams.length > 0) {
-    // Look up param names from the synced template for named-parameter support
-    const template = await WhatsappTemplate.findOne({ name: templateName }).select("components").lean();
-    const bodyComp = (template?.components || []).find((c) => c.type === "BODY");
-    const paramNames = (bodyComp?.text?.match(/\{\{([^}]+)\}\}/g) || []).map(
-      (m) => m.replace(/\{\{|\}\}/g, "").trim()
-    );
-
-    components.push({
+    sendComponents.push({
       type: "body",
       parameters: bodyParams.map((value, i) => ({
         type: "text",
@@ -150,7 +158,7 @@ const sendTemplateMessage = async (
     template: {
       name: templateName,
       language: { code: languageCode },
-      ...(components.length > 0 && { components }),
+      ...(sendComponents.length > 0 && { components: sendComponents }),
     },
   };
 
