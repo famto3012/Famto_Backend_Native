@@ -253,18 +253,9 @@ const purchasedItemsSchema = mongoose.Schema(
       type: Number,
       required: true,
     },
-    lineItemType: {
-      type: String,
-      enum: ["order", "handyman_added", "customer_pickup"],
-      default: "order",
-    },
-    addedAt: {
-      type: Date,
-      default: Date.now,
-    },
   },
   {
-    _id: true,
+    _id: false,
   }
 );
 

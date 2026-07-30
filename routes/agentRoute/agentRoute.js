@@ -24,7 +24,6 @@ const {
   addCustomOrderItemPriceController,
   addHomeDeliveryItemController,
   addOrderDetailsController,
-  addPickupItemController,
   getDeliveryDetailController,
   confirmCashReceivedController,
   addRatingsToCustomer,
@@ -256,12 +255,6 @@ agentRoute.patch(
 );
 
 agentRoute.post("/complete-order", isAuthenticated, completeOrderController);
-
-agentRoute.post(
-  "/add-pickup-item/:orderId",
-  isAuthenticated,
-  addPickupItemController
-);
 
 agentRoute.post(
   "/complete-batch-order",
