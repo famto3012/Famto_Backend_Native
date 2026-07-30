@@ -1989,7 +1989,7 @@ const downloadNotesReceiptController = async (req, res, next) => {
     </div>
   </div>
 
-  <div class="title">Handyman Receipt</div>
+  <div class="title">Receipt</div>
 
   <div class="meta">
     <div>

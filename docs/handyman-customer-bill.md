@@ -181,7 +181,7 @@ Both routes call the **same controller function**. Authorization is handled insi
 │  [Famto Logo]  Famto            │
 │                Private Limited   │  Order ID: O-XXXXX
 │──────────────────────────────────│
-│        HANDYMAN RECEIPT          │  ← Main heading, large, centered
+│        RECEIPT                     │  ← Main heading, large, centered
 │──────────────────────────────────│
 │  Customer     │  Date            │
 │  John Doe     │  30 Jul 2026     │
