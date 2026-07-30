@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const NodeCache = require("node-cache");
 const mappls = require("./providers/mapplsProvider");
 
@@ -7,7 +9,8 @@ const mappls = require("./providers/mapplsProvider");
 // What this does:
 //   1. Accepts pickup/delivery coordinates in [lat, lng] format
 //   2. Checks in-memory cache → if hit, returns instantly (zero cost)
-//   3. If cache miss, delegates to the active provider (today: Mappls)
+//   3. If cache miss, delegates to the active provider (today: Mappls with
+//      v1 primary + v2 automatic fallback)
 //   4. Stores the result in cache, returns it
 //
 // Caching rules:
@@ -16,14 +19,18 @@ const mappls = require("./providers/mapplsProvider");
 //   - If every order asks the same restaurant → delivery area route,
 //     the cache absorbs ~80% of repeat calls
 //
-// To switch provider: change this.provider to a new module that exports
-// the same { distance(...), routePolyline(...), staticMapImage(...) } shape.
+// All 3 public methods (getDistance, getRoutePolyline, getStaticMapImage)
+// are now cached. Cache stats logged to map_cache_stats.txt.
+//
+// To switch provider: change the require in mapplsProvider.js or point
+// this.provider to a different module.
 // ---------------------------------------------------------------------------
 
 class MapService {
   constructor() {
     this.cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
     this.provider = mappls; // swap here when adding OSRM / LocationIQ
+    this.logFile = path.join(__dirname, "..", "map_cache_stats.txt");
   }
 
   // -----------------------------------------------------------------------
@@ -45,6 +52,16 @@ class MapService {
     const result = await fetcher();
     this.cache.set(key, result);
     return result;
+  }
+
+  /** Append a hit/miss line to map_cache_stats.txt */
+  _logCache(method, key, hit) {
+    const ts = new Date().toISOString().slice(11, 19);
+    const status = hit ? "HIT " : "MISS";
+    const line = `[${ts}] ${status} ${method} ${key}\n`;
+    try {
+      fs.appendFileSync(this.logFile, line, "utf-8");
+    } catch (_) { /* best-effort */ }
   }
 
   // -----------------------------------------------------------------------
@@ -126,9 +143,15 @@ class MapService {
     const [lat2, lng2] = d;
     const key = this._cacheKey(lat1, lng1, lat2, lng2, profile);
 
-    return this._cachedOrFetch(key, () =>
-      this.provider.distance(lat1, lng1, lat2, lng2, profile)
-    );
+    const cached = this.cache.get(key);
+    if (cached !== undefined) {
+      this._logCache("getDistance", key, true);
+      return cached;
+    }
+    this._logCache("getDistance", key, false);
+    const result = await this.provider.distance(lat1, lng1, lat2, lng2, profile);
+    this.cache.set(key, result);
+    return result;
   }
 
   /**
@@ -182,7 +205,24 @@ class MapService {
    * @returns {Promise<object>} raw Mappls GeoJSON response
    */
   async getRoutePolyline(path, profile = "biking") {
-    return this.provider.routePolyline(path, profile);
+    // Build a deterministic cache key from the full path
+    const pathKey = path
+      .map((p) => {
+        const norm = this.normalize(p) || [0, 0];
+        return norm[0].toFixed(3) + "," + norm[1].toFixed(3);
+      })
+      .join("|");
+    const key = `route:${pathKey}|${profile}`;
+
+    const cached = this.cache.get(key);
+    if (cached !== undefined) {
+      this._logCache("getRoutePolyline", key, true);
+      return cached;
+    }
+    this._logCache("getRoutePolyline", key, false);
+    const result = await this.provider.routePolyline(path, profile);
+    this.cache.set(key, result);
+    return result;
   }
 
   /**
@@ -196,7 +236,18 @@ class MapService {
     const c = this.normalize(center);
     if (!c) throw new Error(`Invalid center for static map: ${JSON.stringify(center)}`);
     const [lat, lng] = c;
-    return this.provider.staticMapImage(lat, lng, options);
+    const { size = "400x500", zoom = 15 } = options;
+    const key = `map:${lat.toFixed(3)},${lng.toFixed(3)}|${size}|${zoom}`;
+
+    const cached = this.cache.get(key);
+    if (cached !== undefined) {
+      this._logCache("getStaticMapImage", key, true);
+      return cached;
+    }
+    this._logCache("getStaticMapImage", key, false);
+    const result = await this.provider.staticMapImage(lat, lng, options);
+    this.cache.set(key, result);
+    return result;
   }
 }
 
