@@ -50,19 +50,6 @@ const filterCoordinatesFromData = (parsedData) => {
   return coordinates;
 };
 
-// ---------------------------------------------------------------------------
-// Bridge to MapService abstraction
-// ---------------------------------------------------------------------------
-// These functions now delegate to services/MapService.js, which handles
-// caching, provider selection, and normalisation centrally.
-//
-// The old direct Mappls API calls have been moved to
-// services/providers/mapplsProvider.js — the ONLY file that touches
-// mapmyindia.com URLs.
-//
-// Callers importing these functions work exactly as before.
-// ---------------------------------------------------------------------------
-
 const getDistanceFromPickupToDelivery = async (
   pickupCoordinates,
   deliveryCoordinates,
