@@ -1858,6 +1858,196 @@ const downloadOrderBillController = async (req, res, next) => {
   }
 };
 
+// Generate receipt PDF/image from agent notes
+const downloadNotesReceiptController = async (req, res, next) => {
+  try {
+    const { orderId, format = "pdf" } = req.body;
+
+    if (!orderId) return next(appError("orderId is required", 400));
+    if (!["pdf", "image"].includes(format))
+      return next(appError('format must be "pdf" or "image"', 400));
+
+    const orderFound = await Order.findById(orderId)
+      .populate("customerId", "fullName phoneNumber")
+      .lean();
+
+    if (!orderFound) return next(appError("Order not found", 404));
+
+    // ── Authorization ──
+    const isAdminOrMerchant = ["admin", "merchant"].includes(req.userRole?.toLowerCase());
+    const isOwner =
+      req.userRole?.toLowerCase() === "customer" &&
+      orderFound.customerId?._id?.toString() === req.userAuth;
+    if (!isAdminOrMerchant && !isOwner) {
+      return next(appError("Access denied", 403));
+    }
+
+    const notes = orderFound?.detailAddedByAgent?.notes;
+    if (!notes || !notes.trim()) {
+      return next(appError("No notes found for this order", 404));
+    }
+
+    const customerName = orderFound.customerId?.fullName || "-";
+    const createdAt = orderFound.createdAt
+      ? `${formatDate(orderFound.createdAt)} | ${formatTime(orderFound.createdAt)}`
+      : "-";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery Note - ${orderId}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      color: #111;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #0f766e;
+      padding-bottom: 20px;
+    }
+    .header .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header .logo img {
+      height: 50px;
+      width: 50px;
+      object-fit: contain;
+    }
+    .header .logo .company {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f766e;
+    }
+    .header .logo .sub {
+      font-size: 12px;
+      color: #555;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      background: #f9f9f9;
+      padding: 14px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .meta div span { color: #777; }
+    .meta div p { font-weight: 600; margin-top: 2px; }
+    .title {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 700;
+      color: #0f766e;
+      margin: 10px 0 24px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .notes-box {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 24px;
+      min-height: 200px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #ddd;
+      font-size: 13px;
+      color: #777;
+    }
+    .footer a { color: #0f766e; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <img src="https://firebasestorage.googleapis.com/v0/b/famto-aa73e.appspot.com/o/admin_panel_assets%2FGroup.svg?alt=media&token=9629e049-c607-4f98-9fee-1cd435b5754f" alt="Famto">
+      <div>
+        <div class="company">Famto</div>
+        <div class="sub">Private Limited</div>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <p style="font-size:12px;color:#777">Order ID</p>
+      <p style="font-weight:700">${orderId}</p>
+    </div>
+  </div>
+
+  <div class="title">Handyman Receipt</div>
+
+  <div class="meta">
+    <div>
+      <span>Customer</span>
+      <p>${customerName}</p>
+    </div>
+    <div>
+      <span>Date</span>
+      <p>${createdAt}</p>
+    </div>
+  </div>
+
+  <div class="notes-box">${notes}</div>
+
+  <div class="footer">
+    <p>Thank you for choosing Famto</p>
+    <p>contact@famto.in &nbsp;|&nbsp; +91 97781 80794</p>
+  </div>
+</body>
+</html>`;
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load" });
+
+    if (format === "pdf") {
+      const filePath = path.join(__dirname, "../../../notes_receipt.pdf");
+      await page.pdf({ path: filePath, format: "A4", printBackground: true });
+      await browser.close();
+
+      res.download(filePath, `Order_Notes_${orderId}.pdf`, (err) => {
+        fs.unlink(filePath, (unlinkErr) => {
+          if (unlinkErr) console.error("Failed to delete PDF:", unlinkErr);
+        });
+        if (err) return next(appError("Failed to send PDF"));
+      });
+    } else {
+      // image (PNG)
+      const filePath = path.join(__dirname, "../../../notes_receipt.png");
+      await page.screenshot({ path: filePath, fullPage: true });
+      await browser.close();
+
+      res.download(filePath, `Order_Notes_${orderId}.png`, (err) => {
+        fs.unlink(filePath, (unlinkErr) => {
+          if (unlinkErr) console.error("Failed to delete PNG:", unlinkErr);
+        });
+        if (err) return next(appError("Failed to send image"));
+      });
+    }
+  } catch (err) {
+    console.log(err.message);
+    next(appError(err.message));
+  }
+};
+
 const orderMarkAsReadyController = async (req, res, next) => {
   try {
     const { orderId } = req.params;
@@ -3570,6 +3760,7 @@ module.exports = {
   downloadOrdersCSVByAdminController,
   downloadInvoiceBillController,
   downloadOrderBillController,
+  downloadNotesReceiptController,
   orderMarkAsReadyController,
   markTakeAwayOrderCompletedController,
   getScheduledOrderDetailByAdminController,
