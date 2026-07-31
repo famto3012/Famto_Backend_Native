@@ -290,6 +290,17 @@ See `MAP_SERVICE_STRATEGY.md` at project root for full evaluation.
 | WhatsApp Business API | Customer communication | Webhooks | `routes/whatsappRoute/` |
 | SMTP (nodemailer) | Email notifications | SMTP | `.env` — SMTP creds |
 
+### WhatsApp Template Send Flow (order tracking, campaigns)
+
+Template messages are sent from `utils/whatsappApi.js` `sendTemplateMessage()` (single sends: order tracking, welcome, cart reminder) and `controllers/whatsapp/campaignController.js` `buildComponentsFromTemplate()` (campaign broadcasts). Both load the synced template from `WhatsappTemplate` and build Meta `components[]`.
+
+Key rules (learned from prod incident 2026-07-31):
+- **Header images:** Meta returns `header_handle` as an internal CDN handle wrapped in `@url:\`...\`` — this wrapper is **not** a valid `image.link` and must be stripped (`replace(/^@url:\`|\`$/g, '')`) before sending. Sending it verbatim makes Meta silently drop the message (200 OK + message ID, no delivery).
+- **Language:** the payload `template.language.code` must match the template's synced `language` exactly (e.g. `en`), not a caller default. Mismatch breaks named-parameter resolution.
+- **Named params:** `{{customer_name}}` requires `parameter_name` matching the template's declared names; positional `{{1}}` must NOT include `parameter_name`.
+- **Message records:** every outbound `WhatsappMessage` requires a `conversationId` — find-or-create the `WhatsappConversation` by `waId` first (campaign path did this 2026-07-31).
+- **Env config (deploy gap, 2026-07-31):** single sends read header images from `WHATSAPP_*_HEADER_IMAGE` env vars (`.env` / container). The production container was missing these three, so `sendTemplateMessage` fell back to `header_handle` and sent the invalid wrapper. **Deploy must set:** `WHATSAPP_WELCOME_HEADER_IMAGE`, `WHATSAPP_ORDER_TRACKING_HEADER_IMAGE`, `WHATSAPP_CART_REMINDER_HEADER_IMAGE` (Firebase Storage `@url:`-wrapped URLs are fine — code strips the wrapper).
+
 ---
 
 ## Network Architecture
