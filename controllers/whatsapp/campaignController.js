@@ -2,6 +2,7 @@ const WhatsappCampaign = require("../../models/WhatsappCampaign");
 const WhatsappTemplate = require("../../models/WhatsappTemplate");
 const WhatsappContact = require("../../models/WhatsappContact");
 const WhatsappMessage = require("../../models/WhatsappMessage");
+const WhatsappConversation = require("../../models/WhatsappConversation");
 const appError = require("../../utils/appError");
 
 const BUILTIN_AUDIENCES = [
@@ -367,8 +368,26 @@ const processCampaignSend = async (campaign, userId) => {
       const metaMessageId = metaResponse.messages?.[0]?.id;
       console.log(`[Campaign] Success for ${waId}:`, metaMessageId);
 
+      // Find or create the conversation for this recipient.
+      // WhatsappMessage.conversationId is required, so a campaign message
+      // cannot be stored without a conversation. Mirror webhookController's
+      // find-or-create pattern so campaign sends also show up in the inbox.
+      let conversation = await WhatsappConversation.findOne({ waId });
+      if (!conversation) {
+        conversation = await WhatsappConversation.create({
+          waId,
+          status: "open",
+          lastMessage: {
+            text: `[Template: ${template.name}]`,
+            timestamp: new Date(),
+            direction: "outbound",
+          },
+        });
+      }
+
       // Create a message record so analytics/billing can count this campaign message
       await WhatsappMessage.create({
+        conversationId: conversation._id,
         waId,
         metaMessageId,
         direction: "outbound",
