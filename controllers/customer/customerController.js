@@ -938,6 +938,7 @@ const getSingleOrderDetailController = async (req, res, next) => {
         ? {
             deliveryCharge: orderFound?.billDetail?.deliveryCharge || null,
             taxAmount: orderFound?.billDetail?.taxAmount || null,
+            taxComponents: orderFound?.billDetail?.taxComponents || [],
             discountedAmount: orderFound?.billDetail?.discountedAmount || null,
             grandTotal: orderFound?.billDetail?.grandTotal || null,
             itemTotal: orderFound?.billDetail?.itemTotal || null,
