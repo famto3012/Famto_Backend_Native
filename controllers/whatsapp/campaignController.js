@@ -277,8 +277,11 @@ const buildComponentsFromTemplate = (template) => {
     if (comp.type === 'HEADER') {
       // Header with image or text
       if (comp.format === 'IMAGE') {
-        // Use example image handle from Meta, or image_url if available
-        const imageLink = comp.example?.header_handle?.[0] || comp.image_url || '';
+        // Use example image handle from Meta, or image_url if available.
+        // CRITICAL: header_handle is "@url:`https://...`" (internal CDN handle) — strip
+        // the wrapper, same as sendTemplateMessage, or Meta silently drops the message.
+        const rawHandle = comp.example?.header_handle?.[0] || comp.image_url || '';
+        const imageLink = rawHandle.replace(/^@url:`|`$/g, '').trim();
         if (imageLink) {
           sendComponents.push({
             type: 'header',
