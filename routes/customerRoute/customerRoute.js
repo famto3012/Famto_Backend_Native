@@ -124,6 +124,7 @@ const {
 } = require("../../controllers/customer/globalSearchController");
 const { redeemLoyaltyPointController } = require("../../controllers/admin/loyaltyPoint/loyaltyPointController");
 const { getOfferPopupController } = require("../../controllers/admin/appCustomization/offerPopupController");
+const { downloadNotesReceiptController } = require("../../controllers/admin/order/adminOrderController");
 
 const customerRoute = express.Router();
 
@@ -673,5 +674,12 @@ customerRoute.delete("/delete-account", isAuthenticated, deleteCustomerAccount);
 
 // Re-order — rebuild cart from a completed order in one click
 customerRoute.post("/reorder/:orderId", isAuthenticated, reOrderController);
+
+// Download notes receipt as PDF or image
+customerRoute.post(
+  "/download-notes-receipt",
+  isAuthenticated,
+  downloadNotesReceiptController
+);
 
 module.exports = customerRoute;

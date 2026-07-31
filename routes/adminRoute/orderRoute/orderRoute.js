@@ -30,6 +30,7 @@ const {
   downloadOrdersCSVByAdminController,
   downloadInvoiceBillController,
   downloadOrderBillController,
+  downloadNotesReceiptController,
   orderMarkAsReadyController,
   markTakeAwayOrderCompletedController,
   getScheduledOrderDetailByAdminController,
@@ -151,6 +152,14 @@ orderRoute.post(
   isAuthenticated,
   isAdminOrMerchant,
   downloadOrderBillController
+);
+
+// Download notes receipt as PDF or image
+orderRoute.post(
+  "/download-notes-receipt",
+  isAuthenticated,
+  isAdminOrMerchant,
+  downloadNotesReceiptController
 );
 
 orderRoute.post(

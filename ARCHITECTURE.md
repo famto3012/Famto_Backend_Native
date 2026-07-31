@@ -1,7 +1,7 @@
 # Famto Backend — Architecture
 
 > **Role:** REST + Socket.IO API server serving all clients (Flutter mobile app, React web ordering, React admin dashboard, WhatsApp bots).
-> **Stack:** Node 20 · Express 4.21 · MongoDB (Mongoose 8.7) · Socket.IO 4.7 · JWT · Razorpay (India)
+> **Stack:** Node 20 · Express 4.21 · MongoDB (Mongoose 8.7) · Socket.IO 4.7 · Redis 7.x · BullMQ · JWT · Razorpay (India)
 
 ---
 
@@ -42,10 +42,15 @@ npm start
 │         │                          └──────────────────────┘  │
 │         │                          ┌──────────────────────┐  │
 │         ├──────────────────────────►  Firebase (external) │  │
-│                                   └──────────────────────┘  │
+│         │                          └──────────────────────┘  │
+│         │                          ┌──────────────────────┐  │
+│         └──────────────────────────►  Redis (internal)    │  │
+│                                    │  Socket.IO adapter   │  │
+│                                    │  BullMQ queues       │  │
+│                                    │  Driver Geo storage  │  │
+│                                    └──────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
-
 ---
 
 ## Code Layout
@@ -118,7 +123,7 @@ index.js                  ← Entry point: routes + 5 cron jobs (711 lines)
 | Templates | EJS | 3.1 |
 | PDF generation | puppeteer | 23.5 |
 | Image processing | sharp | 0.33 |
-| Caching | node-cache | 5.1 |
+| Caching | Redis + node-cache | 7.x |
 | Email | nodemailer | 6.9 |
 | SMS/WhatsApp | axios | external API calls |
 | Validation | express-validator | 7.2 |
@@ -140,18 +145,18 @@ index.js                  ← Entry point: routes + 5 cron jobs (711 lines)
 
 ## Architecture Decisions
 
-### ADR-001: No Redis at Current Scale
+### ADR-001: Redis — Adopted (was "No Redis")
 
-**Decision:** Do not deploy Redis. All proposed use cases are served by in-process mechanisms:
-- `node-cache` for hot data (faster than Redis at 0ms vs 0.3ms TCP round-trip)
-- MongoDB TTL indexes for token blacklisting
-- MemoryStore for rate limiting
+> **Status:** SUPERSEDED by ADR-003, ADR-004, and ADR-005 below.
+> **Original reasoning:** In-process mechanisms (node-cache, MemoryStore, TTL indexes) were sufficient for single-process scale.
+> **Trigger for reversal:** Need for horizontal scaling of Socket.IO, persistent background jobs, and cross-node driver location sharing.
 
-**Revisit when:**
-1. 2+ Node processes running (need Redis for socket.io adapter)
-2. Single query exceeds 50ms due to collection size
-3. Throughput exceeds ~500 RPS on read-heavy endpoints
-4. Cross-service pub/sub needed (microservices)
+**Decision:** Introduce Redis as a first-class infrastructural dependency. Redis powers:
+- **Socket.IO adapter** (`@socket.io/redis-adapter`) — enables multiple Node processes to share real-time state
+- **BullMQ** — replaces in-process `node-cron` polling with persistent, retryable job queues
+- **Redis Geo** (`GEOADD` / `GEORADIUS`) — replaces in-memory `userSocketMap` for driver location storage
+
+See ADR-003, ADR-004, ADR-005 for details per use case.
 
 ### ADR-002: Performance Priority Framework
 
@@ -165,7 +170,82 @@ All fixes are **free** (zero new infrastructure). Execute in order:
 | 4 | Strip `console.log` from production code paths | Unblocks event loop (Node stdout is synchronous) |
 | 5 | In-process rate limiting via express-rate-limit + MemoryStore | Abuse prevention |
 | 6 | Token blacklist via MongoDB TTL index | Server-side JWT invalidation |
-| 7 | *Re-evaluate Redis* | Marginal after above |
+| 7 | *(Superseded — Redis adopted per ADR-001)* | — |
+
+### ADR-003: Socket.IO Redis Adapter for Horizontal Scaling
+
+**Decision:** Add `@socket.io/redis-adapter` and `ioredis` to the project. Attach the adapter to the existing Socket.IO server instance (socket/socket.js).
+
+**Why:**
+- `userSocketMap` lives in a single Node process's memory. Deploy/restart drops all connected sockets and their in-memory state.
+- Without a shared adapter, only one Node process can serve WebSocket connections — you cannot horizontally scale the real-time layer.
+- A Redis adapter lets Socket.IO broadcast events (`io.emit`) across all connected processes. Any process can emit to any socket, regardless of which process owns that socket.
+
+**Revisit when:** Never (adapter is trivially cheap at ~$15/mo Redis instance and adds zero latency overhead vs. in-process for a single process).
+
+**Trade-off:**
+- New infrastructure dependency (Redis). Mitigation: Redis has near-zero downtime and the adapter is a well-maintained first-party Socket.IO package.
+- Adds ~0.3ms TCP round-trip per event when a single process emits to a socket on another process. Events emitted to sockets on the same process stay local (no Redis hop).
+
+### ADR-004: BullMQ for Background Jobs
+
+**Decision:** Replace in-process `node-cron` polling with BullMQ (backed by the same Redis instance from ADR-003).
+
+**Current problem:**
+- All 8 cron schedules run inside the single Node process.
+- The every-5-second `TemporaryOrder` poller (`*/5 * * * * *` in index.js) is lossy: if the process crashes between polls, unprocessed orders disappear.
+- No retry mechanism — a job that fails mid-way is gone forever.
+- If we run 2+ Node processes in the future, every process runs every cron → duplicate execution.
+
+**Why BullMQ:**
+- **Persistence:** Jobs survive process restarts and server crashes.
+- **Delayed jobs:** Order timeout, auto-cancellation, and scheduled pickups expressed as delayed jobs instead of polling.
+- **Workers:** Job processing runs in separate worker processes that can be scaled independently.
+- **Deduplication:** BullMQ's job dedup (`jobId` option) prevents duplicate execution when multiple processes enqueue the same logical job.
+- **Retries:** Built-in backoff and max attempts per job.
+
+**What moves to BullMQ:**
+
+| Current cron | Frequency | BullMQ pattern |
+|-------------|-----------|----------------|
+| TemporaryOrder processing | `*/5 * * * * *` (every 5s) | Queue worker + delayed job per order |
+| Order auto-cancellation | `* * * * *` (every min) | Delayed job with TTL check |
+| Automated status offlines | `0 6,12,18,0 * * *` (4x daily) | Cron-like repeatable job |
+| Analytics rollup | `30 18 * * *` (daily) | Repeatable job |
+| Invoice/statement generation | `* * * * *` (every min) | Queue per merchant |
+| Other cron-based checks | various | Queue per domain |
+
+**Trade-off:**
+- Redis is a hard dependency for job processing (same instance as ADR-003, no extra cost).
+- Worker processes add process-management complexity vs. simple `node-cron` inline schedules. Mitigation: start with the worker running inside the main process (BullMQ supports this), extract to separate workers when load demands.
+
+### ADR-005: Driver Location Storage in Redis Geo
+
+**Decision:** Move active driver locations from the in-memory `userSocketMap` object into Redis Geo structures.
+
+**Current implementation (socket/socket.js):**
+- `locationUpdated` event writes `[latitude, longitude]` to `userSocketMap[userId].location` (a plain JS object in-process).
+- Customers poll via `agentLocationUpdateForUser` which reads from the same in-memory map.
+- **Lost on every restart.** No historical location data. Only queryable from the one Node process that owns the map.
+
+**Target architecture:**
+| Operation | Redis Command | When |
+|-----------|--------------|------|
+| Store driver position | `GEOADD drivers:live <lng> <lat> <driverId>` | On every `locationUpdated` socket event |
+| Query driver near point | `GEORADIUS drivers:live <lng> <lat> <radius> km` | Customer requests `agentLocationUpdateForUser` |
+| Get single driver position | `GEOPOS drivers:live <driverId>` | Admin panel / order detail |
+| Remove on disconnect | `ZREM drivers:live <driverId>` | On socket `disconnect` event |
+| TTL cleanup | `EXPIRE drivers:live <ttl>` + periodic GEOSEARCHSTORE | Stale positions expire automatically |
+
+**Why Redis Geo:**
+- Survives restarts (Redis persistence/RDB snapshots).
+- Queryable from any Node process (no single-process bottleneck).
+- Built-in geospatial query (`GEORADIUS`) replaces manual distance-filtering in application code.
+- Single-digit microsecond latency per operation.
+
+**Trade-off:**
+- Adds ~0.3ms TCP round-trip per location update. Mitigation: batch writes (e.g., update Redis every 5s, not on every client message) or use Redis pipelining.
+- Existing `userSocketMap` also holds WebSocket socket IDs and FCM tokens — those stay in-process and cluster-local (they're ephemeral and tied to the specific Node process anyway). Redis Geo only replaces the **location** portion.
 
 ### Custom String IDs
 
@@ -219,6 +299,7 @@ See `MAP_SERVICE_STRATEGY.md` at project root for full evaluation.
 | Service | Port | Environment |
 |---------|------|-------------|
 | Express API | 8080 | Container (EXPOSE) |
+| Redis | 6379 | Container or managed (same VPS) |
 | MongoDB | external | Atlas or VPS-hosted |
 | Firebase | external | Google |
 
@@ -229,9 +310,10 @@ See `MAP_SERVICE_STRATEGY.md` at project root for full evaluation.
 - **Runtime:** Docker container on own VPS (Alpine, Node 20)
 - **Base image:** `node:20-alpine`
 - **Port:** 8080
-- **Cron jobs:** 5 scheduled in `index.js` (auto-cancellation, bonus processing, etc.)
+- **Cron jobs:** 5 scheduled in `index.js` — targeted for migration to BullMQ (see ADR-004)
 - **Start command:** `node index.js --host 0.0.0.0`
-- **No CI/CD** — manual `docker build` + `docker-compose pull/up` on VPS
+- **Background workers:** BullMQ workers process job queues (persistent, retryable)
+- **No CI/CD** — manual `docker build` + deploy via SSH on VPS
 
 ---
 

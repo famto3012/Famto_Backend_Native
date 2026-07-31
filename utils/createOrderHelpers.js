@@ -17,10 +17,10 @@ const { convertISTToUTC } = require("./formatters");
 
 const { geoLocation } = require("./getGeoLocation");
 
+const mapService = require("../services/MapService");
 const {
   calculateDeliveryCharges,
   getTaxAmount,
-  getDistanceFromPickupToDelivery,
   filterProductIdAndQuantity,
   calculateReturnCharges,
 } = require("./customerAppHelpers");
@@ -768,7 +768,7 @@ const handleDeliveryMode = async (
     const fromLocation = normalizeLatLng(rawFrom);
 
     if (fromLocation?.length === 2 && addressDetails.deliveryLocation?.length === 2) {
-      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      const { distanceInKM } = await mapService.getDistance(
         fromLocation,
         addressDetails.deliveryLocation
       );
@@ -1383,7 +1383,7 @@ const handleDeliveryModeForAdmin = async (
   let distance = 0;
 
   if (deliveryMode !== "Take Away" && pickupStr) {
-    const result = await getDistanceFromPickupToDelivery(
+    const result = await mapService.getDistance(
       pickupStr,
       deliveryStr
     );
@@ -1465,7 +1465,7 @@ const handleDeliveryModeForAdmin = async (
 //     delivery;
 
 //   if (isValidRoute) {
-//     const result = await getDistanceFromPickupToDelivery(
+//     const result = await mapService.getDistance(
 //       pickup,
 //       delivery
 //     );
@@ -2179,7 +2179,7 @@ const processHomeDeliveryDetailInApp = async (
     }
 
     if (pickupLocation.length) {
-      const { distanceInKM } = await getDistanceFromPickupToDelivery(
+      const { distanceInKM } = await mapService.getDistance(
         pickupLocation,
         deliveryLocation
       );

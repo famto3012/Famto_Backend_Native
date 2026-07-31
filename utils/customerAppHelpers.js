@@ -1,4 +1,4 @@
-const axios = require("axios");
+const mapService = require("../services/MapService");
 
 const Tax = require("../models/Tax");
 const Order = require("../models/Order");
@@ -58,121 +58,24 @@ const getDistanceFromPickupToDelivery = async (
   console.log("pickupcordinates", pickupCoordinates);
   console.log("deliverycordinates", deliveryCoordinates);
 
-  // -----------------------------
-  // CONVERT ANY INPUT → [lat,lng]
-  // -----------------------------
-  const normalize = (input) => {
-    if (!input) return null;
+  // MapService.normalize() handles all input formats (string, array, object)
+  // and returns [lat, lng] consistently
+  const result = await mapService.getDistance(
+    pickupCoordinates,
+    deliveryCoordinates,
+    profile
+  );
 
-    // if string "lat,lng"
-    if (typeof input === "string") {
-      const parts = input.split(",");
-      if (parts.length !== 2) return null;
-      return [Number(parts[0]), Number(parts[1])];
-    }
-
-    if (!Array.isArray(input)) return null;
-    if (input.length !== 2) return null;
-
-    let a = Number(input[0]);
-    let b = Number(input[1]);
-
-    if (Number.isNaN(a) || Number.isNaN(b)) return null;
-
-    // detect lng,lat → swap
-    if (Math.abs(a) > 90 && Math.abs(b) <= 90) {
-      return [b, a];
-    }
-
-    return [a, b];
-  };
-
-  const pickup = normalize(pickupCoordinates);
-  const delivery = normalize(deliveryCoordinates);
-
-  if (!pickup || !delivery) {
-    console.log("Error: invalid input after normalization");
-    throw new Error("Invalid coordinates to find the distance");
-  }
-
-  const [pickLat, pickLng] = pickup;
-  const [delLat, delLng] = delivery;
-
-  // MapMyIndia expects lng,lat
-  const url = `https://apis.mapmyindia.com/advancedmaps/v1/${
-    process.env.MapMyIndiaAPIKey
-  }/distance_matrix/${profile}/${pickLng},${pickLat};${delLng},${delLat}`;
-
-  console.log("Distance URL:", url);
-
-  const { data } = await axios.get(url);
-
-  console.log("MapMyIndia response:", JSON.stringify(data, null, 2));
-
-  const matrix = data?.results?.distances?.[0];
-  const durationMatrix = data?.results?.durations?.[0];
-
-  if (!Array.isArray(matrix) || !Array.isArray(durationMatrix)) {
-    throw new Error("No distance matrix returned from MapMyIndia");
-  }
-
-  const distanceMeters = matrix[1] ?? matrix[0];
-  const durationSeconds = durationMatrix[1] ?? durationMatrix[0];
-
-  if (distanceMeters == null) {
-    throw new Error("Distance not found in matrix");
-  }
-
-  const distanceInKM = Number((distanceMeters / 1000).toFixed(2));
-  const durationInMinutes = Math.ceil((durationSeconds || 0) / 60);
-
-  console.log("Distance in KM:", distanceInKM);
-
-  return {
-    distanceInKM,
-    durationInMinutes,
-  };
+  console.log("Distance in KM:", result.distanceInKM);
+  return result;
 };
 
 const getDistanceFromMultipleCoordinates = async (
   coordinates,
   profile = "biking"
 ) => {
-  if (!coordinates || coordinates.length < 2) {
-    throw new Error("At least 2 coordinates required");
-  }
-
-  let totalDistanceMeters = 0;
-  let totalDurationSeconds = 0;
-
-  for (let i = 0; i < coordinates.length - 1; i++) {
-    const from = `${coordinates[i].lng},${coordinates[i].lat}`;
-    const to = `${coordinates[i + 1].lng},${coordinates[i + 1].lat}`;
-
-    const { data } = await axios.get(
-      `https://apis.mapmyindia.com/advancedmaps/v1/${process.env.MapMyIndiaAPIKey}/distance_matrix/${profile}/${from};${to}`
-    );
-
-    const distance = data?.results?.distances?.[0]?.[1];
-    const duration = data?.results?.durations?.[0]?.[1];
-
-    if (!distance || !duration) {
-      throw new Error("Distance API failed");
-    }
-
-    totalDistanceMeters += distance;
-    totalDurationSeconds += duration;
-  }
-
-  const distanceInKM = parseFloat(
-    (totalDistanceMeters / 1000).toFixed(2)
-  );
-
-  const durationInMinutes = Math.ceil(
-    totalDurationSeconds / 60
-  );
-
-  return { distanceInKM, durationInMinutes };
+  // Delegates to MapService which handles caching per segment
+  return mapService.getDistanceMulti(coordinates, profile);
 };
 
 // const getDistanceFromMultipleCoordinates = async (

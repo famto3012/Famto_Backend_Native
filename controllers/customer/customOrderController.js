@@ -11,8 +11,8 @@ const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const ActivityLog = require("../../models/ActivityLog");
 
 const appError = require("../../utils/appError");
+const mapService = require("../../services/MapService");
 const {
-  getDistanceFromPickupToDelivery,
   getDeliveryAndSurgeCharge,
 } = require("../../utils/customerAppHelpers");
 const {
@@ -23,6 +23,7 @@ const { formatDate, formatTime } = require("../../utils/formatters");
 const { sendSocketDataAndNotification } = require("../../utils/socketHelper");
 
 const { findRolesToNotify } = require("../../socket/socket");
+const { geoLocation } = require("../../utils/getGeoLocation");
 
 const addShopController = async (req, res, next) => {
   try {
@@ -49,7 +50,7 @@ const addShopController = async (req, res, next) => {
       deliveryLocation = customer.customerDetails.location;
 
       const { distanceInKM, durationInMinutes } =
-        await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
+        await mapService.getDistance(pickupLocation, deliveryLocation);
 
       distance = distanceInKM;
       duration = durationInMinutes;
@@ -401,7 +402,7 @@ const addDeliveryAddressController = async (req, res, next) => {
       deliveryLocation = deliveryCoordinates;
 
       const { distanceInKM, durationInMinutes } =
-        await getDistanceFromPickupToDelivery(pickupLocation, deliveryLocation);
+        await mapService.getDistance(pickupLocation, deliveryLocation);
 
       distance = parseFloat(distanceInKM);
       duration = parseInt(durationInMinutes);
@@ -562,6 +563,34 @@ const confirmCustomOrderController = async (req, res, next) => {
 
     if (!customer) return next(appError("Customer not found", 404));
     if (!cart) return next(appError("Cart not found", 404));
+
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Custom Order uses the same PickAndCustomCart schema as Pick & Drop.
+    // Validate the first pickup address coordinates against active geofences
+    // at the final order-creation gateway. This file had NO geofence check
+    // at all — it was the most exposed gap.
+    const firstPickup = cart.pickups?.[0];
+    if (
+      !firstPickup?.location ||
+      !Array.isArray(firstPickup.location) ||
+      firstPickup.location.length < 2
+    ) {
+      return next(
+        appError("Pickup location coordinates are missing or invalid", 400),
+      );
+    }
+    const orderGeofence = await geoLocation(
+      firstPickup.location[0],
+      firstPickup.location[1],
+    );
+    if (!orderGeofence) {
+      return next(
+        appError(
+          "Pickup location is outside our service area. Please choose a different pickup address.",
+          400,
+        ),
+      );
+    }
 
     const orderAmount =
       cart.billDetail.discountedGrandTotal ||

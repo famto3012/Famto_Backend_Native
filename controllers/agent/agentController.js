@@ -18,6 +18,8 @@ const NotificationSetting = require("../../models/NotificationSetting");
 const AgentNotificationLogs = require("../../models/AgentNotificationLog");
 const AgentAnnouncementLogs = require("../../models/AgentAnnouncementLog");
 const AgentAppCustomization = require("../../models/AgentAppCustomization");
+const CustomerAppCustomization = require("../../models/CustomerAppCustomization");
+const Tax = require("../../models/Tax");
 
 const {
   sendSocketData,
@@ -45,10 +47,8 @@ const {
   updateCustomerSubscriptionCount,
   updateAgentDetailsForBatch,
 } = require("../../utils/agentAppHelpers");
+const mapService = require("../../services/MapService");
 const { formatDate, formatTime } = require("../../utils/formatters");
-const {
-  getDistanceFromPickupToDelivery,
-} = require("../../utils/customerAppHelpers");
 const {
   createRazorpayOrderId,
   verifyPayment,
@@ -1728,11 +1728,25 @@ const addCustomOrderItemPriceController = async (req, res, next) => {
 
     const updatedSubTotal = updatedItemTotal + deliveryCharge + surgePrice;
 
-    // Grand total is recalculated based on adjusted totals
-    const updatedGrandTotal = updatedSubTotal;
+    // ── Recalculate tax on the full taxable base ──
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "customOrderCustomization"
+    );
+    const taxId = appCustomization?.customOrderCustomization?.taxId;
+    let taxAmount = 0;
+    if (taxId) {
+      const taxFound = await Tax.findById(taxId);
+      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
+        const taxableBase = updatedItemTotal + deliveryCharge + surgePrice;
+        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      }
+    }
+
+    const updatedGrandTotal = updatedSubTotal + taxAmount;
 
     // Update the order's billing details
     orderFound.billDetail.itemTotal = parseFloat(updatedItemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = taxAmount;
     orderFound.billDetail.subTotal = parseFloat(updatedSubTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(updatedGrandTotal.toFixed(2));
 
@@ -1856,13 +1870,28 @@ const addHomeDeliveryItemController = async (req, res, next) => {
     const deliveryCharge = orderFound.billDetail.deliveryCharge || 0;
     const surgePrice = orderFound.billDetail.surgePrice || 0;
     const addedTip = orderFound.billDetail.addedTip || 0;
-    const taxAmount = orderFound.billDetail.taxAmount || 0;
     const discountedAmount = orderFound.billDetail.discountedAmount || 0;
 
-    const subTotal = itemTotal + deliveryCharge + surgePrice + taxAmount;
-    const grandTotal = subTotal + addedTip - discountedAmount;
+    const subTotal = itemTotal + deliveryCharge + surgePrice;
+
+    // ── Recalculate tax on the full taxable base ──
+    const appCustomization = await CustomerAppCustomization.findOne({}).select(
+      "customOrderCustomization"
+    );
+    const taxId = appCustomization?.customOrderCustomization?.taxId;
+    let taxAmount = 0;
+    if (taxId) {
+      const taxFound = await Tax.findById(taxId);
+      if (taxFound && taxFound.status && taxFound.taxType === "Percentage") {
+        const taxableBase = itemTotal + deliveryCharge + surgePrice;
+        taxAmount = parseFloat(((taxableBase * taxFound.tax) / 100).toFixed(2));
+      }
+    }
+
+    const grandTotal = subTotal + addedTip - discountedAmount + taxAmount;
 
     orderFound.billDetail.itemTotal = parseFloat(itemTotal.toFixed(2));
+    orderFound.billDetail.taxAmount = taxAmount;
     orderFound.billDetail.subTotal = parseFloat(subTotal.toFixed(2));
     orderFound.billDetail.grandTotal = parseFloat(grandTotal.toFixed(2));
 
@@ -2773,7 +2802,7 @@ const updateCustomOrderStatusController = async (req, res, next) => {
     //   shopUpdates?.length !== 1 &&
     //   orderFound?.orderDetail?.pickupLocation?.length === 2
     // ) {
-    const { distanceInKM } = await getDistanceFromPickupToDelivery(
+    const { distanceInKM } = await mapService.getDistance(
       lastLocation,
       location
     );

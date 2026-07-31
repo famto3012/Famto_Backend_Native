@@ -16,14 +16,16 @@ const PickAndCustomCart = require("../../models/PickAndCustomCart");
 const ScheduledOrder = require("../../models/ScheduledOrder");
 const TemporaryOrder = require("../../models/TemporaryOrder");
 const SubscriptionLog = require("../../models/SubscriptionLog");
+const CustomerSubscription = require("../../models/CustomerSubscription");
 const BusinessCategory = require("../../models/BusinessCategory");
 const CustomerTransaction = require("../../models/CustomerTransactionDetail");
 const CustomerWalletTransaction = require("../../models/CustomerWalletTransaction");
 const WebhookEvent = require("../../models/WebhookEvent");
 
+const mapService = require("../../services/MapService");
+
 const {
   sortMerchantsBySponsorship,
-  getDistanceFromPickupToDelivery,
   calculateDiscountedPrice,
   filterProductIdAndQuantity,
   fetchCustomerAndMerchantAndCart,
@@ -517,7 +519,7 @@ const getMerchantData = async (req, res, next) => {
 
         const customerLocation = [Number(latitude), Number(longitude)];
 
-        const distance = await getDistanceFromPickupToDelivery(
+        const distance = await mapService.getDistance(
           merchantLocation,
           customerLocation,
         );
@@ -2036,27 +2038,52 @@ const confirmOrderDetailController = async (req, res, next) => {
       if (subscriptionLog) {
         const now = new Date();
 
+        // Check subscription is active (inclusive date range, within order limit)
         if (
           new Date(subscriptionLog.startDate) <= now &&
           new Date(subscriptionLog.endDate) >= now &&
           (subscriptionLog.maxOrders === null ||
             subscriptionLog.currentNumberOfOrders < subscriptionLog.maxOrders)
         ) {
-          // Check distance limit for free delivery
-          const orderDistance = Number(distance);
-          const exceedsDistanceLimit =
-            subscriptionLog.maxFreeDistanceKm !== null &&
-            !isNaN(orderDistance) &&
-            orderDistance > subscriptionLog.maxFreeDistanceKm;
+          // Fetch the plan definition to get delivery benefit settings
+          const subscriptionPlan = await CustomerSubscription.findById(
+            subscriptionLog.planId,
+          ).lean();
 
-          if (exceedsDistanceLimit) {
-            // Distance too far — no free delivery, no slot consumed
-            actualDeliveryCharge = oneTimeDeliveryCharge;
+          if (subscriptionPlan) {
+            const benefitType = subscriptionPlan.deliveryBenefitType || "free";
+            const benefitValue = subscriptionPlan.deliveryBenefitValue || 0;
+
+            if (benefitType === "percentage") {
+              // Reduce delivery charge by X%
+              const discount = (oneTimeDeliveryCharge * benefitValue) / 100;
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - discount,
+              );
+            } else if (benefitType === "fixed") {
+              // Reduce delivery charge by ₹X (floor 0)
+              actualDeliveryCharge = Math.max(
+                0,
+                oneTimeDeliveryCharge - benefitValue,
+              );
+            } else {
+              // "free" — no delivery charge
+              // Check if a distance cap is set; if so, only free when distance ≤ cap
+              const freeKm = subscriptionPlan.freeDeliveryUpToKm || 0;
+              if (freeKm > 0 && distance > freeKm) {
+                // Distance exceeds free-delivery cap — charge full price
+                actualDeliveryCharge = oneTimeDeliveryCharge;
+              } else {
+                // Free delivery applies — also consume a slot
+                actualDeliveryCharge = 0;
+                subscriptionLog.currentNumberOfOrders += 1;
+                await subscriptionLog.save();
+              }
+            }
           } else {
-            // Within distance limit or no limit set — apply free delivery
+            // Plan not found — fall back to free to avoid breaking existing subs
             actualDeliveryCharge = 0;
-            subscriptionLog.currentNumberOfOrders += 1;
-            await subscriptionLog.save();
           }
         }
       }
@@ -2168,6 +2195,30 @@ const orderPaymentController = async (req, res, next) => {
     const merchant = await Merchant.findById(cart.merchantId);
 
     if (!merchant) return next(appError("Merchant not found", 404));
+
+    // ── Geofence validation ─────────────────────────────────────────────
+    // Re-validate the delivery address against active geofences at the
+    // final order-creation gateway. The coordinates were validated earlier
+    // in confirmOrderDetailController (checkpoint), but the geofence could
+    // have been deleted/resized, or the cart data could have been tampered
+    // with between that step and this one.
+    // Home Delivery → validate cart.cartDetail.deliveryLocation
+    const deliveryLocation = cart.cartDetail?.deliveryLocation;
+    if (!Array.isArray(deliveryLocation) || deliveryLocation.length < 2) {
+      return next(appError("Delivery location coordinates are missing", 400));
+    }
+    const orderGeofence = await geoLocation(
+      deliveryLocation[0],
+      deliveryLocation[1],
+    );
+    if (!orderGeofence) {
+      return next(
+        appError(
+          "Delivery address is outside our service area. Please choose a different address.",
+          400,
+        ),
+      );
+    }
 
     const deliveryTimeMinutes = parseInt(
       merchant.merchantDetail.deliveryTime,
