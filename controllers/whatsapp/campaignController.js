@@ -5,6 +5,9 @@ const WhatsappMessage = require("../../models/WhatsappMessage");
 const WhatsappConversation = require("../../models/WhatsappConversation");
 const appError = require("../../utils/appError");
 const { logCampaignEvent } = require("../../utils/errorLogger");
+const { sendMetaMessage } = require("../../utils/whatsappApi");
+const { sendSocketData } = require("../../socket/socket");
+const { formatCampaign } = require("../../utils/whatsappFormatters");
 
 const BUILTIN_AUDIENCES = [
   "All opted-in customers",
@@ -51,10 +54,6 @@ const resolveAudience = async (audience, maxRecipients) => {
   const contacts = await query;
   return contacts.map((c) => c.waId).filter(Boolean);
 };
-const { sendMetaMessage } = require("../../utils/whatsappApi");
-const { sendSocketData } = require("../../socket/socket");
-const { formatCampaign } = require("../../utils/whatsappFormatters");
-
 const getCampaigns = async (req, res, next) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
@@ -92,8 +91,6 @@ const getCampaigns = async (req, res, next) => {
 
 const createCampaign = async (req, res, next) => {
   try {
-    console.log("Body:", req.body);
-
     const {
       name,
       templateId,
@@ -287,8 +284,26 @@ const buildComponentsFromTemplate = (template) => {
        // CRITICAL: In template messages, header content is sent directly (not as parameters).
        // The image link or text should be part of the header component itself, NOT wrapped in parameters.
        if (comp.format === 'IMAGE') {
-         const rawHandle = comp.example?.header_handle?.[0] || comp.image_url || '';
-         const imageLink = rawHandle.replace(/^@url:`|`$/g, '').trim();
+         // Prefer the project's env header image (Firebase URL) over Meta's
+         // expiring CDN header_handle. Meta silently drops sends whose image.link
+         // is a scontent.whatsapp.net URL (its own CDN handle is only valid for
+         // the template preview, not for send-time).
+         // Explicit per-template map — env names are NOT mechanical
+         // (welcome_famto → WHATSAPP_WELCOME_HEADER_IMAGE, not _WELCOME_FAMTO_).
+         const templateName = template?.name || "";
+         const envKey =
+           {
+             welcome_famto: "WHATSAPP_WELCOME_HEADER_IMAGE",
+             cart_reminder: "WHATSAPP_CART_REMINDER_HEADER_IMAGE",
+             order_tracking: "WHATSAPP_ORDER_TRACKING_HEADER_IMAGE",
+           }[templateName] || "";
+         const envImage = (envKey && process.env[envKey]) || "";
+         const rawHandle =
+           (envImage && String(envImage).replace(/^@url:`|`$/g, "").trim()) ||
+           comp.example?.header_handle?.[0] ||
+           comp.image_url ||
+           "";
+         const imageLink = rawHandle.replace(/^@url:`|`$/g, "").trim();
          if (imageLink) {
            sendComponents.push({
              type: 'header',
@@ -487,7 +502,10 @@ const getCampaignEvents = async (req, res, next) => {
   try {
     const { campaignId } = req.params;
 
-    const campaign = await WhatsappCampaign.findById(campaignId)
+    const campaign = await WhatsappCampaign.findOne({
+      _id: campaignId,
+      createdBy: req.userAuth,
+    })
       .select("name status stats events sentAt")
       .lean();
 
