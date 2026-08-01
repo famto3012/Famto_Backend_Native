@@ -30,9 +30,12 @@ exports.creditMilestoneBonus = async (orderInput) => {
     const grandTotal = order.billDetail?.grandTotal || 0;
     if (grandTotal < MIN_ORDER_AMOUNT) return;
 
-    // For COD orders, only credit after payment is collected
+    // For COD orders, only credit after delivery completed AND payment collected
     if (order.paymentMode === "Cash-on-delivery") {
-      if (order.paymentCollectedFromCustomer !== "Completed") {
+      if (
+        order.paymentCollectedFromCustomer !== "Completed" ||
+        order.status !== "Completed"
+      ) {
         console.log(
           `[BONUS] Skipping bonus for COD order ${order._id} - payment not collected yet`
         );
