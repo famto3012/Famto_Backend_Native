@@ -111,7 +111,7 @@ const sendTemplateMessage = async (
   if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
   // Load template once for header + body param names
-  const template = await WhatsappTemplate.findOne({ name: templateName }).select("components").lean();
+  const template = await WhatsappTemplate.findOne({ name: templateName }).select("components language").lean();
   const components = template?.components || [];
   const headerComp = components.find((c) => c.type === "HEADER");
   const bodyComp = components.find((c) => c.type === "BODY");
@@ -119,12 +119,23 @@ const sendTemplateMessage = async (
     (m) => m.replace(/\{\{|\}\}/g, "").trim()
   );
 
+  // Meta requires the EXACT language the template was created with.
+  // Default to the template's synced language, then the caller's, then "en".
+  const effectiveLanguage = template?.language || languageCode || "en";
+
   const sendComponents = [];
 
-  // 1. Header component - use provided headerImageUrl, or auto-populate from template
-  let finalHeaderImageUrl = headerImageUrl;
+  // 1. Header component - use provided headerImageUrl, or auto-populate from template.
+  //    CRITICAL: BOTH the env header URLs (WHATSAPP_*_HEADER_IMAGE) and Meta's
+  //    header_handle use the "@url:`https://...`" wrapper (backticks + prefix).
+  //    That wrapper is NOT a valid image.link — Meta silently drops the message
+  //    (200 OK + message ID, but nothing delivered). Strip it from whatever source.
+  let finalHeaderImageUrl = headerImageUrl
+    ? String(headerImageUrl).replace(/^@url:`|`$/g, "").trim() || null
+    : null;
   if (!finalHeaderImageUrl && headerComp && headerComp.format === "IMAGE") {
-    finalHeaderImageUrl = headerComp.example?.header_handle?.[0] || headerComp.image_url || null;
+    const rawHandle = headerComp.example?.header_handle?.[0] || headerComp.image_url || "";
+    finalHeaderImageUrl = rawHandle.replace(/^@url:`|`$/g, "").trim() || null;
   }
   if (finalHeaderImageUrl) {
     sendComponents.push({
@@ -138,7 +149,10 @@ const sendTemplateMessage = async (
     });
   }
 
-  // 2. Body component - use param names from template
+  // 2. Body component - use param names from template.
+  //    Named params ({{customer_name}}) require parameter_name to match the template's
+  //    declared names AND the exact template language. With the effective language now
+  //    aligned, Meta resolves named params correctly.
   if (bodyParams.length > 0) {
     sendComponents.push({
       type: "body",
@@ -157,7 +171,7 @@ const sendTemplateMessage = async (
     type: "template",
     template: {
       name: templateName,
-      language: { code: languageCode },
+      language: { code: effectiveLanguage },
       ...(sendComponents.length > 0 && { components: sendComponents }),
     },
   };

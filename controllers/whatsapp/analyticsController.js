@@ -28,6 +28,7 @@ const getAnalytics = async (req, res, next) => {
       deliveryStatusBreakdown,
       hourlyActivity,
       topTemplates,
+      templateCategoryBreakdown,
       avgResponseTime,
       metaPhoneResult,
     ] = await Promise.allSettled([
@@ -164,6 +165,35 @@ const getAnalytics = async (req, res, next) => {
         { $limit: 10 },
       ]),
 
+      // Template category breakdown (marketing / utility / authentication / other)
+      WhatsappMessage.aggregate([
+        {
+          $match: {
+            messageType: "template",
+            direction: "outbound",
+            timestamp: { $gte: startDate },
+          },
+        },
+        {
+          $lookup: {
+            from: "whatsapptemplates",
+            localField: "templateName",
+            foreignField: "name",
+            as: "tpl",
+          },
+        },
+        { $unwind: { path: "$tpl", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: {
+              category: { $ifNull: ["$tpl.category", "other"] },
+              deliveryStatus: "$deliveryStatus",
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+
       // Average first response time (time from first inbound to first outbound per conversation)
       WhatsappMessage.aggregate([
         { $match: { timestamp: { $gte: startDate } } },
@@ -285,6 +315,29 @@ const getAnalytics = async (req, res, next) => {
 
     const totalDeliveryMsgs = Object.values(delivery).reduce((a, b) => a + b, 0);
 
+    // ── Template category breakdown ──────────────────────────
+    const tplCatData = safe(templateCategoryBreakdown) || [];
+    const tplCatMap = {};
+    tplCatData.forEach((row) => {
+      const cat = (row._id.category || "other").toLowerCase();
+      if (!tplCatMap[cat]) tplCatMap[cat] = { sent: 0, delivered: 0, read: 0, failed: 0 };
+      const status = row._id.deliveryStatus;
+      if (status === "delivered" || status === "read") tplCatMap[cat].delivered += row.count;
+      if (status === "read") tplCatMap[cat].read += row.count;
+      if (status === "failed") tplCatMap[cat].failed += row.count;
+      tplCatMap[cat].sent += row.count;
+    });
+    const templateCategories = Object.entries(tplCatMap)
+      .map(([category, counts]) => ({
+        category,
+        ...counts,
+        deliveryRate:
+          counts.sent > 0
+            ? parseFloat(((counts.delivered / counts.sent) * 100).toFixed(1))
+            : 0,
+      }))
+      .sort((a, b) => b.sent - a.sent);
+
     // ── Hourly activity ──────────────────────────────────────
     const hourlyData = safe(hourlyActivity) || [];
     const hourly = Array.from({ length: 24 }, (_, i) => ({
@@ -372,6 +425,8 @@ const getAnalytics = async (req, res, next) => {
         hourlyActivity: hourly,
 
         topTemplates: templates,
+
+        templateCategories,
 
         campaignFunnel: [
           { label: "Sent", value: totalSent },

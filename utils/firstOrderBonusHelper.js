@@ -19,6 +19,8 @@ const resolveOrderObject = async (orderInput) => {
  * Credit 50rs bonus if customer's first qualifying order (>= 300) completed.
  * One-time only — uses three-state enum: unclaimed / claimed / clawed_back.
  * Non-blocking: never throws, never blocks the completion flow.
+ * 
+ * For COD orders, only credits after payment is collected from customer.
  */
 exports.creditMilestoneBonus = async (orderInput) => {
   try {
@@ -27,6 +29,16 @@ exports.creditMilestoneBonus = async (orderInput) => {
 
     const grandTotal = order.billDetail?.grandTotal || 0;
     if (grandTotal < MIN_ORDER_AMOUNT) return;
+
+    // For COD orders, only credit after payment is collected
+    if (order.paymentMode === "Cash-on-delivery") {
+      if (order.paymentCollectedFromCustomer !== "Completed") {
+        console.log(
+          `[BONUS] Skipping bonus for COD order ${order._id} - payment not collected yet`
+        );
+        return;
+      }
+    }
 
     const customer = await Customer.findById(order.customerId);
     if (!customer) return;
