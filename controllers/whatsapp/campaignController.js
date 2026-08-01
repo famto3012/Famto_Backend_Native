@@ -4,6 +4,7 @@ const WhatsappContact = require("../../models/WhatsappContact");
 const WhatsappMessage = require("../../models/WhatsappMessage");
 const WhatsappConversation = require("../../models/WhatsappConversation");
 const appError = require("../../utils/appError");
+const { logCampaignEvent } = require("../../utils/errorLogger");
 
 const BUILTIN_AUDIENCES = [
   "All opted-in customers",
@@ -267,67 +268,66 @@ const sendCampaign = async (req, res, next) => {
   }
 };
 
+const isValidWaId = (waId) => {
+   // WhatsApp Business API requires waId to be a numeric string
+   // Optional country code prefix (e.g., 919876543210 or 9876543210)
+   const waIdRegex = /^(?:\d{8,15})$/;
+   return waIdRegex.test(String(waId).replace(/^\+/, ''));
+};
+
 const buildComponentsFromTemplate = (template) => {
-  const components = template?.components || [];
-  if (!components.length) return [];
+   const components = template?.components || [];
+   if (!components.length) return [];
 
-  const sendComponents = [];
+   const sendComponents = [];
 
-  for (const comp of components) {
-    if (comp.type === 'HEADER') {
-      // Header with image or text
-      if (comp.format === 'IMAGE') {
-        // Use example image handle from Meta, or image_url if available.
-        // CRITICAL: header_handle is "@url:`https://...`" (internal CDN handle) — strip
-        // the wrapper, same as sendTemplateMessage, or Meta silently drops the message.
-        const rawHandle = comp.example?.header_handle?.[0] || comp.image_url || '';
-        const imageLink = rawHandle.replace(/^@url:`|`$/g, '').trim();
-        if (imageLink) {
-          sendComponents.push({
-            type: 'header',
-            parameters: [{ type: 'image', image: { link: imageLink } }],
-          });
-        }
-      } else if (comp.format === 'TEXT' || comp.text) {
-        const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
-        sendComponents.push({
-          type: 'header',
-          parameters: paramNames.map(name => ({
-            type: 'text',
-            text: '',
-            ...(name && { parameter_name: name }),
-          })),
-        });
-      }
-    } else if (comp.type === 'BODY') {
-      const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
-      if (paramNames.length > 0) {
-        sendComponents.push({
-          type: 'body',
-          parameters: paramNames.map(name => ({
-            type: 'text',
-            text: '',
-            parameter_name: name,
-          })),
-        });
-      }
-    } else if (comp.type === 'FOOTER') {
-      const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
-      if (paramNames.length > 0) {
-        sendComponents.push({
-          type: 'footer',
-          parameters: paramNames.map(name => ({
-            type: 'text',
-            text: '',
-            parameter_name: name,
-          })),
-        });
-      }
-    }
-    // BUTTONS are not sent as components in template messages - they're defined in the template itself
-  }
+   for (const comp of components) {
+     if (comp.type === 'HEADER') {
+       // Header with image or text
+       // CRITICAL: In template messages, header content is sent directly (not as parameters).
+       // The image link or text should be part of the header component itself, NOT wrapped in parameters.
+       if (comp.format === 'IMAGE') {
+         const rawHandle = comp.example?.header_handle?.[0] || comp.image_url || '';
+         const imageLink = rawHandle.replace(/^@url:`|`$/g, '').trim();
+         if (imageLink) {
+           sendComponents.push({
+             type: 'header',
+             parameters: [{ type: 'image', image: { link: imageLink } }],
+           });
+         }
+       } else if (comp.format === 'TEXT' || comp.text) {
+         // Header text is typically static in the template definition
+         // If there are placeholders, they should be in the BODY component instead
+       }
+     } else if (comp.type === 'BODY') {
+       const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
+       if (paramNames.length > 0) {
+         sendComponents.push({
+           type: 'body',
+           parameters: paramNames.map(name => ({
+             type: 'text',
+             text: '',
+             parameter_name: name,
+           })),
+         });
+       }
+     } else if (comp.type === 'FOOTER') {
+       const paramNames = (comp.text?.match(/\{\{([^}]+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, ''));
+       if (paramNames.length > 0) {
+         sendComponents.push({
+           type: 'footer',
+           parameters: paramNames.map(name => ({
+             type: 'text',
+             text: '',
+             parameter_name: name,
+           })),
+         });
+       }
+     }
+     // BUTTONS are not sent as components in template messages - they're defined in the template itself
+   }
 
-  return sendComponents;
+   return sendComponents;
 };
 
 const processCampaignSend = async (campaign, userId) => {
@@ -339,19 +339,31 @@ const processCampaignSend = async (campaign, userId) => {
     ? campaign.templateParams
     : buildComponentsFromTemplate(template);
 
-  console.log("[Campaign] Template:", JSON.stringify({
-    name: template.name,
-    language: template.language,
-    status: template.status,
-    category: template.category,
-  }));
-  console.log("[Campaign] Recipients count:", campaign.recipients.length);
-  console.log("[Campaign] sendComponents:", JSON.stringify(sendComponents));
+  logCampaignEvent("START", `Starting campaign ${campaign._id} to ${campaign.recipients.length} recipients`, {
+    template: template.name,
+    recipients: campaign.recipients.length,
+  });
 
   let sentCount = 0;
   let failedCount = 0;
 
   for (const waId of campaign.recipients) {
+    // Validate waId format before attempting to send
+    if (!isValidWaId(waId)) {
+      logCampaignEvent("INVALID_WAID", `Invalid waId format, skipping: ${waId}`, {
+        waId,
+        template: template.name,
+      });
+      campaign.events.push({
+        waId,
+        status: "failed",
+        failureReason: "Invalid waId format",
+        timestamp: new Date(),
+      });
+      failedCount++;
+      continue;
+    }
+
     try {
       const payload = {
         messaging_product: "whatsapp",
@@ -369,7 +381,12 @@ const processCampaignSend = async (campaign, userId) => {
 
       const metaResponse = await sendMetaMessage(payload);
       const metaMessageId = metaResponse.messages?.[0]?.id;
-      console.log(`[Campaign] Success for ${waId}:`, metaMessageId);
+      logCampaignEvent("SUCCESS", `Successfully sent template to ${waId}`, {
+        waId,
+        template: template.name,
+        metaMessageId,
+        status: "sent",
+      });
 
       // Find or create the conversation for this recipient.
       // WhatsappMessage.conversationId is required, so a campaign message
@@ -402,7 +419,11 @@ const processCampaignSend = async (campaign, userId) => {
         campaignId: campaign._id,
         timestamp: new Date(),
       }).catch((err) => {
-        console.error(`[Campaign] Failed to save message record for ${waId}:`, err.message);
+        logCampaignEvent("MESSAGE_SAVE_FAILED", `Failed to save message record for ${waId}: ${err.message}`, {
+          waId,
+          template: template.name,
+          error: err.message,
+        });
       });
 
       campaign.events.push({
@@ -416,8 +437,12 @@ const processCampaignSend = async (campaign, userId) => {
       const fullError = err.response?.data || err.message;
       const reason =
         err.response?.data?.error?.message || err.message;
-      console.error(`[Campaign] Failed to send to ${waId}:`, JSON.stringify(fullError));
-      console.error(`[Campaign] Status:`, err.response?.status, `Code:`, err.response?.data?.error?.code, `Subcode:`, err.response?.data?.error?.error_subcode);
+      logCampaignEvent("SEND_FAILED", `Failed to send template to ${waId}: ${JSON.stringify(fullError)}`, {
+        waId,
+        template: template.name,
+        status: "failed",
+        error: reason,
+      });
 
       campaign.events.push({
         waId,
@@ -442,6 +467,14 @@ const processCampaignSend = async (campaign, userId) => {
         : "completed";
 
   await campaign.save();
+
+  logCampaignEvent("COMPLETED", `Campaign ${campaign._id} completed with ${sentCount} sent, ${failedCount} failed`, {
+    template: template.name,
+    recipients: campaign.recipients.length,
+    sent: sentCount,
+    failed: failedCount,
+    status: campaign.status,
+  });
 
   sendSocketData(userId, "whatsapp:campaign:event", {
     campaignId: campaign._id,
