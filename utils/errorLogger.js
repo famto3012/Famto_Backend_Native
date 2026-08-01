@@ -3,6 +3,7 @@ const path = require("path");
 const moment = require("moment-timezone");
 
 const logDir = path.join(__dirname, "..", "middlewares", "logs");
+const campaignLogDir = path.join(__dirname, "..", "middlewares", "logs", "whatsapp", "campaigns");
 
 const logError = (message, extra = {}) => {
   const now = moment().tz("Asia/Kolkata");
@@ -29,4 +30,29 @@ ${extra.stack ? `Stack: ${extra.stack}\n` : ""}${extra.orderId ? `OrderId: ${ext
   });
 };
 
-module.exports = { logError };
+const logCampaignEvent = (eventType, message, extra = {}) => {
+  const now = moment().tz("Asia/Kolkata");
+  const logFileName = `campaign-${now.format("YYYY-MM-DD")}.log`;
+  const logFilePath = path.join(campaignLogDir, logFileName);
+
+  const log = `
+[${now.format()}] // ISO format in IST
+Event: ${eventType}
+Message: ${message}
+${extra.template ? `Template: ${extra.template}\n` : ""}${extra.recipients !== undefined ? `Recipients: ${extra.recipients}\n` : ""}${extra.waId ? `WaId: ${extra.waId}\n` : ""}${extra.status ? `Status: ${extra.status}\n` : ""}${extra.error ? `Error: ${extra.error}\n` : ""}--------------------------------------------------------
+`;
+
+  fs.mkdir(campaignLogDir, { recursive: true }, (dirErr) => {
+    if (dirErr) {
+      console.error("Could not create campaign logs directory:", dirErr);
+    } else {
+      fs.appendFile(logFilePath, log, (fileErr) => {
+        if (fileErr) {
+          console.error("Failed to write campaign log to file:", fileErr);
+        }
+      });
+    }
+  });
+};
+
+module.exports = { logError, logCampaignEvent };

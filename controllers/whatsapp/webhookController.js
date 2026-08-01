@@ -274,12 +274,26 @@ const handleStatusUpdate = async (status) => {
     });
   }
 
-  // Also update campaign events if this message belongs to one
-  if (mapped === "delivered" || mapped === "read" || mapped === "failed") {
+  // Also update campaign events if this message belongs to one.
+  // Forward-only transitions so webhook retries can't double-count stats
+  // or regress a status (delivered only from sent; read only from sent/delivered).
+  if (mapped === "delivered" || mapped === "read") {
+    const from = mapped === "delivered" ? ["sent"] : ["sent", "delivered"];
+    await WhatsappCampaign.updateOne(
+      { events: { $elemMatch: { metaMessageId, status: { $in: from } } } },
+      {
+        $set: { "events.$.status": mapped },
+        $inc: { [`stats.${mapped}`]: 1 },
+      }
+    );
+  } else if (mapped === "failed") {
     await WhatsappCampaign.updateOne(
       { "events.metaMessageId": metaMessageId },
       {
-        $set: { "events.$.status": mapped },
+        $set: {
+          "events.$.status": mapped,
+          "events.$.failureReason": status.errors?.[0]?.title || "Unknown error",
+        },
       }
     );
   }
