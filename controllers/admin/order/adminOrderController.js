@@ -3360,6 +3360,9 @@ const markPaymentCollectedFromCustomer = async (req, res, next) => {
       return next(appError("Order not found", 404));
     }
 
+    // COD: bonus is gated on payment collection — re-trigger now that cash is received
+    await creditMilestoneBonus(updatedOrder);
+
     res.status(200).json({ success: true, message: "Payment status updated" });
   } catch (err) {
     next(appError(err.message));
