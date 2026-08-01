@@ -179,13 +179,6 @@ const processOrderService = async (tempOrder) => {
 
     await session.commitTransaction();
 
-    // Fire-and-forget: credit milestone bonus — non-blocking, never throws
-    setImmediate(() => {
-      creditMilestoneBonus(finalOrder._id).catch(err =>
-        console.error("[BONUS] async credit failed:", err.message)
-      );
-    });
-
     return finalOrder;
   } catch (err) {
     await session.abortTransaction();

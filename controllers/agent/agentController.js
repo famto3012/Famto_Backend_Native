@@ -47,6 +47,7 @@ const {
   updateCustomerSubscriptionCount,
   updateAgentDetailsForBatch,
 } = require("../../utils/agentAppHelpers");
+const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
 const mapService = require("../../services/MapService");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const {
@@ -2399,6 +2400,7 @@ const completeOrderController = async (req, res, next) => {
       orderFound.save(),
       customerFound.save(),
       agentFound.save(),
+      creditMilestoneBonus(orderFound),
     ]);
 
     console.log("✅ Agent after save check...");
