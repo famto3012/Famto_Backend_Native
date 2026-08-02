@@ -636,12 +636,12 @@ cron.schedule(
             .map((name, i) => `${i + 1}. ${name}`)
             .join("\n");
 
-          await sendCartReminderMessage(
-            customer.phoneNumber,
+          await sendCartReminderMessage({
+            phoneNumber: customer.phoneNumber,
             customerName,
             merchantName,
-            productList
-          );
+            productList,
+          });
         } catch (innerErr) {
           console.error(
             "[CartReminder] Error sending reminder:",

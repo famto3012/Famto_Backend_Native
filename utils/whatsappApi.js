@@ -208,12 +208,12 @@ const sendWelcomeMessage = async (phoneNumber, name = "") => {
   await sendTemplateMessage(phoneNumber, templateName, bodyParams, lang, headerImage);
 };
 
-const sendCartReminderMessage = async (
+const sendCartReminderMessage = async ({
   phoneNumber,
   customerName,
   merchantName,
-  productList
-) => {
+  productList,
+}) => {
   const templateName =
     process.env.WHATSAPP_CART_REMINDER_TEMPLATE || "cart_reminder";
   const lang = await getTemplateLanguage(templateName);
@@ -225,19 +225,16 @@ const sendCartReminderMessage = async (
   ], lang, headerImage);
 };
 
-const sendOrderTrackingMessage = async (
+const sendOrderTrackingMessage = async ({
   phoneNumber,
   customerName,
-  merchantName
-) => {
+  merchantName,
+}) => {
   const templateName =
     process.env.WHATSAPP_ORDER_TRACKING_TEMPLATE || "order_tracking";
   const lang = await getTemplateLanguage(templateName);
   const headerImage = process.env.WHATSAPP_ORDER_TRACKING_HEADER_IMAGE || null;
-  await sendTemplateMessage(phoneNumber, templateName, [
-    customerName,
-    merchantName,
-  ], lang, headerImage);
+  await sendTemplateMessage(phoneNumber, templateName, [customerName, merchantName], lang, headerImage);
 };
 
 module.exports = {
