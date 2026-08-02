@@ -1110,11 +1110,11 @@ const confirmOrderController = async (req, res, next) => {
         const merchantName =
           orderFound.merchantId?.merchantDetail?.merchantName || "your store";
 
-        sendOrderTrackingMessage(
-          customer.phoneNumber,
+        sendOrderTrackingMessage({
+          phoneNumber: customer.phoneNumber,
           customerName,
           merchantName,
-        ).catch((err) =>
+        }).catch((err) =>
           console.error(
             "[WhatsApp] Order tracking message error:",
             err.message,
