@@ -20,7 +20,7 @@ const resolveOrderObject = async (orderInput) => {
  * One-time only — uses three-state enum: unclaimed / claimed / clawed_back.
  * Non-blocking: never throws, never blocks the completion flow.
  * 
- * For COD orders, only credits after payment is collected from customer.
+ * Only credits after the order is completed/closed (agent or admin) — all payment modes.
  */
 exports.creditMilestoneBonus = async (orderInput) => {
   try {
@@ -30,18 +30,8 @@ exports.creditMilestoneBonus = async (orderInput) => {
     const grandTotal = order.billDetail?.grandTotal || 0;
     if (grandTotal < MIN_ORDER_AMOUNT) return;
 
-    // For COD orders, only credit after delivery completed AND payment collected
-    if (order.paymentMode === "Cash-on-delivery") {
-      if (
-        order.paymentCollectedFromCustomer !== "Completed" ||
-        order.status !== "Completed"
-      ) {
-        console.log(
-          `[BONUS] Skipping bonus for COD order ${order._id} - payment not collected yet`
-        );
-        return;
-      }
-    }
+    // Only credit once the order is completed/closed (by agent or admin)
+    if (order.status !== "Completed") return;
 
     const customer = await Customer.findById(order.customerId);
     if (!customer) return;
