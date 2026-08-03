@@ -22,11 +22,13 @@ const taxSchema = new mongoose.Schema(
         required: true,
       },
     ],
-    assignToBusinessCategory: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "BusinessCategory",
-      default: null,
-    },
+    assignToBusinessCategory: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BusinessCategory",
+        default: [],
+      },
+    ],
     status: {
       type: Boolean,
       default: true,
