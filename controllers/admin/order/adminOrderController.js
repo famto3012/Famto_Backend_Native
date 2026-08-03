@@ -2950,6 +2950,7 @@ const createOrderByAdminController = async (req, res, next) => {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
       serviceId: cartFound.serviceId,
+      orderSource: "Order Manager",
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,

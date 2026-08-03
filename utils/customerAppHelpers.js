@@ -269,6 +269,7 @@ const createOrdersFromScheduled = async (scheduledOrder) => {
     let options = {
       customerId: scheduledOrder.customerId,
       merchantId: scheduledOrder.merchantId,
+      orderSource: "Customer App",
       scheduledOrderId: scheduledOrder._id,
       pickups: scheduledOrder.pickups,
       drops: mappedDrops,
@@ -417,6 +418,7 @@ const createOrdersFromScheduledPickAndDrop = async (scheduledOrder) => {
     const newOrder = await Order.create({
       customerId: scheduledOrder.customerId,
       merchantId: scheduledOrder.merchantId || null,
+      orderSource: "Customer App",
       pickups: scheduledOrder.pickups,
       drops: mappedDrops,
       billDetail: {

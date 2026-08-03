@@ -130,6 +130,11 @@ const scheduledOrderSchema = mongoose.Schema(
       enum: ["Home Delivery", "Take Away"],
       required: true,
     },
+    orderSource: {
+      type: String,
+      enum: ["Customer App", "Order Manager"],
+      default: "Customer App",
+    },
     deliveryOption: {
       type: String,
       enum: ["On-demand", "Scheduled"],

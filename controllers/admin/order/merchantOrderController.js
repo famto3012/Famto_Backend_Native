@@ -1768,6 +1768,7 @@ const createOrderController = async (req, res, next) => {
       paymentMode,
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
+      orderSource: "Order Manager",
       purchasedItems: orderDetails.purchasedItems,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
@@ -2756,6 +2757,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         itemName: item.itemName,
         quantity: item.quantity,
       })),
+      orderSource: "Order Manager",
       orderDetailStepper: {
         created: {
           by: "External",
