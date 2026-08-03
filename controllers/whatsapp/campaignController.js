@@ -296,6 +296,7 @@ const buildComponentsFromTemplate = (template) => {
              welcome_famto: "WHATSAPP_WELCOME_HEADER_IMAGE",
              cart_reminder: "WHATSAPP_CART_REMINDER_HEADER_IMAGE",
              order_tracking: "WHATSAPP_ORDER_TRACKING_HEADER_IMAGE",
+             medicine_home_delivery: "WHATSAPP_MEDICINE_IMAGE",
            }[templateName] || "";
          const envImage = (envKey && process.env[envKey]) || "";
          const rawHandle =
