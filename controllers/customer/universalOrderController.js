@@ -2355,6 +2355,7 @@ const orderPaymentController = async (req, res, next) => {
         const newOrderCreated = await ScheduledOrder.create({
           customerId,
           merchantId: cart.merchantId,
+          orderSource: "Customer App",
           pickups,
           drops,
           billDetail: orderBill,

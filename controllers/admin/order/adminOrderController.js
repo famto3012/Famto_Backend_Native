@@ -85,6 +85,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
       status,
       paymentMode,
       deliveryMode,
+      orderSource,
       merchantId,
       startDate,
       endDate,
@@ -113,6 +114,10 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
+    }
+
+    if (orderSource && orderSource?.trim()?.toLowerCase() !== "all") {
+      filterCriteria["orderSource"] = orderSource.trim();
     }
 
     if (merchantId && merchantId?.trim()?.toLowerCase() !== "all") {
@@ -182,6 +187,7 @@ const fetchAllOrdersByAdminController = async (req, res, next) => {
           null,
         assignedAgent: order?.agentId?.fullName || "Unassigned",
         deliveryMode: order?.deliveryMode || null,
+        orderSource: order?.orderSource || "-",
         orderDate: formatDate(order?.createdAt) || null,
         orderTime: formatTime(order?.createdAt) || null,
         deliveryDate: order?.deliveryTime
@@ -217,6 +223,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
       status,
       paymentMode,
       deliveryMode,
+      orderSource,
       merchantId,
       startDate,
       endDate,
@@ -249,6 +256,10 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
+    }
+
+    if (orderSource && orderSource.trim().toLowerCase() !== "all") {
+      filterCriteria["orderSource"] = orderSource.trim();
     }
 
     if (merchantId && merchantId.trim().toLowerCase() !== "all") {
@@ -340,6 +351,7 @@ const fetchAllScheduledOrdersByAdminController = async (req, res, next) => {
           order?.drops?.[0]?.deliveryAddress?.fullName ||
           "-",
         deliveryMode: order?.deliveryMode,
+        orderSource: order?.orderSource || "-",
         orderDate: formatDate(order?.createdAt),
         orderTime: formatTime(order?.createdAt),
         deliveryDate: order?.time ? formatDate(order?.time) : "-",
@@ -942,6 +954,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
         agentName: order?.agentId?.fullName || "-",
         agentPhoneNumber: order?.agentId?.phoneNumber || "-",
         deliveryMode: order?.deliveryMode || "-",
+        orderSource: order?.orderSource || "-",
         orderTime: `${formatDate(order?.createdAt)} | ${formatTime(order?.createdAt)}`,
         deliveryTime: `${formatDate(order?.deliveryTime)} | ${formatTime(order?.deliveryTime)}`,
         paymentMode: order?.paymentMode || "-",
@@ -1036,6 +1049,7 @@ const downloadOrdersCSVByAdminController = async (req, res, next) => {
       { id: "agentName", title: "Agent Name" },
       { id: "agentPhoneNumber", title: "Agent Phone Number" },
       { id: "deliveryMode", title: "Delivery Mode" },
+      { id: "orderSource", title: "Source" },
       { id: "orderTime", title: "Order Time" },
       { id: "deliveryTime", title: "Delivery Time" },
       { id: "paymentMode", title: "Payment Mode" },
@@ -2950,6 +2964,7 @@ const createOrderByAdminController = async (req, res, next) => {
       customerId: cartFound.customerId,
       merchantId: cartFound.merchantId,
       serviceId: cartFound.serviceId,
+      orderSource: "Order Manager",
       deliveryMode,
       deliveryOption:
         cartFound.cartDetail?.deliveryOption || cartFound.deliveryOption,

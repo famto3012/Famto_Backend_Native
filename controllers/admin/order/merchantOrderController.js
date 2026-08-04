@@ -360,6 +360,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
       status,
       paymentMode,
       deliveryMode,
+      orderSource,
       startDate,
       endDate,
       orderId,
@@ -403,6 +404,10 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
+    }
+
+    if (orderSource && orderSource.trim().toLowerCase() !== "all") {
+      filterCriteria["orderSource"] = orderSource.trim();
     }
 
     if (orderId && orderId !== "") {
@@ -472,6 +477,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
             order.orderDetail?.deliveryAddress?.fullName ||
             "-",
           deliveryMode: order?.deliveryMode || null,
+          orderSource: order?.orderSource || "-",
           orderDate: formatDate(order.createdAt),
           orderTime: formatTime(order.createdAt),
           deliveryDate: order?.deliveryTime
@@ -1768,6 +1774,7 @@ const createOrderController = async (req, res, next) => {
       paymentMode,
       paymentStatus:
         paymentMode === "Cash-on-delivery" ? "Pending" : "Completed",
+      orderSource: "Order Manager",
       purchasedItems: orderDetails.purchasedItems,
       "orderDetailStepper.created": {
         by: `${req.userRole} - ${req.userName}`,
@@ -2756,6 +2763,7 @@ const createOrderFromExternalMerchant = async (req, res, next) => {
         itemName: item.itemName,
         quantity: item.quantity,
       })),
+      orderSource: "Order Manager",
       orderDetailStepper: {
         created: {
           by: "External",

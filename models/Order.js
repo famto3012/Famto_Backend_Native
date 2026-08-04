@@ -273,6 +273,10 @@ const orderSchema = mongoose.Schema(
       enum: ["Home Delivery", "Take Away", "Pick and Drop", "Custom Order"],
       required: true,
     },
+    orderSource: {
+      type: String,
+      enum: ["Customer App", "Order Manager"],
+    },
     deliveryOption: {
       type: String,
       enum: ["On-demand", "Scheduled"],
