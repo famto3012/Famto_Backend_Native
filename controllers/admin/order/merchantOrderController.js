@@ -360,6 +360,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
       status,
       paymentMode,
       deliveryMode,
+      orderSource,
       startDate,
       endDate,
       orderId,
@@ -403,6 +404,10 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
         $regex: deliveryMode.trim(),
         $options: "i",
       };
+    }
+
+    if (orderSource && orderSource.trim().toLowerCase() !== "all") {
+      filterCriteria["orderSource"] = orderSource.trim();
     }
 
     if (orderId && orderId !== "") {
@@ -472,6 +477,7 @@ const fetchAllOrderOfMerchant = async (req, res, next) => {
             order.orderDetail?.deliveryAddress?.fullName ||
             "-",
           deliveryMode: order?.deliveryMode || null,
+          orderSource: order?.orderSource || "-",
           orderDate: formatDate(order.createdAt),
           orderTime: formatTime(order.createdAt),
           deliveryDate: order?.deliveryTime
