@@ -106,16 +106,14 @@
 
 | Order Path | Model Created | Bonus? | Location |
 |-----------|---------------|--------|----------|
-| Universal → Famto-cash + Scheduled | `ScheduledOrder` | ✅ | `universalOrderController` L2323 |
-| Universal → Famto-cash + On-demand | `Order` (cron) | ✅ | `ProcessOrderService` L184 |
-| Universal → COD/Online → cron | `Order` (cron) | ✅ | `ProcessOrderService` L184 |
+| Agent completes order | `Order` | ✅ (completion-gated) | `agentController` L2403 |
+| Admin marks order completed | `Order` | ✅ (completion-gated) | `adminOrderController` L3340 |
+| Universal order creation | `Order`/`ScheduledOrder` | ⚠️ No-op since gate — status `Pending` at creation | `universalOrderController` L2461 |
 | Pick&Drop → Famto-cash + Scheduled | `ScheduledPickAndCustom` | ⚠️ Silent no-op — see #4 | `pickAndDropController` L1729 |
-| Pick&Drop → Famto-cash + On-demand | `Order` (cron) | ✅ | `ProcessOrderService` L184 |
-| Pick&Drop → Online + On-demand | `Order` (cron) | ✅ | `ProcessOrderService` L184 |
-| CustomOrder → COD (cron) | `Order` (cron) | ✅ | `ProcessOrderService` L184 |
-| Admin mark-complete | any | ✅ | `adminOrderController` L3142 |
-| Admin cancel (clawback) | any | ✅ | `adminOrderController` L3231 |
-| Merchant cancel (clawback) | any | ✅ | `merchantOrderController` L1234 |
+| Admin cancel (clawback) | any | ✅ | `adminOrderController` L3432 |
+| Merchant cancel (clawback) | any | ✅ | `merchantOrderController` L1240 |
+
+> **Rule (2026-08-02):** bonus credits when `order.status === "Completed"` — NO payment-mode condition. COD/online/cash identical. `creditMilestoneBonus` no longer fires at order creation (`ProcessOrderService` call removed in `f36f653`; `universalOrderController` L2461 is a gated no-op).
 
 ### Gaps
 
@@ -126,7 +124,7 @@
 | C | **P0** | Merchant `createOrder` (any type) | Same as B, merchant-side order creation |
 | 4 | **P1** | `resolveOrderObject` only queries `Order` — `ScheduledPickAndCustom` IDs return null | Helper does `Order.findById(stringId)`. ScheduledPickAndCustom IDs (format `SO2507XXX`) live in different collection → `findById` returns null → bonus silently skipped |
 | 6 | **P1** | Response returns pre-bonus balance — `setImmediate` fires bonus *after* `res.json()` | Customer sees stale balance until re-fetch |
-| 7 | **P1** | COD order gets ₹50 bonus before payment collected — no customer-cancel clawback | Bonus fires for all `PAYMENT_COMPLETED` TemporaryOrders including COD. Customer cancel within 60s doesn't revert. |
+| 7 | ~~P1~~ **RESOLVED 2026-08-02** | COD order gets ₹50 bonus before payment collected — no customer-cancel clawback | Bonus is now completion-gated (`order.status === "Completed"`, all payment modes). A cancelled COD order never reaches Completed → no bonus to claw back. Customer cannot cancel a completed order; admin/merchant cancel still claw back (`adminOrderController` L3432, `merchantOrderController` L1240). |
 | 8 | **P2** | Lost update race: concurrent qualifying orders read `walletBalance=0`, both write `0+50=50` | Uses read-modify-write instead of `$inc` |
 | 9 | **P2** | `walletBalance.toFixed(2)` crashes on non-numeric wallet | No guard before `.toFixed()` |
 | 10 | **P3** | `setImmediate` lost on restart/crash — no retry | Fire-and-forget has no persistence/retry |
@@ -149,3 +147,4 @@ No centralized `orderCompleted()` hook. Every creation path calls its own chain 
 
 - **Product search pagination (Jul 2026):** Both merchant-level product search endpoints now support pagination. `searchProductsInMerchantToOrderController` accepts `page`/`limit` params, runs parallel `countDocuments` + paginated `find()` with `.lean()`. `filterAndSortAndSearchProductsController` changed from bare array to `{ data, pagination }`. Previously unbounded endpoint now returns max 50 items per page. Docs at `work/docs/product-search-pagination.md`.
 - **₹50 Wallet Bonus (Jul 2026):** `creditMilestoneBonus` wired into 4 of 6 order completion paths. Helper at `utils/firstOrderBonusHelper.js`: 50rs bonus, min order 300, one-time per customer, 3-state enum. Clawback in admin + merchant cancel paths. 3 gaps remain (A, B, C above).
+- **₹50 Wallet Bonus — completion-gated (Aug 2, 2026):** bonus now credits strictly when `order.status === "Completed"` (agent or admin closes), all payment modes — removed the COD payment-collection gate. Trigger points: `agentController` L2403 + `adminOrderController` L3340. Payment-received endpoint is a pure flag-flip again. Clawback retained (admin cancel has no status guard — can cancel a completed order). Gap 7 resolved.

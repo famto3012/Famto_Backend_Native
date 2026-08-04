@@ -4,6 +4,16 @@ const Tax = require("../../../models/Tax");
 
 const appError = require("../../../utils/appError");
 
+// normalize single (legacy) value OR array into a category array
+const toArray = (value) =>
+  value == null ? [] : Array.isArray(value) ? value : [value];
+
+// after populate, render either shape as comma-joined titles ("-" when empty)
+const toCategoryTitles = (value) => {
+  const titles = toArray(value).map((c) => c?.title ?? c);
+  return titles.length ? titles.join(", ") : "-";
+};
+
 //Add tax
 const addTaxController = async (req, res, next) => {
   const { taxName, tax, taxType, geofences, assignToBusinessCategory } =
@@ -25,22 +35,12 @@ const addTaxController = async (req, res, next) => {
       .replace(/\s+/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
 
-    const taxNameFound = await Tax.findOne({
-      taxName: normalizedTaxName,
-      assignToBusinessCategory,
-    });
-
-    if (taxNameFound) {
-      formattedErrors.taxName = "Tax name already exists";
-      return res.status(409).json({ errors: formattedErrors });
-    }
-
     let newTax = await Tax.create({
       taxName: normalizedTaxName,
       tax,
       taxType,
       geofences,
-      assignToBusinessCategory: assignToBusinessCategory || null,
+      assignToBusinessCategory: toArray(assignToBusinessCategory),
     });
 
     if (!newTax) {
@@ -59,7 +59,9 @@ const addTaxController = async (req, res, next) => {
       geofences: newTax.geofences.map((geofence) => {
         return geofence.name;
       }),
-      assignToBusinessCategory: newTax?.assignToBusinessCategory?.title || "-",
+      assignToBusinessCategory: toCategoryTitles(
+        newTax?.assignToBusinessCategory
+      ),
       status: newTax.status,
     };
 
@@ -95,7 +97,9 @@ const getAllTaxController = async (req, res, next) => {
         geofences: tax.geofences.map((geofence) => {
           return geofence.name;
         }),
-        assignToBusinessCategory: tax?.assignToBusinessCategory?.title || "-",
+        assignToBusinessCategory: toCategoryTitles(
+          tax?.assignToBusinessCategory
+        ),
         status: tax.status,
       };
     });
@@ -156,16 +160,6 @@ const editTaxController = async (req, res, next) => {
       .replace(/\s+/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
 
-    const taxNameFound = await Tax.findOne({
-      _id: { $ne: taxId },
-      taxName: new RegExp(`^${normalizedTaxName}$`, "i"),
-    });
-
-    if (taxNameFound) {
-      formattedErrors.taxName = "Tax name already exists";
-      return res.status(409).json({ errors: formattedErrors });
-    }
-
     let updatedTax = await Tax.findByIdAndUpdate(
       taxId,
       {
@@ -173,7 +167,7 @@ const editTaxController = async (req, res, next) => {
         tax,
         taxType,
         geofences,
-        assignToBusinessCategory: assignToBusinessCategory || null,
+        assignToBusinessCategory: toArray(assignToBusinessCategory),
       },
       { new: true }
     );
@@ -197,8 +191,9 @@ const editTaxController = async (req, res, next) => {
       geofences: updatedTax.geofences.map((geofence) => {
         return geofence.name;
       }),
-      assignToBusinessCategory:
-        updatedTax?.assignToBusinessCategory?.title || "-",
+      assignToBusinessCategory: toCategoryTitles(
+        updatedTax?.assignToBusinessCategory
+      ),
       status: updatedTax.status,
     };
 
