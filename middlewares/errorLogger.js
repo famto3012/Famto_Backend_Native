@@ -1,19 +1,29 @@
-const logger = require('../utils/logger');
+const fs = require("fs");
+const path = require("path");
+const moment = require("moment-timezone");
 
-/**
- * Unified error logger using Pino with rotating file streams
- * Logs are stored in logs/errors/ directory with daily rotation and 14-day retention
- */
+const errorLogger = (message) => {
+  const now = moment().tz("Asia/Kolkata");
+  const formattedDate = now.format("YYYY-MM-DD");
+  const logFileName = `error-${formattedDate}.log`;
+  const logFilePath = path.join(__dirname, "logs", logFileName);
 
-const errorLogger = (message, extra = {}, category = 'general') => {
-  const errorInfo = {
-    message,
-    ...extra,
-    timestamp: new Date().toISOString(),
-  };
+  const log = `
+  Error in ${now.format()}
+  Message: ${message}
+  `;
 
-  logger.error[category](message, errorInfo);
-  return errorInfo;
+  fs.mkdir(path.dirname(logFilePath), { recursive: true }, (dirErr) => {
+    if (dirErr) {
+      console.error("Could not create logs directory:", dirErr);
+    } else {
+      fs.appendFile(logFilePath, log, (fileErr) => {
+        if (fileErr) {
+          console.error("Failed to write error to file:", fileErr);
+        }
+      });
+    }
+  });
 };
 
 module.exports = { errorLogger };
