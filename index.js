@@ -1,15 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
-const morgan = require("morgan");
 const moment = require("moment-timezone");
+const { logError, logInfo, logger } = require("./utils/logger");
 const TemporaryOrder = require("./models/TemporaryOrder");
 const Order = require("./models/Order");
 const CustomerCart = require("./models/CustomerCart");
 const Customer = require("./models/Customer");
 const Merchant = require("./models/Merchant");
 const globalErrorHandler = require("./middlewares/globalErrorHandler");
-const { logError } = require("./utils/errorLogger");
 const { sendCartReminderMessage } = require("./utils/whatsappApi");
 
 const categoryRoute = require("./routes/adminRoute/merchantRoute/categoryRoute/categoryRoute");
@@ -111,9 +110,9 @@ app.use(
   express.raw({ type: "application/json" })
 );
 
-//middlewares
+// Request logging middleware (replaces morgan)
 app.use(express.json({ limit: "10mb" }));
-app.use(morgan("tiny"));
+app.use(require("./utils/logger/requestLogger"));
 app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
