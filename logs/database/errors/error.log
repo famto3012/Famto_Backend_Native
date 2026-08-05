@@ -1,1 +1,0 @@
-{"level":50,"timestamp":"2026-08-05T17:15:36.855Z","app":"Famto_Backend","env":"development","category":"database","host":"localhost","retryCount":3,"type":"DATABASE","msg":"MongoDB connection timeout"}
