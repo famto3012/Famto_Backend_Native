@@ -5,4 +5,6 @@
 .codegpt
 .qodo
 
+# pino logger output (utils/logger/index.js) — never commit runtime logs
+/logs
 /middlewares/logs
