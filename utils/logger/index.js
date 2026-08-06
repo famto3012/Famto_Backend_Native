@@ -166,6 +166,47 @@ const logger = {
       createLogger('api').info(msg, { ...data, type: 'API' }),
   },
 
+  // Warn logs (category accessors must exist even though createLogger routes warn
+  // to the info stream — logWarning calls these directly)
+  warn: {
+    general: (msg, data) =>
+      createLogger('general').warn(msg, { ...data, type: 'WARN' }),
+    whatsapp: (msg, data) =>
+      createLogger('whatsapp').warn(msg, { ...data, type: 'WARN' }),
+    razorpay: (msg, data) =>
+      createLogger('razorpay').warn(msg, { ...data, type: 'WARN' }),
+    cron: (msg, data) =>
+      createLogger('cron').warn(msg, { ...data, type: 'WARN' }),
+    database: (msg, data) =>
+      createLogger('database').warn(msg, { ...data, type: 'WARN' }),
+    http: (msg, data) =>
+      createLogger('http').warn(msg, { ...data, type: 'WARN' }),
+    redis: (msg, data) =>
+      createLogger('redis').warn(msg, { ...data, type: 'WARN' }),
+    api: (msg, data) =>
+      createLogger('api').warn(msg, { ...data, type: 'WARN' }),
+  },
+
+  // Debug logs (only written in non-production; createLogger already guards this)
+  debug: {
+    general: (msg, data) =>
+      createLogger('general').debug(msg, { ...data, type: 'DEBUG' }),
+    whatsapp: (msg, data) =>
+      createLogger('whatsapp').debug(msg, { ...data, type: 'DEBUG' }),
+    razorpay: (msg, data) =>
+      createLogger('razorpay').debug(msg, { ...data, type: 'DEBUG' }),
+    cron: (msg, data) =>
+      createLogger('cron').debug(msg, { ...data, type: 'DEBUG' }),
+    database: (msg, data) =>
+      createLogger('database').debug(msg, { ...data, type: 'DEBUG' }),
+    http: (msg, data) =>
+      createLogger('http').debug(msg, { ...data, type: 'DEBUG' }),
+    redis: (msg, data) =>
+      createLogger('redis').debug(msg, { ...data, type: 'DEBUG' }),
+    api: (msg, data) =>
+      createLogger('api').debug(msg, { ...data, type: 'DEBUG' }),
+  },
+
   // Helper methods
   logError: (error, context = {}, category = 'general') => {
     const errorInfo = {
