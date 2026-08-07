@@ -2589,7 +2589,9 @@ const getAvailableMerchantBusinessCategoriesController = async (
 
 const markScheduledOrderViewedController = async (req, res, next) => {
   try {
-    const { orderId, merchantId } = req.params;
+    const { orderId } = req.params;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
 
     const scheduledOrder = await ScheduledOrder.findOneAndUpdate(
       { _id: orderId, merchantId },

@@ -1583,7 +1583,8 @@ const sponsorshipPaymentController = async (req, res, next) => {
   const { sponsorshipStatus, currentPlan } = req.body;
 
   try {
-    const { merchantId } = req.params;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
 
     const merchantFound = await Merchant.findById(merchantId);
 
@@ -1616,7 +1617,8 @@ const sponsorshipPaymentController = async (req, res, next) => {
 
 // Verify Merchant sponsorship payment by admin
 const verifyPaymentController = async (req, res, next) => {
-  const { merchantId } = req.params;
+  const merchantId =
+    req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
   const paymentDetails = req.body;
 
   try {
@@ -1672,7 +1674,8 @@ const verifyPaymentController = async (req, res, next) => {
 // Directly activate sponsorship by admin/manager (no Razorpay)
 const adminAddSponsorshipController = async (req, res, next) => {
   try {
-    const { merchantId } = req.params;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
     const { currentPlan } = req.body;
 
     if (!currentPlan) {

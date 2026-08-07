@@ -18,6 +18,22 @@ const {
   deleteFromFirebase,
 } = require("../../../../utils/imageOperation");
 
+// Products carry no merchantId; ownership flows through Category.merchantId.
+// For Merchant-role requests, verify the product belongs to the authenticated merchant.
+const isProductOwnedByMerchant = async (product, merchantId) => {
+  if (!product) return false;
+  const category = await Category.findById(product.categoryId)
+    .select("merchantId")
+    .lean();
+  return category && category.merchantId === merchantId;
+};
+
+// Category ids owned by the authenticated merchant (used to scope list/search queries).
+const getMerchantCategoryIds = async (merchantId) => {
+  const categories = await Category.find({ merchantId }).select("_id").lean();
+  return categories.map((c) => c._id);
+};
+
 // ------------------------------------------------------
 // ----------------For Merchant and Admin----------------
 // ------------------------------------------------------
@@ -54,6 +70,16 @@ const addProductController = async (req, res, next) => {
   } = req.body;
 
   try {
+    if (req.userRole === "Merchant") {
+      const category = await Category.findOne({
+        _id: categoryId,
+        merchantId: req.userAuth,
+      })
+        .select("_id")
+        .lean();
+      if (!category) return next(appError("Category not found", 404));
+    }
+
     const existingProduct = await Product.findOne({ productName, categoryId }).lean();
     const category = await Category.findById(categoryId)
       .populate("businessCategoryId")
@@ -123,7 +149,8 @@ const addProductController = async (req, res, next) => {
 
 const getAllProductsByMerchant = async (req, res) => {
   try {
-    const { merchantId } = req.params;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
 
     const categories = await Category.find({ merchantId }).select("_id").lean();
 
@@ -152,6 +179,11 @@ const getProductController = async (req, res, next) => {
     const productFound = await Product.findById(productId).lean();
 
     if (!productFound) return next(appError("Product not found", 404));
+
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(productFound, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
 
     res.status(200).json({ message: "Product data", data: productFound });
   } catch (err) {
@@ -193,15 +225,21 @@ const editProductController = async (req, res, next) => {
   try {
     const { productId } = req.params;
     const productToUpdate = await Product.findById(productId).lean();
+
+    if (!productToUpdate) {
+      return next(appError("Product not found", 404));
+    }
+
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(productToUpdate, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
+
     const category = await Category.findById(productToUpdate.categoryId)
       .populate("businessCategoryId")
       .lean();
     const increasedPercentage =
       category?.businessCategoryId?.increasedPercentage || 5;
-
-    if (!productToUpdate) {
-      return next(appError("Product not found", 404));
-    }
 
     let productImageURL = productToUpdate?.productImageURL;
     if (req.file) {
@@ -273,6 +311,11 @@ const deleteProductController = async (req, res, next) => {
       return next(appError("Product not found", 404));
     }
 
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(productToDelete, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
+
     let productImageURL = productToDelete.productImageURL;
 
     if (productImageURL) {
@@ -299,7 +342,13 @@ const searchProductController = async (req, res, next) => {
 
     const searchTerm = query.trim();
 
+    let categoryIds;
+    if (req.userRole === "Merchant") {
+      categoryIds = await getMerchantCategoryIds(req.userAuth);
+    }
+
     const searchResults = await Product.find({
+      ...(categoryIds ? { categoryId: { $in: categoryIds } } : {}),
       $or: [
         { productName: { $regex: searchTerm, $options: "i" } },
         { searchTags: { $regex: searchTerm, $options: "i" } },
@@ -318,6 +367,16 @@ const searchProductController = async (req, res, next) => {
 const getProductByCategoryController = async (req, res, next) => {
   try {
     const categoryId = req.params.categoryId;
+
+    if (req.userRole === "Merchant") {
+      const category = await Category.findOne({
+        _id: categoryId,
+        merchantId: req.userAuth,
+      })
+        .select("_id")
+        .lean();
+      if (!category) return next(appError("Category not found", 404));
+    }
 
     const productsByCategory = await Product.find({
       categoryId: categoryId,
@@ -345,6 +404,19 @@ const changeProductCategoryController = async (req, res, next) => {
       return next(appError("Product not found", 404));
     }
 
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(productFound, req.userAuth);
+      const targetCategory = await Category.findOne({
+        _id: categoryId,
+        merchantId: req.userAuth,
+      })
+        .select("_id")
+        .lean();
+      if (!owned || !targetCategory) {
+        return next(appError("Product not found", 404));
+      }
+    }
+
     productFound.categoryId = categoryId;
     await productFound.save();
 
@@ -370,6 +442,11 @@ const changeInventoryStatusController = async (req, res, next) => {
       return next(appError("Product not found", 404));
     }
 
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(productFound, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
+
     productFound.inventory = !productFound.inventory;
     await productFound.save();
 
@@ -390,6 +467,13 @@ const updateProductOrderController = async (req, res, next) => {
 
   try {
     for (const product of products) {
+      if (req.userRole === "Merchant") {
+        const existing = await Product.findById(product.id)
+          .select("categoryId")
+          .lean();
+        const owned = await isProductOwnedByMerchant(existing, req.userAuth);
+        if (!owned) return next(appError("Product not found", 404));
+      }
       await Product.findByIdAndUpdate(product.id, {
         order: product.order,
       });
@@ -431,6 +515,12 @@ const addVariantToProductController = async (req, res, next) => {
     if (!product) {
       return next(appError("Product not found", 404));
     }
+
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(product, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
+
     const category = await Category.findById(product.categoryId)
       .populate("businessCategoryId")
       .lean();
@@ -491,6 +581,12 @@ const editVariantController = async (req, res, next) => {
 
     const product = await Product.findById(productId);
     if (!product) return next(appError("Product not found", 404));
+
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(product, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
+    }
+
     const category = await Category.findById(product.categoryId)
       .populate("businessCategoryId")
       .lean();
@@ -569,6 +665,11 @@ const deleteVariantTypeController = async (req, res, next) => {
     const product = await Product.findById(productId);
     if (!product) {
       return next(appError("Product not found", 404));
+    }
+
+    if (req.userRole === "Merchant") {
+      const owned = await isProductOwnedByMerchant(product, req.userAuth);
+      if (!owned) return next(appError("Product not found", 404));
     }
 
     const variant = product.variants.id(variantId);
@@ -714,7 +815,8 @@ const downloadProductSampleCSVController = async (req, res, next) => {
 
 const downloadCobminedProductAndCategoryController = async (req, res, next) => {
   try {
-    const { merchantId } = req.body;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.body.merchantId;
 
     // Find all categories and related products for the given merchant
     const categories = await Category.find({ merchantId })
@@ -835,7 +937,8 @@ const addCategoryAndProductsFromCSVController = async (req, res, next) => {
   let fileUrl = null;
 
   try {
-    const { merchantId } = req.body;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.body.merchantId;
 
     // ── 1. Input validation ──
     if (!merchantId) {

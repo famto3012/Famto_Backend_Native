@@ -153,9 +153,12 @@ const getCommissionLogsByCreatedDate = async (req, res, next) => {
 
     let commissionLogs;
 
-    if (merchantId) {
+    const scopedMerchantId =
+      req.userRole === "Merchant" ? req.userAuth : merchantId;
+
+    if (scopedMerchantId) {
       commissionLogs = await CommissionLogs.find({
-        merchantId,
+        merchantId: scopedMerchantId,
         createdAt: {
           $gte: startDate,
           $lte: endDate,
@@ -182,7 +185,8 @@ const getCommissionLogsByCreatedDate = async (req, res, next) => {
 // TODO: Remove this controller after Panel V2
 const getCommissionLogsByMerchantId = async (req, res) => {
   try {
-    const merchantId = req.params.merchantId;
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
 
     if (!merchantId) return next(appError("Merchant id is required", 400));
 
@@ -208,8 +212,11 @@ const fetchCommissionLogs = async (req, res, next) => {
 
     const filterCriteria = {};
 
-    // If manager, restrict to merchants in their geofences only
-    if (req.geofenceId && req.geofenceId.length > 0) {
+    // Merchant-role users can only ever see their own commission logs
+    if (req.userRole === "Merchant") {
+      filterCriteria.merchantId = req.userAuth;
+    } else if (req.geofenceId && req.geofenceId.length > 0) {
+      // If manager, restrict to merchants in their geofences only
       const merchantsInGeofence = await Merchant.find({
         "merchantDetail.geofenceId": { $in: req.geofenceId },
       })
@@ -230,7 +237,11 @@ const fetchCommissionLogs = async (req, res, next) => {
     }
 
     // Merchant ID filter (only apply if no geofence restriction, or refine within it)
-    if (merchantId && merchantId.toLowerCase() !== "all") {
+    if (
+      merchantId &&
+      merchantId.toLowerCase() !== "all" &&
+      req.userRole !== "Merchant"
+    ) {
       filterCriteria.merchantId = merchantId;
     }
 

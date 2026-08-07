@@ -15,7 +15,9 @@ const {
 
 const getSelectedBusinessCategoriesOfMerchant = async (req, res, next) => {
   try {
-    const { merchantId } = req.params;
+    // Merchant can only read their own business categories
+    const merchantId =
+      req.userRole === "Merchant" ? req.userAuth : req.params.merchantId;
 
     if (!merchantId) return next(appError("Merchant id is required", 400));
 
@@ -615,6 +617,15 @@ const updateCategoryOrderController = async (req, res, next) => {
 
   try {
     for (const category of categories) {
+      if (req.userRole === "Merchant") {
+        const existing = await Category.findOne({
+          _id: category.id,
+          merchantId: req.userAuth,
+        })
+          .select("_id")
+          .lean();
+        if (!existing) return next(appError("Category not found", 404));
+      }
       await Category.findByIdAndUpdate(
         category.id,
         { order: category.order },
