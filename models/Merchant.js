@@ -580,6 +580,7 @@ const merchantDetailSchema = new mongoose.Schema(
     },
     locationImage: { type: String, default: null },
     ratingByCustomers: [ratingByCustomerSchema],
+    qrUrl: { type: String, default: null },
     pancardNumber: { type: String, default: null },
     pancardImageURL: { type: String, default: null },
     GSTINNumber: { type: String, default: null },
