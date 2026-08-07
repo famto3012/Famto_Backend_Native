@@ -1617,6 +1617,8 @@ const addRatingToMerchantController = async (req, res, next) => {
       return next(appError("Merchant not found", 404));
     }
 
+    if (!merchantFound.merchantDetail) merchantFound.merchantDetail = {};
+
     const ratingData = {
       customerId: currentCustomer,
       review,
