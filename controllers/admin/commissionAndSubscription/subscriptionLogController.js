@@ -233,6 +233,8 @@ const createSubscriptionLogUser = async (req, res, next) => {
     const { planId, paymentMode } = req.body;
 
     const userId = req.userAuth;
+    let razorpayOrderId = null;
+    let paymentStatus = "Unpaid";
 
     const merchant = await Merchant.findById(userId);
 
