@@ -5,7 +5,12 @@ const whatsappConversationSchema = new mongoose.Schema(
     waId: {
       type: String,
       required: true,
-      unique: true,
+      index: true,
+    },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
       index: true,
     },
     name: {
@@ -52,6 +57,7 @@ const whatsappConversationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+whatsappConversationSchema.index({ waId: 1, merchantId: 1 }, { unique: true });
 whatsappConversationSchema.index({ "lastMessage.timestamp": -1 });
 whatsappConversationSchema.index({ status: 1, "lastMessage.timestamp": -1 });
 

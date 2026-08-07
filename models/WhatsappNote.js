@@ -8,6 +8,12 @@ const whatsappNoteSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
+      index: true,
+    },
     content: {
       type: String,
       required: true,

@@ -4,8 +4,14 @@ const whatsappTemplateSchema = new mongoose.Schema(
   {
     metaTemplateId: {
       type: String,
-      unique: true,
       sparse: true,
+      index: true,
+    },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
+      index: true,
     },
     name: {
       type: String,
@@ -35,5 +41,8 @@ const whatsappTemplateSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+whatsappTemplateSchema.index({ metaTemplateId: 1, merchantId: 1 }, { unique: true, sparse: true });
+whatsappTemplateSchema.index({ merchantId: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model("WhatsappTemplate", whatsappTemplateSchema);

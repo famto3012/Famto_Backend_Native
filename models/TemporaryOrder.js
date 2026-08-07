@@ -185,6 +185,20 @@ const temporaryOrderSchema = new mongoose.Schema(
 
     paymentMode: String,
 
+    paymentAccountMode: {
+      type: String,
+      enum: ["Own", "Platform"],
+      default: "Platform",
+      index: true,
+    },
+
+    merchantPaymentConfigId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MerchantPaymentConfig",
+      default: null,
+      index: true,
+    },
+
     paymentStatus: {
       type: String,
       enum: [

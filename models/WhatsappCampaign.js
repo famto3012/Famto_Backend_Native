@@ -62,6 +62,12 @@ const whatsappCampaignSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
     },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );

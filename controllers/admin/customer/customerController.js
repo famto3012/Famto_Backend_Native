@@ -382,9 +382,18 @@ const getSingleCustomerController = async (req, res, next) => {
       return next(appError("Customer not found", 404));
     }
 
+    // For Merchant role: verify customer belongs to them AND filter orders to only their orders
+    const isMerchant = req.userRole === "Merchant";
+    const merchantId = isMerchant ? req.userAuth : null;
+
+    let orderQuery = { customerId };
+    if (merchantId) {
+      orderQuery.merchantId = merchantId;
+    }
+
     const [orders, transactions, referredCustomers, referrerCustomer] =
       await Promise.all([
-        Order.find({ customerId })
+        Order.find(orderQuery)
           .populate({ path: "merchantId", select: "merchantDetail" })
           .sort({ createdAt: -1 })
           .limit(50)
@@ -404,6 +413,15 @@ const getSingleCustomerController = async (req, res, next) => {
               .lean()
           : Promise.resolve(null),
       ]);
+
+    // If merchant, verify the customer actually placed orders with them
+    if (merchantId && orders.length === 0) {
+      // Check if customer ever placed order with this merchant
+      const hasAnyOrder = await Order.exists({ customerId, merchantId });
+      if (!hasAnyOrder) {
+        return next(appError("Customer not found for this merchant", 404));
+      }
+    }
 
     const formattedCustomerOrders = orders?.map((order) => {
       const merchantDetail = order?.merchantId?.merchantDetail;

@@ -8,6 +8,12 @@ const whatsappMessageSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
+      index: true,
+    },
     waId: {
       type: String,
       required: true,
@@ -87,5 +93,6 @@ const whatsappMessageSchema = new mongoose.Schema(
 );
 
 whatsappMessageSchema.index({ conversationId: 1, timestamp: -1 });
+whatsappMessageSchema.index({ merchantId: 1, timestamp: -1 });
 
 module.exports = mongoose.model("WhatsappMessage", whatsappMessageSchema);

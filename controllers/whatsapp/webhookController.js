@@ -3,6 +3,7 @@ const WhatsappMessage = require("../../models/WhatsappMessage");
 const WhatsappContact = require("../../models/WhatsappContact");
 const WhatsappTemplate = require("../../models/WhatsappTemplate");
 const WhatsappCampaign = require("../../models/WhatsappCampaign");
+const WhatsappConnection = require("../../models/WhatsappConnection");
 const Admin = require("../../models/Admin");
 const Manager = require("../../models/Manager");
 const { sendSocketData, sendNotification } = require("../../socket/socket");
@@ -26,6 +27,24 @@ const verifyWebhook = (req, res) => {
   res.sendStatus(403);
 };
 
+// ─── Merchant resolution helper ──────────────────────────────
+//
+// Resolves merchantId from Meta's phone_number_id by looking up the
+// WhatsappConnection. Returns { merchantId, connection } or null for platform.
+
+const resolveMerchantFromPhoneNumberId = async (phoneNumberId) => {
+  if (!phoneNumberId) return { merchantId: null, connection: null };
+  const connection = await WhatsappConnection.findOne({
+    phoneNumberId,
+    status: "Active",
+  }).lean();
+  if (!connection) {
+    // Not a merchant connection — platform number
+    return { merchantId: null, connection: null };
+  }
+  return { merchantId: connection.merchantId, connection };
+};
+
 const handleWebhook = async (req, res) => {
   // Always respond 200 immediately to Meta
   res.sendStatus(200);
@@ -40,23 +59,27 @@ const handleWebhook = async (req, res) => {
         const value = change.value;
         if (!value) continue;
 
+        // Resolve merchant from the event's phone_number_id
+        const phoneNumberId = value.metadata?.phone_number_id;
+        const { merchantId, connection } = await resolveMerchantFromPhoneNumberId(phoneNumberId);
+
         // Handle incoming messages
         if (value.messages?.length) {
           for (const msg of value.messages) {
-            await handleIncomingMessage(value, msg);
+            await handleIncomingMessage(value, msg, merchantId, connection);
           }
         }
 
         // Handle message status updates
         if (value.statuses?.length) {
           for (const status of value.statuses) {
-            await handleStatusUpdate(status);
+            await handleStatusUpdate(status, merchantId, connection);
           }
         }
 
         // Handle template status updates (via message_template_status_update)
         if (change.field === "message_template_status_update") {
-          await handleTemplateStatusUpdate(value);
+          await handleTemplateStatusUpdate(value, merchantId);
         }
       }
     }
@@ -67,7 +90,7 @@ const handleWebhook = async (req, res) => {
 
 // ─── Incoming Message Handler ────────────────────────────
 
-const handleIncomingMessage = async (event, msg) => {
+const handleIncomingMessage = async (event, msg, merchantId = null, connection = null) => {
   const phoneNumberId = event.metadata?.phone_number_id;
   const waId = msg.from;
   const contactName =
@@ -79,11 +102,13 @@ const handleIncomingMessage = async (event, msg) => {
   });
   if (existingMsg) return;
 
-  // Find or create conversation
-  let conversation = await WhatsappConversation.findOne({ waId });
+  // Find or create conversation (scoped to merchant)
+  const conversationQuery = { waId, merchantId };
+  let conversation = await WhatsappConversation.findOne(conversationQuery);
   if (!conversation) {
     conversation = await WhatsappConversation.create({
       waId,
+      merchantId,
       name: contactName,
       status: "open",
       lastMessage: {
@@ -94,12 +119,13 @@ const handleIncomingMessage = async (event, msg) => {
       unreadCount: 1,
     });
 
-    // Auto-create contact
+    // Auto-create contact (scoped to merchant)
     await WhatsappContact.findOneAndUpdate(
-      { waId },
+      { waId, merchantId },
       {
         $setOnInsert: {
           waId,
+          merchantId,
           name: contactName,
           phone: `+${waId}`,
         },
@@ -132,6 +158,7 @@ const handleIncomingMessage = async (event, msg) => {
   // Build message document
   const messageData = {
     conversationId: conversation._id,
+    merchantId,
     waId,
     metaMessageId: msg.id,
     direction: "inbound",
@@ -246,13 +273,17 @@ const handleIncomingMessage = async (event, msg) => {
 
   const savedMessage = await WhatsappMessage.create(messageData);
 
-  // Broadcast to all admins and managers with properly formatted message
-  await broadcastToStaff("whatsapp:message", formatMessage(savedMessage));
+  // Broadcast to staff — admins/managers for platform; merchant users when scoped.
+  if (merchantId) {
+    await broadcastToMerchant(merchantId, "whatsapp:message", formatMessage(savedMessage));
+  } else {
+    await broadcastToStaff("whatsapp:message", formatMessage(savedMessage));
+  }
 };
 
 // ─── Status Update Handler ───────────────────────────────
 
-const handleStatusUpdate = async (status) => {
+const handleStatusUpdate = async (status, merchantId = null) => {
   const metaMessageId = status.id;
   const newStatus = status.status; // sent, delivered, read, failed
 
@@ -266,12 +297,18 @@ const handleStatusUpdate = async (status) => {
   );
 
   if (message) {
-    await broadcastToStaff("whatsapp:message:status", {
+    const payload = {
       messageId: message._id,
       metaMessageId,
       conversationId: message.conversationId,
+      merchantId: message.merchantId,
       deliveryStatus: mapped,
-    });
+    };
+    if (message.merchantId) {
+      await broadcastToMerchant(message.merchantId, "whatsapp:message:status", payload);
+    } else {
+      await broadcastToStaff("whatsapp:message:status", payload);
+    }
   }
 
   // Also update campaign events if this message belongs to one.
@@ -309,15 +346,18 @@ const handleStatusUpdate = async (status) => {
 
 // ─── Template Status Update Handler ──────────────────────
 
-const handleTemplateStatusUpdate = async (value) => {
+const handleTemplateStatusUpdate = async (value, merchantId = null) => {
   const event = value.message_template_status_update || value;
   const templateName = event.message_template_name;
   const newStatus = event.event; // APPROVED, REJECTED, DISABLED, etc.
 
   if (!templateName || !newStatus) return;
 
+  const templateQuery = merchantId
+    ? { name: templateName, merchantId }
+    : { name: templateName, merchantId: null };
   const template = await WhatsappTemplate.findOneAndUpdate(
-    { name: templateName },
+    templateQuery,
     {
       $set: {
         status: newStatus,
@@ -328,11 +368,16 @@ const handleTemplateStatusUpdate = async (value) => {
   );
 
   if (template) {
-    await broadcastToStaff("whatsapp:template:status", {
+    const payload = {
       templateId: template._id,
       name: template.name,
       status: newStatus,
-    });
+    };
+    if (merchantId) {
+      await broadcastToMerchant(merchantId, "whatsapp:template:status", payload);
+    } else {
+      await broadcastToStaff("whatsapp:template:status", payload);
+    }
   }
 };
 
@@ -424,6 +469,17 @@ const broadcastToStaff = async (eventName, data) => {
     }
   } catch (err) {
     console.error("[WhatsApp] Broadcast error:", err.message);
+  }
+};
+
+// Broadcast to a specific merchant's sockets. Currently sends to the
+// merchant's own userAuth id; when staff/role is added this expands.
+const broadcastToMerchant = async (merchantId, eventName, data) => {
+  try {
+    if (!merchantId) return;
+    sendSocketData(String(merchantId), eventName, data);
+  } catch (err) {
+    console.error("[WhatsApp] Merchant broadcast error:", err.message);
   }
 };
 

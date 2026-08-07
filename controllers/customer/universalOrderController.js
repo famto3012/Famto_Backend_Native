@@ -37,6 +37,10 @@ const {
   verifyPayment,
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
+const {
+  createMerchantRazorpayOrderId,
+  verifyMerchantPayment,
+} = require("../../utils/merchantRazorpay");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
 const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
@@ -2592,14 +2596,24 @@ const orderPaymentController = async (req, res, next) => {
       const {
         success,
         orderId: razorpayOrderId,
+        keyId,
+        mode,
         error,
-      } = await createRazorpayOrderId(orderAmount);
+      } = await createMerchantRazorpayOrderId(cart.merchantId, orderAmount);
 
       if (!success) {
         return next(appError(error, 500));
       }
 
       const orderId = new mongoose.Types.ObjectId();
+
+      // Get merchantPaymentConfigId if mode is Own
+      let merchantPaymentConfigId = null;
+      if (mode === "Own") {
+        const MerchantPaymentConfig = require("../../models/MerchantPaymentConfig");
+        const config = await MerchantPaymentConfig.findOne({ merchantId: cart.merchantId }).select("_id").lean();
+        merchantPaymentConfigId = config?._id;
+      }
 
       const tempOrder = await TemporaryOrder.create({
         orderId,
@@ -2628,6 +2642,8 @@ const orderPaymentController = async (req, res, next) => {
         purchasedItems,
         prescription,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours for webhook + cron fallback
+        paymentAccountMode: mode, // "Own" or "Platform"
+        merchantPaymentConfigId,
       });
 
       if (!tempOrder) {
@@ -2639,6 +2655,8 @@ const orderPaymentController = async (req, res, next) => {
         orderId,
         razorpayOrderId,
         amount: orderAmount,
+        keyId, // Merchant's keyId or platform keyId
+        paymentAccountMode: mode, // "Own" or "Platform"
         walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     }
@@ -3354,7 +3372,21 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       paymentDetails;
 
-    const isValid = await verifyPayment(paymentDetails);
+    // Find the temp order first to determine which secret to use
+    const tempOrderForVerify = await TemporaryOrder.findOne({
+      razorpayOrderId: razorpay_order_id,
+    }).lean();
+
+    let isValid;
+    if (tempOrderForVerify?.paymentAccountMode === "Own" && tempOrderForVerify.merchantPaymentConfigId) {
+      // Per-merchant verification
+      const MerchantPaymentConfig = require("../../models/MerchantPaymentConfig");
+      const config = await MerchantPaymentConfig.findById(tempOrderForVerify.merchantPaymentConfigId);
+      isValid = await verifyMerchantPayment(paymentDetails, "Own", config);
+    } else {
+      // Platform verification
+      isValid = await verifyPayment(paymentDetails);
+    }
 
     if (!isValid) {
       return next(appError("Payment verification failed", 400));

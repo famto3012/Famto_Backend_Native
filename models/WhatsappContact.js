@@ -5,7 +5,12 @@ const whatsappContactSchema = new mongoose.Schema(
     waId: {
       type: String,
       required: true,
-      unique: true,
+      index: true,
+    },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
       index: true,
     },
     name: {
@@ -40,5 +45,7 @@ const whatsappContactSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+whatsappContactSchema.index({ waId: 1, merchantId: 1 }, { unique: true });
 
 module.exports = mongoose.model("WhatsappContact", whatsappContactSchema);

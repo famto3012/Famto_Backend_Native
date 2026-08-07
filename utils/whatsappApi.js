@@ -7,28 +7,48 @@ const getWhatsappConfig = () => ({
   apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
 });
 
-const getHeaders = () => {
-  const { token } = getWhatsappConfig();
+// ── Connection override ──
+//
+// `connection` (optional) overrides the platform env defaults for one call.
+// Pass `{ phoneNumberId, token, businessAccountId }` from a WhatsappConnection
+// doc to send/receive through a merchant's own WhatsApp number.
+//
+// Falls back to platform env when not provided — all existing callers unchanged.
+
+const resolveConfig = (connection) => {
+  if (connection && connection.phoneNumberId && connection.token) {
+    return {
+      token: connection.token,
+      phoneNumberId: connection.phoneNumberId,
+      businessAccountId: connection.businessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
+      apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
+    };
+  }
+  return getWhatsappConfig();
+};
+
+const getHeaders = (connection) => {
+  const { token } = resolveConfig(connection);
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
 };
 
-const getBaseUrl = () => {
-  const { apiVersion, phoneNumberId } = getWhatsappConfig();
+const getBaseUrl = (connection) => {
+  const { apiVersion, phoneNumberId } = resolveConfig(connection);
   return `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`;
 };
 
-const sendMetaMessage = async (payload) => {
-  const response = await axios.post(`${getBaseUrl()}/messages`, payload, {
-    headers: getHeaders(),
+const sendMetaMessage = async (payload, connection) => {
+  const response = await axios.post(`${getBaseUrl(connection)}/messages`, payload, {
+    headers: getHeaders(connection),
   });
   return response.data;
 };
 
-const getMediaUrl = async (mediaId) => {
-  const { token, apiVersion } = getWhatsappConfig();
+const getMediaUrl = async (mediaId, connection) => {
+  const { token, apiVersion } = resolveConfig(connection);
   const response = await axios.get(
     `https://graph.facebook.com/${apiVersion}/${mediaId}`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -36,8 +56,8 @@ const getMediaUrl = async (mediaId) => {
   return response.data.url;
 };
 
-const downloadMedia = async (url) => {
-  const { token } = getWhatsappConfig();
+const downloadMedia = async (url, connection) => {
+  const { token } = resolveConfig(connection);
   const response = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
     responseType: "arraybuffer",
@@ -45,25 +65,25 @@ const downloadMedia = async (url) => {
   return response.data;
 };
 
-const fetchBusinessProfile = async () => {
+const fetchBusinessProfile = async (connection) => {
   const response = await axios.get(
-    `${getBaseUrl()}/whatsapp_business_profile?fields=about,address,description,email,profile_picture_url,websites,vertical`,
-    { headers: getHeaders() }
+    `${getBaseUrl(connection)}/whatsapp_business_profile?fields=about,address,description,email,profile_picture_url,websites,vertical`,
+    { headers: getHeaders(connection) }
   );
   return response.data.data?.[0] || {};
 };
 
-const updateMetaBusinessProfile = async (profileData) => {
+const updateMetaBusinessProfile = async (profileData, connection) => {
   const response = await axios.post(
-    `${getBaseUrl()}/whatsapp_business_profile`,
+    `${getBaseUrl(connection)}/whatsapp_business_profile`,
     { messaging_product: "whatsapp", ...profileData },
-    { headers: getHeaders() }
+    { headers: getHeaders(connection) }
   );
   return response.data;
 };
 
-const fetchMetaTemplates = async () => {
-  const { token, apiVersion, businessAccountId } = getWhatsappConfig();
+const fetchMetaTemplates = async (connection) => {
+  const { token, apiVersion, businessAccountId } = resolveConfig(connection);
   const response = await axios.get(
     `https://graph.facebook.com/${apiVersion}/${businessAccountId}/message_templates`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -71,22 +91,22 @@ const fetchMetaTemplates = async () => {
   return response.data.data || [];
 };
 
-const createMetaTemplate = async (templateData) => {
-  const { token, apiVersion, businessAccountId } = getWhatsappConfig();
+const createMetaTemplate = async (templateData, connection) => {
+  const { apiVersion, businessAccountId } = resolveConfig(connection);
   const response = await axios.post(
     `https://graph.facebook.com/${apiVersion}/${businessAccountId}/message_templates`,
     templateData,
-    { headers: getHeaders() }
+    { headers: getHeaders(connection) }
   );
   return response.data;
 };
 
-const updateMetaTemplate = async (templateId, templateData) => {
-  const { token, apiVersion } = getWhatsappConfig();
+const updateMetaTemplate = async (templateId, templateData, connection) => {
+  const { apiVersion } = resolveConfig(connection);
   const response = await axios.post(
     `https://graph.facebook.com/${apiVersion}/${templateId}`,
     templateData,
-    { headers: getHeaders() }
+    { headers: getHeaders(connection) }
   );
   return response.data;
 };
@@ -95,14 +115,37 @@ const updateMetaTemplate = async (templateId, templateData) => {
 
 const WhatsappTemplate = require("../models/WhatsappTemplate");
 
+// Look up a merchant's active connection (cached per-process via simple Map).
+// Returns plain config or null when not configured.
+const _connectionCache = new Map();
+const resolveMerchantConnection = async (merchantId) => {
+  if (!merchantId) return null;
+  const key = String(merchantId);
+  if (_connectionCache.has(key)) {
+    const cached = _connectionCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.connection;
+    _connectionCache.delete(key);
+  }
+  const WhatsappConnection = require("../models/WhatsappConnection");
+  const conn = await WhatsappConnection.findOne({
+    merchantId,
+    status: "Active",
+  }).lean();
+  if (!conn) return null;
+  _connectionCache.set(key, { connection: conn, expiresAt: Date.now() + 60_000 });
+  return conn;
+};
+
 const sendTemplateMessage = async (
   phoneNumber,
   templateName,
   bodyParams = [],
   languageCode = "en",
-  headerImageUrl = null
+  headerImageUrl = null,
+  connection = null
 ) => {
-  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+  // Skip if no platform creds AND no override
+  if (!connection && (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID)) {
     console.log("[WhatsApp] Credentials not set – skipping message.");
     return;
   }
@@ -178,7 +221,7 @@ const sendTemplateMessage = async (
 
   try {
     console.log(`[WhatsApp] Sending template payload:`, JSON.stringify(payload));
-    const response = await sendMetaMessage(payload);
+    const response = await sendMetaMessage(payload, connection);
     console.log(
       `[WhatsApp] Template sent to ${cleanPhone} (${templateName}):`,
       response.messages?.[0]?.id || "ok"
@@ -198,14 +241,14 @@ const getTemplateLanguage = async (templateName) => {
   return template?.language || "en";
 };
 
-const sendWelcomeMessage = async (phoneNumber, name = "") => {
+const sendWelcomeMessage = async (phoneNumber, name = "", connection = null) => {
   const templateName =
     process.env.WHATSAPP_WELCOME_TEMPLATE || "welcome_famto";
   const lang = await getTemplateLanguage(templateName);
   // welcome_famto is a static template with no body placeholders
   const bodyParams = [];
   const headerImage = process.env.WHATSAPP_WELCOME_HEADER_IMAGE || null;
-  await sendTemplateMessage(phoneNumber, templateName, bodyParams, lang, headerImage);
+  await sendTemplateMessage(phoneNumber, templateName, bodyParams, lang, headerImage, connection);
 };
 
 const sendCartReminderMessage = async ({
@@ -213,6 +256,7 @@ const sendCartReminderMessage = async ({
   customerName,
   merchantName,
   productList,
+  connection = null,
 }) => {
   const templateName =
     process.env.WHATSAPP_CART_REMINDER_TEMPLATE || "cart_reminder";
@@ -222,23 +266,25 @@ const sendCartReminderMessage = async ({
     customerName,
     merchantName,
     productList,
-  ], lang, headerImage);
+  ], lang, headerImage, connection);
 };
 
 const sendOrderTrackingMessage = async ({
   phoneNumber,
   customerName,
   merchantName,
+  connection = null,
 }) => {
   const templateName =
     process.env.WHATSAPP_ORDER_TRACKING_TEMPLATE || "order_tracking";
   const lang = await getTemplateLanguage(templateName);
   const headerImage = process.env.WHATSAPP_ORDER_TRACKING_HEADER_IMAGE || null;
-  await sendTemplateMessage(phoneNumber, templateName, [customerName, merchantName], lang, headerImage);
+  await sendTemplateMessage(phoneNumber, templateName, [customerName, merchantName], lang, headerImage, connection);
 };
 
 module.exports = {
   getWhatsappConfig,
+  resolveMerchantConnection,
   sendMetaMessage,
   getMediaUrl,
   downloadMedia,

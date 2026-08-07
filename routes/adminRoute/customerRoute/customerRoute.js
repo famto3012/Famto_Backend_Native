@@ -129,7 +129,7 @@ adminCustomerRoute.get(
 adminCustomerRoute.get(
   "/:customerId",
   isAuthenticated,
-  isAdmin,
+  isAdminOrMerchant,
   getSingleCustomerController
 );
 

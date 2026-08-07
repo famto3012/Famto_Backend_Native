@@ -92,10 +92,15 @@ const {
   preparePayoutForMerchant,
   resetStatusManualToggleForAllMerchants,
 } = require("./utils/merchantHelpers.js");
+const { processMerchantPayout } = require("./controllers/merchant/merchantWalletController");
+const MerchantWalletBalance = require("./models/MerchantWalletBalance");
 const {
   deleteOldActivityLogs,
 } = require("./controllers/admin/activityLogs/activityLogController.js");
 const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
+const merchantWhatsappRoute = require("./routes/whatsappRoute/merchantWhatsappRoute.js");
+const merchantPaymentRoute = require("./routes/merchantRoute/merchantPaymentRoute.js");
+const merchantWalletRoute = require("./routes/merchantRoute/merchantWalletRoute.js");
 const { deleteOldLogs, deleteOldTasks, removeOldNotifications } = require("./libs/automatic.js");
 const { removeExpiredMerchantDiscounts, removeExpiredProductDiscount, removeExpiredPromoCode } = require("./libs/removeExpired.js");
 const {
@@ -103,6 +108,7 @@ const {
 } = require("./controllers/customer/universalOrderController.js");
 const processOrderService = require("./utils/ProcessOrderService.js");
 const { fetchRazorpayOrderPayments } = require("./utils/razorpayPayment.js");
+const { merchantRazorpayWebhookController } = require("./utils/merchantRazorpay.js");
 
 
 app.use(
@@ -110,7 +116,12 @@ app.use(
   express.raw({ type: "application/json" })
 );
 
-// Request logging middleware (replaces morgan)
+app.use(
+  "/api/v1/merchants/:merchantId/razorpay-webhook",
+  express.raw({ type: "application/json" }),
+  merchantRazorpayWebhookController
+);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(require("./utils/logger/requestLogger"));
 app.use(express.urlencoded({ extended: true }));
@@ -139,6 +150,8 @@ app.use(
 
 app.use("/api/v1/auth", authRoute); //Login is same for both Admin & Merchant
 app.use("/api/v1/merchants", merchantRoute); //can be used by both admin and merchant
+app.use("/api/v1/merchants", merchantPaymentRoute); // Merchant payment config
+app.use("/api/v1/merchants", merchantWalletRoute); // Merchant wallet + payout
 app.use("/api/v1/admin/agents", adminAgentRoute);
 app.use("/api/v1/admin/geofence", geofenceRoute);
 app.use("/api/v1/admin/home", homeRoute);
@@ -200,6 +213,7 @@ app.use("/api/v1/token", tokenRoute);
 // --------Whatsapp--------
 // =====================
 app.use("/api/v1/whatsapp", whatsappRoute);
+app.use("/api/v1/merchant/whatsapp", merchantWhatsappRoute);
 
 // Schedule the task to run four times daily for deleting expired plans of Merchants and customer
 cron.schedule("0 6,12,18,0 * * *", async () => {
@@ -230,6 +244,16 @@ cron.schedule("30 18 * * *", async () => {
     deleteOldLogs(),
     deleteOldTasks(),
   ]);
+
+  // Auto-payout: scan merchant wallets and process payouts
+  const wallets = await MerchantWalletBalance.find({ balance: { $gte: 1 } });
+  for (const wallet of wallets) {
+    try {
+      await processMerchantPayout(wallet.merchantId);
+    } catch (err) {
+      console.error(`[Auto-payout] Failed for merchant ${wallet.merchantId}:`, err.message);
+    }
+  }
 });
 
 // Cron jobs for every minutes
