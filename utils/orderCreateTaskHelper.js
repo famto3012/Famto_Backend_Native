@@ -286,6 +286,7 @@ const fetchAgents = async (merchantId) => {
   if (merchantId) {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
+      if (!merchant.merchantDetail) merchant.merchantDetail = {};
       if (merchant.merchantDetail?.hasOwnDelivery) {
         ownFleetFilter.merchantId = merchant._id;
       }
@@ -334,6 +335,7 @@ const fetchNearestAgents = async (radius, merchantId) => {
   if (merchantId) {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
+      if (!merchant.merchantDetail) merchant.merchantDetail = {};
       if (merchant.merchantDetail?.hasOwnDelivery) {
         ownFleetFilter.merchantId = merchant._id;
       }
@@ -372,7 +374,8 @@ const fetchNearestAgents = async (radius, merchantId) => {
 
   if (!radius || radius <= 0 || !merchant) return agents;
 
-  const merchantLocation = merchant.merchantDetail.geoLocation.coordinates;
+  const merchantLocation = merchant.merchantDetail?.geoLocation?.coordinates;
+  if (!merchantLocation) return agents;
 
   return agents.filter((agent) => {
     const agentLocation = getUserLocationFromSocket(agent._id);
@@ -395,6 +398,7 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
+        if (!merchant.merchantDetail) merchant.merchantDetail = {};
         if (merchant.merchantDetail?.hasOwnDelivery) {
           ownFleetFilter.merchantId = merchant._id;
         }
@@ -468,6 +472,7 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
+        if (!merchant.merchantDetail) merchant.merchantDetail = {};
         if (merchant.merchantDetail?.hasOwnDelivery) {
           ownFleetFilter.merchantId = merchant._id;
         }
@@ -505,10 +510,11 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
     }
 
     // Filter by distance if radius + merchant location are available
+    const merchantLocation = merchant?.merchantDetail?.geoLocation?.coordinates;
+
     const distanceFiltered =
-      radius > 0 && merchant
+      radius > 0 && merchant && merchantLocation
         ? agents.filter((agent) => {
-          const merchantLocation = merchant.merchantDetail.geoLocation.coordinates;
           const agentLocation = getUserLocationFromSocket(agent._id);
           if (!agentLocation) return false;
           const distance = turf.distance(
