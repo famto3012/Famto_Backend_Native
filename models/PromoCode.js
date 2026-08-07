@@ -63,7 +63,7 @@ const promoCodeSchema = new mongoose.Schema(
     ],
     imageUrl: {
       type: String,
-      required: true,
+      default: null,
     },
     status: {
       type: Boolean,

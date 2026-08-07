@@ -2,6 +2,7 @@ const express = require("express");
 const { body } = require("express-validator");
 const isAuthenticated = require("../../../middlewares/isAuthenticated");
 const isAdmin = require("../../../middlewares/isAdmin");
+const isMerchant = require("../../../middlewares/isMerchant");
 const { upload } = require("../../../utils/imageOperation");
 const {
   addPromoCodeController,
@@ -10,6 +11,11 @@ const {
   deletePromoCodeController,
   editPromoCodeStatusController,
   getSinglePromoCodeController,
+  addPromoCodeByMerchantController,
+  getAllPromoCodesByMerchantController,
+  getSinglePromoCodeByMerchantController,
+  editPromoCodeStatusByMerchantController,
+  deletePromoCodeByMerchantController,
 } = require("../../../controllers/admin/promocode/promoCodeController");
 
 const promoCodeRoute = express.Router();
@@ -74,6 +80,64 @@ promoCodeRoute.delete(
   isAuthenticated,
   isAdmin,
   deletePromoCodeController
+);
+
+// -------------------------------------------------
+// Merchant-scoped
+// -------------------------------------------------
+
+promoCodeRoute.get(
+  "/merchant/get-promocode",
+  isAuthenticated,
+  isMerchant,
+  getAllPromoCodesByMerchantController
+);
+
+promoCodeRoute.get(
+  "/merchant/:promoCodeId",
+  isAuthenticated,
+  isMerchant,
+  getSinglePromoCodeByMerchantController
+);
+
+promoCodeRoute.post(
+  "/merchant/add-promocode",
+  upload.single("promoImage"),
+  [
+    body("promoCode").notEmpty().withMessage("Promo code is required"),
+    body("promoType").notEmpty().withMessage("Promo type is required"),
+    body("discount").notEmpty().withMessage("Discount is required"),
+    body("fromDate").notEmpty().withMessage("From date is required"),
+    body("toDate").notEmpty().withMessage("To date is required"),
+    body("maxDiscountValue")
+      .notEmpty()
+      .withMessage("Max discount value is required"),
+    body("minOrderAmount")
+      .notEmpty()
+      .withMessage("Min order amount is required"),
+    body("maxAllowedUsers")
+      .notEmpty()
+      .withMessage("Max allowed users is required"),
+    body("appliedOn").notEmpty().withMessage("applied on is required"),
+    body("geofenceId").notEmpty().withMessage("Geofence id is required"),
+  ],
+  isAuthenticated,
+  isMerchant,
+  addPromoCodeByMerchantController
+);
+
+promoCodeRoute.put(
+  "/merchant/edit-promocode-status/:promoCodeId",
+  isAuthenticated,
+  isMerchant,
+  editPromoCodeStatusByMerchantController
+);
+
+promoCodeRoute.delete(
+  "/merchant/delete-promocode/:promoCodeId",
+  isAuthenticated,
+  isMerchant,
+  deletePromoCodeByMerchantController
 );
 
 module.exports = promoCodeRoute;
