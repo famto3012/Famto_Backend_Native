@@ -37,6 +37,11 @@ const isAuthenticated = require("../../../middlewares/isAuthenticated");
 const {
   merchantValidations,
 } = require("../../../middlewares/validators/merchantValidations");
+const isMerchant = require("../../../middlewares/isMerchant");
+const {
+  getOwnDeliveryController,
+  updateOwnDeliveryController,
+} = require("../../../controllers/admin/deliveryManagement/merchantDeliveryController");
 
 const merchantRoute = express.Router();
 
@@ -62,6 +67,22 @@ merchantRoute.patch(
 
 // Get merchant profile
 merchantRoute.get("/profile", isAuthenticated, getMerchantProfileController);
+
+// Get own delivery toggle
+merchantRoute.get(
+  "/own-delivery",
+  isAuthenticated,
+  isMerchant,
+  getOwnDeliveryController
+);
+
+// Update own delivery toggle
+merchantRoute.put(
+  "/own-delivery",
+  isAuthenticated,
+  isMerchant,
+  updateOwnDeliveryController
+);
 
 // Edit merchant profile
 merchantRoute.put(

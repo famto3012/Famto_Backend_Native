@@ -281,10 +281,14 @@ const _sendAgentNotification = async (agent, order, autoAllocation) => {
 const fetchAgents = async (merchantId) => {
   let merchant;
   let merchantBusinessCategory;
+  const ownFleetFilter = {};
 
   if (merchantId) {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
+      if (merchant.merchantDetail?.hasOwnDelivery) {
+        ownFleetFilter.merchantId = merchant._id;
+      }
       merchantBusinessCategory = await BusinessCategory.findById(
         merchant.merchantDetail.businessCategoryId
       );
@@ -297,12 +301,17 @@ const fetchAgents = async (merchantId) => {
       merchantBusinessCategory?.title === "Meat"
     ) {
       return Agent.find({
+        ...ownFleetFilter,
         status: "Free",
         "workStructure.tag": "Fish & Meat",
         isApproved: "Approved",
       });
     } else {
-      return Agent.find({ status: "Free", isApproved: "Approved" });
+      return Agent.find({
+        ...ownFleetFilter,
+        status: "Free",
+        isApproved: "Approved",
+      });
     }
   } else {
     return Agent.find({
@@ -320,10 +329,14 @@ const fetchAgents = async (merchantId) => {
 const fetchNearestAgents = async (radius, merchantId) => {
   let merchant;
   let merchantBusinessCategory;
+  const ownFleetFilter = {};
 
   if (merchantId) {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
+      if (merchant.merchantDetail?.hasOwnDelivery) {
+        ownFleetFilter.merchantId = merchant._id;
+      }
       merchantBusinessCategory = await BusinessCategory.findById(
         merchant.merchantDetail.businessCategoryId
       );
@@ -337,12 +350,17 @@ const fetchNearestAgents = async (radius, merchantId) => {
       merchantBusinessCategory?.title === "Meat"
     ) {
       agents = await Agent.find({
+        ...ownFleetFilter,
         status: "Free",
         "workStructure.tag": "Fish & Meat",
         isApproved: "Approved",
       });
     } else {
-      agents = await Agent.find({ status: "Free", isApproved: "Approved" });
+      agents = await Agent.find({
+        ...ownFleetFilter,
+        status: "Free",
+        isApproved: "Approved",
+      });
     }
   } else {
     agents = await Agent.find({
@@ -372,10 +390,14 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
   try {
     let merchant;
     let merchantBusinessCategory;
+    const ownFleetFilter = {};
 
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
+        if (merchant.merchantDetail?.hasOwnDelivery) {
+          ownFleetFilter.merchantId = merchant._id;
+        }
         merchantBusinessCategory = await BusinessCategory.findById(
           merchant.merchantDetail.businessCategoryId
         );
@@ -393,12 +415,17 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
         merchantBusinessCategory?.title === "Meat"
       ) {
         agents = await Agent.find({
+          ...ownFleetFilter,
           status: "Free",
           "workStructure.tag": "Fish & Meat",
           isApproved: "Approved",
         });
       } else {
-        agents = await Agent.find({ status: "Free", isApproved: "Approved" });
+        agents = await Agent.find({
+          ...ownFleetFilter,
+          status: "Free",
+          isApproved: "Approved",
+        });
       }
     } else {
       agents = await Agent.find({
@@ -436,10 +463,14 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
 
     let merchant;
     let merchantBusinessCategory;
+    const ownFleetFilter = {};
 
     if (merchantId) {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
+        if (merchant.merchantDetail?.hasOwnDelivery) {
+          ownFleetFilter.merchantId = merchant._id;
+        }
         merchantBusinessCategory = await BusinessCategory.findById(
           merchant.merchantDetail.businessCategoryId
         );
@@ -453,12 +484,17 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
         merchantBusinessCategory?.title === "Meat"
       ) {
         agents = await Agent.find({
+          ...ownFleetFilter,
           status: "Free",
           "workStructure.tag": "Fish & Meat",
           isApproved: "Approved",
         });
       } else {
-        agents = await Agent.find({ status: "Free", isApproved: "Approved" });
+        agents = await Agent.find({
+          ...ownFleetFilter,
+          status: "Free",
+          isApproved: "Approved",
+        });
       }
     } else {
       agents = await Agent.find({

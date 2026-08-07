@@ -90,12 +90,12 @@ const workStructureSchema = mongoose.Schema(
     salaryStructureId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AgentPricing",
-      required: true,
+      default: null,
     },
     tag: {
       type: String,
       enum: ["Fish & Meat", "Normal"],
-      required: true,
+      default: "Normal",
     },
     cashInHand: {
       type: Number,
@@ -191,6 +191,10 @@ const agentSchema = mongoose.Schema(
   {
     _id: {
       type: String,
+    },
+    merchantId: {
+      type: String,
+      default: null,
     },
     fullName: {
       type: String,
@@ -331,6 +335,7 @@ agentSchema.virtual("loggedInHours").get(function () {
   return formatToHours(difference);
 });
 
+agentSchema.index({ merchantId: 1 });
 agentSchema.index({ geofenceId: 1 });
 agentSchema.index({ status: 1 });
 agentSchema.index({ isApproved: 1, isBlocked: 1 });

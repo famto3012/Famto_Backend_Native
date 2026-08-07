@@ -207,6 +207,11 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       isBlocked: false,
     };
 
+    // Respect merchant's own-delivery fleet: only that merchant's agents
+    if (merchant?.merchantDetail?.hasOwnDelivery) {
+      matchCriteria.merchantId = merchant._id;
+    }
+
     if (name?.trim()) {
       matchCriteria.fullName = { $regex: name.trim(), $options: "i" };
     }

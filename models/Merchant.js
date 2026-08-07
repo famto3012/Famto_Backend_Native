@@ -622,6 +622,7 @@ const merchantDetailSchema = new mongoose.Schema(
     },
     availability: availabilitySchema,
     bankDetail: bankDetailSchema,
+    hasOwnDelivery: { type: Boolean, default: false },
   },
   {
     _id: false,
