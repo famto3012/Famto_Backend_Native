@@ -101,6 +101,7 @@ const whatsappRoute = require("./routes/whatsappRoute/whatsappRoute.js");
 const merchantWhatsappRoute = require("./routes/whatsappRoute/merchantWhatsappRoute.js");
 const merchantPaymentRoute = require("./routes/merchantRoute/merchantPaymentRoute.js");
 const merchantWalletRoute = require("./routes/merchantRoute/merchantWalletRoute.js");
+const merchantReviewRoute = require("./routes/adminRoute/merchantRoute/merchantReviewRoute.js");
 const { deleteOldLogs, deleteOldTasks, removeOldNotifications } = require("./libs/automatic.js");
 const { removeExpiredMerchantDiscounts, removeExpiredProductDiscount, removeExpiredPromoCode } = require("./libs/removeExpired.js");
 const {
@@ -152,6 +153,7 @@ app.use("/api/v1/auth", authRoute); //Login is same for both Admin & Merchant
 app.use("/api/v1/merchants", merchantRoute); //can be used by both admin and merchant
 app.use("/api/v1/merchants", merchantPaymentRoute); // Merchant payment config
 app.use("/api/v1/merchants", merchantWalletRoute); // Merchant wallet + payout
+app.use("/api/v1/merchants", merchantReviewRoute); // Merchant reviews
 app.use("/api/v1/admin/agents", adminAgentRoute);
 app.use("/api/v1/admin/geofence", geofenceRoute);
 app.use("/api/v1/admin/home", homeRoute);

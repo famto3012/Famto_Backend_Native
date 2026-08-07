@@ -510,6 +510,8 @@ const ratingByCustomerSchema = new mongoose.Schema(
     customerId: { type: String, ref: "User", required: true },
     review: { type: String, default: null },
     rating: { type: Number, required: true, min: 1, max: 5 },
+    reply: { type: String, default: null },
+    replyDate: { type: Date, default: null },
   },
   { _id: false }
 );
