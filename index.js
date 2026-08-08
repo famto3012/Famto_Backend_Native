@@ -103,6 +103,7 @@ const merchantPaymentRoute = require("./routes/merchantRoute/merchantPaymentRout
 const merchantWalletRoute = require("./routes/merchantRoute/merchantWalletRoute.js");
 const merchantReviewRoute = require("./routes/adminRoute/merchantRoute/merchantReviewRoute.js");
 const merchantQrConfigRoute = require("./routes/adminRoute/merchantRoute/merchantQrConfigRoute.js");
+const merchantAnalyticsRoute = require("./routes/adminRoute/merchantRoute/merchantAnalyticsRoute.js");
 const { deleteOldLogs, deleteOldTasks, removeOldNotifications } = require("./libs/automatic.js");
 const { removeExpiredMerchantDiscounts, removeExpiredProductDiscount, removeExpiredPromoCode } = require("./libs/removeExpired.js");
 const {
@@ -156,6 +157,7 @@ app.use("/api/v1/merchants", merchantPaymentRoute); // Merchant payment config
 app.use("/api/v1/merchants", merchantWalletRoute); // Merchant wallet + payout
 app.use("/api/v1/merchants", merchantReviewRoute); // Merchant reviews
 app.use("/api/v1/merchants", merchantQrConfigRoute); // Merchant QR config
+app.use("/api/v1/merchants", merchantAnalyticsRoute); // Merchant analytics (Phase 7)
 app.use("/api/v1/admin/agents", adminAgentRoute);
 app.use("/api/v1/admin/geofence", geofenceRoute);
 app.use("/api/v1/admin/home", homeRoute);
