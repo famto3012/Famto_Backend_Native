@@ -63,7 +63,9 @@ const createMerchantRazorpayOrderId = async (merchantId, amount) => {
     };
   } catch (err) {
     console.error("Error creating merchant Razorpay order:", err);
-    return { success: false, error: err.message };
+    // Razorpay errors have the message in err.error.description, not err.message
+    const errorMessage = err.error?.description || err.error?.message || err.message || "Unknown error";
+    return { success: false, error: errorMessage };
   }
 };
 

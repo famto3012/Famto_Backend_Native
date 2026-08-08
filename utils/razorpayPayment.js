@@ -21,7 +21,9 @@ const createRazorpayOrderId = async (amount) => {
     return { success: true, orderId: order.id };
   } catch (err) {
     console.error("Error in processing payment:", err);
-    return { success: false, error: err.message };
+    // Razorpay errors have the message in err.error.description, not err.message
+    const errorMessage = err.error?.description || err.error?.message || err.message || "Unknown error";
+    return { success: false, error: errorMessage };
   }
 };
 
@@ -70,7 +72,9 @@ const razorpayRefund = async (paymentId, amount) => {
     return { success: true, refundId: refund.id };
   } catch (err) {
     console.error("Error in processing refund:", err);
-    return { success: false, error: err.message };
+    // Razorpay errors have the message in err.error.description, not err.message
+    const errorMessage = err.error?.description || err.error?.message || err.message || "Unknown error";
+    return { success: false, error: errorMessage };
   }
 };
 

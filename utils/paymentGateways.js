@@ -117,6 +117,16 @@ const createCashfreeOrder = async (merchantId, amount, customerInfo) => {
   try {
     const config = await loadOwnConfig(merchantId);
     const creds = config?.getDecryptedGatewayCredentials("cashfree");
+    console.log("=== CASHFREE CREATE ORDER DEBUG ===");
+    console.log("Merchant ID:", merchantId);
+    console.log("Config found:", !!config);
+    console.log("Config mode:", config?.mode);
+    console.log("Config status:", config?.status);
+    console.log("Decrypted creds:", creds ? { clientId: creds.clientId, clientSecret: creds.clientSecret ? "***" : "MISSING" } : "NULL");
+    console.log("ENV CASHFREE_BASE:", CASHFREE_BASE);
+    console.log("ENV CASHFREE_API_VERSION:", CASHFREE_API_VERSION);
+    console.log("====================================");
+
     if (!creds) return { success: false, gateway: "cashfree", error: "No Cashfree credentials" };
 
     const orderId = `famto_${crypto.randomBytes(8).toString("hex")}`;
@@ -154,8 +164,17 @@ const createCashfreeOrder = async (merchantId, amount, customerInfo) => {
       paymentUrl: `${CASHFREE_PAYMENTS_BASE}/order/${data.payment_session_id}`,
     };
   } catch (err) {
-    console.error("Cashfree order creation error:", err.message);
-    return { success: false, gateway: "cashfree", error: err.response?.data?.message || err.message };
+    const errorDetail = {
+      message: err.response?.data?.message || err.message,
+      code: err.response?.data?.code,
+      type: err.response?.data?.type,
+      status: err.response?.status,
+      // Include request info for debugging (without secrets)
+      requestUrl: err.config?.url,
+      requestMethod: err.config?.method,
+    };
+    console.error("Cashfree order creation error:", JSON.stringify(errorDetail, null, 2));
+    return { success: false, gateway: "cashfree", error: JSON.stringify(errorDetail) };
   }
 };
 

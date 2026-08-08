@@ -199,6 +199,17 @@ const testMerchantPaymentConfig = async (req, res, next) => {
       testOrderId = testOrder.id;
     } else if (gateway === "cashfree") {
       // Order creation validates client creds (₹1, never charged).
+      const configForTest = await MerchantPaymentConfig.findOne({ merchantId }).select(SECRET_SELECT);
+      console.log("=== CASHFREE TEST DEBUG ===");
+      console.log("config.gateway:", configForTest?.gateway);
+      console.log("config.mode:", configForTest?.mode);
+      console.log("config.status:", configForTest?.status);
+      const creds = configForTest?.getDecryptedGatewayCredentials("cashfree");
+      console.log("Decrypted creds:", creds ? { clientId: creds.clientId, clientSecret: creds.clientSecret ? "***" : "MISSING" } : "NULL");
+      console.log("ENV CASHFREE_KEY_ID:", process.env.CASHFREE_KEY_ID ? "SET" : "NOT SET");
+      console.log("ENV CASHFREE_KEY_SECRET:", process.env.CASHFREE_KEY_SECRET ? "SET" : "NOT SET");
+      console.log("============================");
+
       const result = await createCashfreeOrder(merchantId, 1, {
         name: "Famto Test",
         email: "test@famto.in",
@@ -231,12 +242,24 @@ const testMerchantPaymentConfig = async (req, res, next) => {
       data: { testOrderId, gateway },
     });
   } catch (err) {
+    console.error("Error in testing payment config:", err);
     // If validation fails, mark as Invalid
     await MerchantPaymentConfig.findOneAndUpdate(
       { merchantId: req.merchantId },
       { status: "Invalid" }
     );
-    next(appError(`Validation failed: ${err.message}`, 500));
+    // Handle different error formats:
+    // - Razorpay: err.error.description
+    // - Cashfree/PhonePe: err.message may be JSON string from createGatewayOrder
+    let errorMessage = err.error?.description || err.error?.message || err.message || "Unknown error";
+    // If message is a JSON string, try to extract the actual message
+    if (typeof errorMessage === 'string' && errorMessage.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(errorMessage);
+        errorMessage = parsed.message || parsed.error || errorMessage;
+      } catch {}
+    }
+    next(appError(`Validation failed: ${errorMessage}`, 500));
   }
 };
 
