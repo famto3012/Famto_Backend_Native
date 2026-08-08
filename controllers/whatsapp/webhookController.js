@@ -15,6 +15,7 @@ const {
   uploadFileToFirebaseForWhatsapp,
 } = require("../../utils/imageOperation");
 const { formatMessage } = require("../../utils/whatsappFormatters");
+const { decrypt } = require("../../utils/crypto");
 
 const verifyWebhook = (req, res) => {
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "token";
@@ -37,11 +38,16 @@ const resolveMerchantFromPhoneNumberId = async (phoneNumberId) => {
   const connection = await WhatsappConnection.findOne({
     phoneNumberId,
     status: "Active",
-  }).lean();
+  })
+    .select("+token")
+    .lean();
   if (!connection) {
     // Not a merchant connection — platform number
     return { merchantId: null, connection: null };
   }
+  // Decrypt so the returned connection can be passed straight into
+  // sendMetaMessage()/fetchBusinessProfile() for reply paths.
+  if (connection.token) connection.token = decrypt(connection.token);
   return { merchantId: connection.merchantId, connection };
 };
 

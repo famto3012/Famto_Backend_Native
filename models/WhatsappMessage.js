@@ -9,7 +9,7 @@ const whatsappMessageSchema = new mongoose.Schema(
       index: true,
     },
     merchantId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Merchant",
       default: null,
       index: true,

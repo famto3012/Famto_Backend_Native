@@ -37,30 +37,31 @@ const {
 
 const {
   getMerchantConnection,
-  requestMerchantConnection,
-  verifyMerchantConnectionOtp,
+  saveMerchantConnection,
+  testMerchantConnection,
 } = require("../../controllers/whatsapp/merchantConnectionController");
 
 const merchantWhatsappRoute = express.Router();
 
-// ─── Connection Onboarding ────────────────────────────────────
+// ─── Connection (OwnWABA) ────────────────────────────────────
+// Save the merchant's own Meta credentials, then test them against Meta.
 merchantWhatsappRoute.get(
   "/connection",
   isAuthenticated,
   isMerchant,
   getMerchantConnection
 );
-merchantWhatsappRoute.post(
-  "/connection/request",
+merchantWhatsappRoute.put(
+  "/connection",
   isAuthenticated,
   isMerchant,
-  requestMerchantConnection
+  saveMerchantConnection
 );
 merchantWhatsappRoute.post(
-  "/connection/verify-otp",
+  "/connection/test",
   isAuthenticated,
   isMerchant,
-  verifyMerchantConnectionOtp
+  testMerchantConnection
 );
 
 // ─── Inbox ────────────────────────────────────────────────────

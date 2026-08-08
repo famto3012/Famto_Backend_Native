@@ -1,7 +1,7 @@
 const WhatsappTemplate = require("../../models/WhatsappTemplate");
-const WhatsappConnection = require("../../models/WhatsappConnection");
 const appError = require("../../utils/appError");
 const {
+  resolveMerchantConnection,
   fetchMetaTemplates,
   createMetaTemplate,
   updateMetaTemplate,
@@ -24,11 +24,8 @@ const syncMerchantTemplates = async (req, res, next) => {
   try {
     const merchantId = req.merchantId;
 
-    // Resolve merchant's connection
-    const connection = await WhatsappConnection.findOne({
-      merchantId,
-      status: "Active",
-    }).lean();
+    // Resolve merchant's connection (plaintext token + merchant's WABA id)
+    const connection = await resolveMerchantConnection(merchantId);
     if (!connection) {
       return next(appError("No active WhatsApp connection. Please connect your number first.", 400));
     }
@@ -65,11 +62,8 @@ const createMerchantTemplate = async (req, res, next) => {
   try {
     const merchantId = req.merchantId;
 
-    // Resolve merchant's connection
-    const connection = await WhatsappConnection.findOne({
-      merchantId,
-      status: "Active",
-    }).lean();
+    // Resolve merchant's connection (plaintext token + merchant's WABA id)
+    const connection = await resolveMerchantConnection(merchantId);
     if (!connection) {
       return next(appError("No active WhatsApp connection. Please connect your number first.", 400));
     }
@@ -107,11 +101,8 @@ const updateMerchantTemplate = async (req, res, next) => {
     const { templateId } = req.params;
     const { name, language, category, components } = req.body;
 
-    // Resolve merchant's connection
-    const connection = await WhatsappConnection.findOne({
-      merchantId,
-      status: "Active",
-    }).lean();
+    // Resolve merchant's connection (plaintext token + merchant's WABA id)
+    const connection = await resolveMerchantConnection(merchantId);
     if (!connection) {
       return next(appError("No active WhatsApp connection. Please connect your number first.", 400));
     }

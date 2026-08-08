@@ -9,7 +9,7 @@ const whatsappNoteSchema = new mongoose.Schema(
       index: true,
     },
     merchantId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Merchant",
       default: null,
       index: true,
@@ -19,7 +19,7 @@ const whatsappNoteSchema = new mongoose.Schema(
       required: true,
     },
     createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Admin",
       required: true,
     },

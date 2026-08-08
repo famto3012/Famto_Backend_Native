@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const merchantWalletTransactionSchema = new mongoose.Schema(
   {
     merchantId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Merchant",
       required: true,
       index: true,

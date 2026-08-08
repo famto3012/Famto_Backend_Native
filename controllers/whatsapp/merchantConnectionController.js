@@ -1,12 +1,14 @@
-const crypto = require("crypto");
 const WhatsappConnection = require("../../models/WhatsappConnection");
 const appError = require("../../utils/appError");
+const { fetchBusinessProfile } = require("../../utils/whatsappApi");
 
-// ─── Merchant Connection Onboarding ─────────────────────────────
+// ─── Merchant Connection (OwnWABA) ──────────────────────────────
 //
-// Model A (Platform WABA) — the platform registers the number under its WABA,
-// triggers OTP, merchant enters OTP → status becomes Active.
-// This is a scaffold; the actual Meta registration call is platform-side.
+// Each merchant connects their OWN WhatsApp Business number by pasting their
+// Meta credentials (phoneNumberId + wabaId + access token). No platform OTP
+// flow — the number is registered and verified on Meta's side by the merchant.
+// Famto stores the token encrypted and validates it with a live Meta call
+// (fetchBusinessProfile) before marking the connection Active.
 
 const getMerchantConnection = async (req, res, next) => {
   try {
@@ -21,86 +23,121 @@ const getMerchantConnection = async (req, res, next) => {
   }
 };
 
-const requestMerchantConnection = async (req, res, next) => {
+// PUT /connection — save (or overwrite) the merchant's own Meta credentials.
+// token is encrypted at rest via the model pre-save hook. Saving resets status
+// to Pending until the merchant runs /connection/test to validate against Meta.
+const saveMerchantConnection = async (req, res, next) => {
   try {
     const merchantId = req.merchantId;
-    const { phoneNumber, displayName, mode = "PlatformWABA" } = req.body;
+    const {
+      phoneNumber,
+      phoneNumberId,
+      wabaId,
+      token,
+      displayName,
+      mode = "OwnWABA",
+    } = req.body;
 
     if (!phoneNumber) {
       return next(appError("Phone number is required", 400));
     }
-
-    // Check if merchant already has a connection
-    const existing = await WhatsappConnection.findOne({ merchantId });
-    if (existing) {
-      return next(appError("Connection already exists. Current status: " + existing.status, 400));
+    if (!phoneNumberId) {
+      return next(appError("phoneNumberId is required (from your Meta WhatsApp Business account)", 400));
     }
 
-    // Normalize phone number: remove +, ensure country code
+    // Normalize phone number: strip +, ensure country code
     let cleanPhone = String(phoneNumber).replace(/^\+/, "");
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
-    // Create connection record (status Pending)
-    // phoneNumberId, wabaId, token will be filled by platform after Meta registration
-    const connection = await WhatsappConnection.create({
-      merchantId,
-      phoneNumber: cleanPhone,
-      displayName: displayName || "Famto Merchant",
-      mode,
-      status: "Pending",
-    });
+    const existing = await WhatsappConnection.findOne({ merchantId });
 
-    // TODO: Platform-side Meta registration flow
-    // - If mode === "PlatformWABA": call Meta WABA API to register phoneNumber
-    // - Meta sends OTP to the phone number via SMS/call
-    // - Merchant receives OTP, enters in dashboard → verifyMerchantConnectionOtp
+    let connection;
+    if (existing) {
+      existing.phoneNumber = cleanPhone;
+      existing.phoneNumberId = phoneNumberId;
+      // wabaId doubles as the Meta business account id for template APIs.
+      existing.wabaId = wabaId || existing.wabaId;
+      existing.businessAccountId = wabaId || existing.businessAccountId;
+      existing.displayName = displayName || existing.displayName;
+      existing.mode = mode;
+      if (token) existing.token = token;
+      // Credentials changed — re-validate before re-activating.
+      existing.status = "Pending";
+      existing.verifiedAt = undefined;
+      connection = existing;
+    } else {
+      connection = new WhatsappConnection({
+        merchantId,
+        phoneNumber: cleanPhone,
+        phoneNumberId,
+        wabaId,
+        businessAccountId: wabaId,
+        displayName: displayName || "Famto Merchant",
+        mode,
+        token,
+        status: "Pending",
+      });
+    }
 
-    res.status(201).json({
+    await connection.save();
+
+    res.status(existing ? 200 : 201).json({
       success: true,
-      data: connection,
-      message: "Connection requested. OTP will be sent to the phone number for verification.",
+      data: { ...connection.toObject(), token: undefined },
+      message: "Connection saved. Test the credentials to activate.",
     });
   } catch (err) {
     next(appError(err.message, 500));
   }
 };
 
-const verifyMerchantConnectionOtp = async (req, res, next) => {
+// POST /connection/test — validate the stored credentials with a live Meta call.
+// Success → status Active + verifiedAt. Failure → status Failed.
+const testMerchantConnection = async (req, res, next) => {
   try {
     const merchantId = req.merchantId;
-    const { otp, phoneNumberId } = req.body;
-
-    if (!otp || !phoneNumberId) {
-      return next(appError("OTP and phoneNumberId are required", 400));
-    }
-
-    const connection = await WhatsappConnection.findOne({ merchantId });
+    const connection = await WhatsappConnection.findOne({ merchantId }).select("+token");
     if (!connection) {
-      return next(appError("No pending connection found", 404));
+      return next(appError("No connection configured. Save your credentials first.", 400));
     }
 
-    if (connection.status !== "Pending") {
-      return next(appError("Connection is not in Pending state", 400));
+    const token = connection.getDecryptedToken();
+    if (!token) {
+      connection.status = "Failed";
+      await connection.save();
+      return next(appError("Failed to decrypt token. Re-enter your credentials.", 400));
     }
 
-    // TODO: Platform-side OTP verification with Meta
-    // For PlatformWABA mode, this would call Meta's verify OTP endpoint
-    // For now, we simulate success and mark Active
+    // Build a sendable config for the Meta call (whatsappApi.resolveConfig
+    // expects a plaintext token).
+    const sendable = {
+      phoneNumberId: connection.phoneNumberId,
+      token,
+      businessAccountId: connection.businessAccountId || connection.wabaId,
+    };
 
-    // In production: call Meta's /{phone_number_id}/verify_otp with the OTP
-    // const metaRes = await axios.post(`https://graph.facebook.com/v21.0/${phoneNumberId}/verify_otp`, { code: otp }, { headers: ... });
-    // const { token, business_account_id } = metaRes.data;
+    try {
+      await fetchBusinessProfile(sendable);
+    } catch (err) {
+      connection.status = "Failed";
+      connection.verifiedAt = undefined;
+      await connection.save();
+      return next(
+        appError(
+          "Invalid WhatsApp credentials: " +
+            (err.response?.data?.error?.message || err.message),
+          400
+        )
+      );
+    }
 
-    connection.phoneNumberId = phoneNumberId;
-    connection.wabaId = "platform_waba_id"; // from Meta response
-    connection.token = crypto.randomBytes(32).toString("hex"); // platform generates token for this number
     connection.status = "Active";
     connection.verifiedAt = new Date();
     await connection.save();
 
     res.status(200).json({
       success: true,
-      data: connection,
+      data: { ...connection.toObject(), token: undefined },
       message: "WhatsApp number verified and active!",
     });
   } catch (err) {
@@ -110,6 +147,6 @@ const verifyMerchantConnectionOtp = async (req, res, next) => {
 
 module.exports = {
   getMerchantConnection,
-  requestMerchantConnection,
-  verifyMerchantConnectionOtp,
+  saveMerchantConnection,
+  testMerchantConnection,
 };

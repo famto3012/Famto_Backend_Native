@@ -59,11 +59,11 @@ const whatsappCampaignSchema = new mongoose.Schema(
     },
     events: [campaignEventSchema],
     createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Admin",
     },
     merchantId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Merchant",
       default: null,
       index: true,

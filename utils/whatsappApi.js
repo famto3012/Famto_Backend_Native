@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { decrypt } = require("./crypto");
 
 const getWhatsappConfig = () => ({
   token: process.env.WHATSAPP_API_TOKEN,
@@ -20,7 +21,10 @@ const resolveConfig = (connection) => {
     return {
       token: connection.token,
       phoneNumberId: connection.phoneNumberId,
-      businessAccountId: connection.businessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
+      businessAccountId:
+        connection.businessAccountId ||
+        connection.wabaId ||
+        process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
       apiVersion: process.env.WHATSAPP_API_VERSION || "v21.0",
     };
   }
@@ -130,8 +134,14 @@ const resolveMerchantConnection = async (merchantId) => {
   const conn = await WhatsappConnection.findOne({
     merchantId,
     status: "Active",
-  }).lean();
+  })
+    .select("+token")
+    .lean();
   if (!conn) return null;
+  // Token is encrypted at rest — decrypt so the cached doc can be passed
+  // straight into resolveConfig()/sendMetaMessage(). The cache holds the
+  // decrypted token in-memory for up to 60s; the DB keeps only ciphertext.
+  if (conn.token) conn.token = decrypt(conn.token);
   _connectionCache.set(key, { connection: conn, expiresAt: Date.now() + 60_000 });
   return conn;
 };
