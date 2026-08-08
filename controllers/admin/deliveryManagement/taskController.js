@@ -18,6 +18,7 @@ const {
 } = require("../../../socket/socket");
 
 const appError = require("../../../utils/appError");
+const { featureEnabled } = require("../../../utils/featureConfig");
 const mapService = require("../../../services/MapService");
 const { formatDate, formatTime } = require("../../../utils/formatters");
 const BatchOrder = require("../../../models/BatchOrder");
@@ -207,8 +208,9 @@ const getAgentsAccordingToGeofenceController = async (req, res, next) => {
       isBlocked: false,
     };
 
-    // Respect merchant's own-delivery fleet: only that merchant's agents
-    if (merchant?.merchantDetail?.hasOwnDelivery) {
+    // Respect merchant's own-delivery fleet: only that merchant's agents.
+    // Skip when the delivery feature is off — platform fleet serves instead.
+    if (merchant?.merchantDetail?.hasOwnDelivery && (await featureEnabled("delivery", merchant._id))) {
       matchCriteria.merchantId = merchant._id;
     }
 

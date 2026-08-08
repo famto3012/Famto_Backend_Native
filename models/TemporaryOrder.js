@@ -136,6 +136,23 @@ const temporaryOrderSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Gateway used for this order. For razorpay, gatewayOrderId === razorpayOrderId.
+    gateway: {
+      type: String,
+      enum: ["razorpay", "cashfree", "phonepe"],
+      default: "razorpay",
+      index: true,
+    },
+
+    // Gateway-native order/transaction id (razorpay order id, cashfree payment_session_id,
+    // phonepe merchantTransactionId). Used by webhooks/verify for non-razorpay gateways.
+    gatewayOrderId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
     paymentId: {
       type: String,
       sparse: true,

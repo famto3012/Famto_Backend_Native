@@ -22,6 +22,7 @@ const {
   addAgentByAdminValidations,
 } = require("../../../middlewares/validators/agentValidation");
 const isMerchant = require("../../../middlewares/isMerchant");
+const { requireFeature } = require("../../../utils/featureConfig");
 const {
   filterMerchantAgentsController,
   fetchSingleMerchantAgentController,
@@ -32,6 +33,10 @@ const {
 } = require("../../../controllers/admin/agent/merchantAgentController");
 
 const adminAgentRoute = express.Router();
+
+// Merchant-scoped own-fleet routes require the delivery feature (global or this
+// merchant's override). Platform fleet serves when delivery is off.
+const merchantAuth = [isAuthenticated, isMerchant, requireFeature("delivery")];
 
 // Filter agent payout
 adminAgentRoute.get(
@@ -171,16 +176,14 @@ adminAgentRoute.delete(
 // Filter merchant agents
 adminAgentRoute.get(
   "/merchant/filter",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   filterMerchantAgentsController
 );
 
 // Get single merchant agent
 adminAgentRoute.get(
   "/merchant/:agentId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   fetchSingleMerchantAgentController
 );
 
@@ -196,8 +199,7 @@ adminAgentRoute.post(
     { name: "drivingLicenseBackImage", maxCount: 1 },
     { name: "agentImage", maxCount: 1 },
   ]),
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   addMerchantAgentController
 );
 
@@ -211,24 +213,21 @@ adminAgentRoute.put(
     { name: "drivingLicenseBackImage", maxCount: 1 },
     { name: "agentImage", maxCount: 1 },
   ]),
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   editMerchantAgentController
 );
 
 // Change merchant agent status
 adminAgentRoute.patch(
   "/merchant/change-status/:agentId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   changeMerchantAgentStatusController
 );
 
 // Block merchant agent
 adminAgentRoute.patch(
   "/merchant/block-agent/:agentId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   blockMerchantAgentController
 );
 

@@ -1,6 +1,7 @@
 const express = require("express");
 const isAuthenticated = require("../../middlewares/isAuthenticated");
 const isMerchant = require("../../middlewares/isMerchant");
+const { requireFeature } = require("../../utils/featureConfig");
 const { upload } = require("../../utils/imageOperation");
 
 const {
@@ -43,56 +44,53 @@ const {
 
 const merchantWhatsappRoute = express.Router();
 
+// Every merchant WhatsApp endpoint requires the WhatsApp feature to be enabled
+// (global default, or this merchant's override). requireFeature must run after
+// isMerchant so it can read req.merchantId.
+const merchantAuth = [isAuthenticated, isMerchant, requireFeature("whatsapp")];
+
 // ─── Connection (OwnWABA) ────────────────────────────────────
 // Save the merchant's own Meta credentials, then test them against Meta.
 merchantWhatsappRoute.get(
   "/connection",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantConnection
 );
 merchantWhatsappRoute.put(
   "/connection",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   saveMerchantConnection
 );
 merchantWhatsappRoute.post(
   "/connection/test",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   testMerchantConnection
 );
 
 // ─── Inbox ────────────────────────────────────────────────────
 merchantWhatsappRoute.get(
   "/overview",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantOverview
 );
 merchantWhatsappRoute.get(
   "/conversations",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantConversations
 );
 merchantWhatsappRoute.patch(
   "/conversations/:conversationId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   updateMerchantConversation
 );
 merchantWhatsappRoute.get(
   "/conversations/:conversationId/messages",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantMessages
 );
 merchantWhatsappRoute.post(
   "/conversations/:conversationId/messages",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "document", maxCount: 1 },
@@ -102,98 +100,83 @@ merchantWhatsappRoute.post(
 );
 merchantWhatsappRoute.post(
   "/conversations/:conversationId/templates",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   sendMerchantTemplateMessage
 );
 merchantWhatsappRoute.get(
   "/conversations/:conversationId/notes",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantNotes
 );
 merchantWhatsappRoute.post(
   "/conversations/:conversationId/notes",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   addMerchantNote
 );
 merchantWhatsappRoute.delete(
   "/conversations/:conversationId/notes/:noteId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   deleteMerchantNote
 );
 
 // ─── Contacts ────────────────────────────────────────────────
 merchantWhatsappRoute.get(
   "/contacts",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantContacts
 );
 merchantWhatsappRoute.post(
   "/contacts/sync",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   syncMerchantContacts
 );
 merchantWhatsappRoute.patch(
   "/contacts/:contactId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   updateMerchantContact
 );
 
 // ─── Campaigns ───────────────────────────────────────────────
 merchantWhatsappRoute.get(
   "/campaigns",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantCampaigns
 );
 merchantWhatsappRoute.post(
   "/campaigns",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   createMerchantCampaign
 );
 merchantWhatsappRoute.post(
   "/campaigns/:campaignId/send",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   sendMerchantCampaign
 );
 merchantWhatsappRoute.get(
   "/campaigns/:campaignId/events",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantCampaignEvents
 );
 
 // ─── Templates ───────────────────────────────────────────────
 merchantWhatsappRoute.get(
   "/templates",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   getMerchantTemplates
 );
 merchantWhatsappRoute.post(
   "/templates/sync",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   syncMerchantTemplates
 );
 merchantWhatsappRoute.post(
   "/templates",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   createMerchantTemplate
 );
 merchantWhatsappRoute.patch(
   "/templates/:templateId",
-  isAuthenticated,
-  isMerchant,
+  ...merchantAuth,
   updateMerchantTemplate
 );
 

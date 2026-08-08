@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { decrypt } = require("./crypto");
+const { featureEnabled } = require("./featureConfig");
 
 const getWhatsappConfig = () => ({
   token: process.env.WHATSAPP_API_TOKEN,
@@ -124,6 +125,10 @@ const WhatsappTemplate = require("../models/WhatsappTemplate");
 const _connectionCache = new Map();
 const resolveMerchantConnection = async (merchantId) => {
   if (!merchantId) return null;
+  // Feature gate (per-merchant override; global off is enforced at the route
+  // level too — this also covers direct util callers / platform flows).
+  const enabled = await featureEnabled("whatsapp", merchantId);
+  if (!enabled) return null;
   const key = String(merchantId);
   if (_connectionCache.has(key)) {
     const cached = _connectionCache.get(key);
@@ -154,6 +159,15 @@ const sendTemplateMessage = async (
   headerImageUrl = null,
   connection = null
 ) => {
+  // Feature kill-switch: skip entirely when WhatsApp is disabled globally, or
+  // for this merchant when the message goes through their own connection.
+  const gatingId = connection?.merchantId || null;
+  const featureOn = await featureEnabled("whatsapp", gatingId);
+  if (!featureOn) {
+    console.log("[WhatsApp] Feature disabled – skipping message.");
+    return;
+  }
+
   // Skip if no platform creds AND no override
   if (!connection && (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID)) {
     console.log("[WhatsApp] Credentials not set – skipping message.");

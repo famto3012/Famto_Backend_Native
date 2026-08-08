@@ -38,6 +38,7 @@ const {
   merchantValidations,
 } = require("../../../middlewares/validators/merchantValidations");
 const isMerchant = require("../../../middlewares/isMerchant");
+const { requireFeature } = require("../../../utils/featureConfig");
 const {
   getOwnDeliveryController,
   updateOwnDeliveryController,
@@ -76,11 +77,13 @@ merchantRoute.get(
   getOwnDeliveryController
 );
 
-// Update own delivery toggle
+// Update own delivery toggle — hard-blocked when the delivery feature is off
+// (global or this merchant's override); platform fleet then serves instead.
 merchantRoute.put(
   "/own-delivery",
   isAuthenticated,
   isMerchant,
+  requireFeature("delivery"),
   updateOwnDeliveryController
 );
 

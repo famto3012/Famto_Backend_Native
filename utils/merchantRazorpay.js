@@ -108,7 +108,9 @@ const verifyMerchantPayment = async (paymentDetails, mode, merchantConfig = null
 const merchantRazorpayWebhookController = async (req, res) => {
   try {
     const merchantId = req.params.merchantId;
-    const config = await MerchantPaymentConfig.findOne({ merchantId });
+    // keySecret is select:false — must select it explicitly or decryption fails.
+    const config = await MerchantPaymentConfig.findOne({ merchantId })
+      .select("+keySecret");
     if (!config || config.mode !== "Own" || config.status !== "Active") {
       return res.status(400).send("Invalid merchant config for webhook");
     }

@@ -38,9 +38,13 @@ const {
   razorpayRefund,
 } = require("../../utils/razorpayPayment");
 const {
-  createMerchantRazorpayOrderId,
   verifyMerchantPayment,
 } = require("../../utils/merchantRazorpay");
+const {
+  resolvePaymentGateway,
+  createGatewayOrderId,
+  verifyGatewayPayment,
+} = require("../../utils/paymentGateways");
 const { formatDate, formatTime } = require("../../utils/formatters");
 const appError = require("../../utils/appError");
 const { creditMilestoneBonus } = require("../../utils/firstOrderBonusHelper");
@@ -2595,23 +2599,32 @@ const orderPaymentController = async (req, res, next) => {
       // NOTE: Cron worker (index.js) creates the final Order after expiresAt
       // and handles CustomerTransaction, PromoCode, ActivityLog, notifications
     } else if (paymentMode === "Online-payment") {
-      const {
-        success,
-        orderId: razorpayOrderId,
-        keyId,
+      // Resolve which gateway actually processes this order (feature flags +
+      // merchant self-payment eligibility) then create the order there.
+      const { gateway, mode } = await resolvePaymentGateway(cart.merchantId);
+      const customerInfo = {
+        customerId,
+        name: customer.fullName || "Customer",
+        email: customer.email,
+        phone: customer.phoneNumber,
+      };
+      const gwRes = await createGatewayOrderId(
+        gateway,
+        cart.merchantId,
+        orderAmount,
+        customerInfo,
         mode,
-        error,
-      } = await createMerchantRazorpayOrderId(cart.merchantId, orderAmount);
+      );
 
-      if (!success) {
-        return next(appError(error, 500));
+      if (!gwRes.success) {
+        return next(appError(gwRes.error, 500));
       }
 
       const orderId = new mongoose.Types.ObjectId();
 
       // Get merchantPaymentConfigId if mode is Own
       let merchantPaymentConfigId = null;
-      if (mode === "Own") {
+      if (gwRes.mode === "Own") {
         const MerchantPaymentConfig = require("../../models/MerchantPaymentConfig");
         const config = await MerchantPaymentConfig.findOne({ merchantId: cart.merchantId }).select("_id").lean();
         merchantPaymentConfigId = config?._id;
@@ -2619,7 +2632,9 @@ const orderPaymentController = async (req, res, next) => {
 
       const tempOrder = await TemporaryOrder.create({
         orderId,
-        razorpayOrderId,
+        gateway: gwRes.gateway,
+        gatewayOrderId: gwRes.gatewayOrderId,
+        razorpayOrderId: gwRes.razorpayOrderId || undefined,
         customerId,
         merchantId: cart.merchantId,
         serviceId: cart.serviceId,
@@ -2644,7 +2659,7 @@ const orderPaymentController = async (req, res, next) => {
         purchasedItems,
         prescription,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours for webhook + cron fallback
-        paymentAccountMode: mode, // "Own" or "Platform"
+        paymentAccountMode: gwRes.mode, // "Own" or "Platform"
         merchantPaymentConfigId,
       });
 
@@ -2655,10 +2670,17 @@ const orderPaymentController = async (req, res, next) => {
       return res.status(200).json({
         success: true,
         orderId,
-        razorpayOrderId,
+        // Backward-compatible superset: legacy clients read razorpayOrderId /
+        // keyId / paymentAccountMode; the app uses gateway/paymentUrl for the
+        // cashfree/phonepe hosted pages.
+        gateway: gwRes.gateway,
+        gatewayOrderId: gwRes.gatewayOrderId,
+        razorpayOrderId: gwRes.razorpayOrderId,
         amount: orderAmount,
-        keyId, // Merchant's keyId or platform keyId
-        paymentAccountMode: mode, // "Own" or "Platform"
+        keyId: gwRes.keyId, // Merchant's keyId or platform keyId
+        token: gwRes.token,
+        paymentUrl: gwRes.paymentUrl,
+        paymentAccountMode: gwRes.mode, // "Own" or "Platform"
         walletBalance: customer.customerDetails.walletBalance.toFixed(2),
       });
     }
@@ -3371,19 +3393,41 @@ const verifyOnlinePaymentController = async (req, res, next) => {
   try {
     const { paymentDetails } = req.body;
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      paymentDetails;
+    const { razorpay_order_id, razorpay_payment_id } = paymentDetails;
 
-    // Find the temp order first to determine which secret to use
-    const tempOrderForVerify = await TemporaryOrder.findOne({
-      razorpayOrderId: razorpay_order_id,
-    }).lean();
+    // Find the temp order first to determine which gateway/secret to use.
+    // cashfree/phonepe clients pass gatewayOrderId; razorpay (+ legacy clients)
+    // pass razorpay_order_id.
+    const byGatewayOrderId = paymentDetails.gatewayOrderId
+      ? await TemporaryOrder.findOne({
+          gatewayOrderId: paymentDetails.gatewayOrderId,
+        }).lean()
+      : null;
+    const tempOrderForVerify =
+      byGatewayOrderId ||
+      (razorpay_order_id
+        ? await TemporaryOrder.findOne({
+            razorpayOrderId: razorpay_order_id,
+          }).lean()
+        : null);
+
+    if (!tempOrderForVerify) {
+      return next(appError("Order not found", 404));
+    }
 
     let isValid;
-    if (tempOrderForVerify?.paymentAccountMode === "Own" && tempOrderForVerify.merchantPaymentConfigId) {
+    if (tempOrderForVerify.gateway && tempOrderForVerify.gateway !== "razorpay") {
+      // Cashfree/PhonePe — authoritative status-API cross-check (no inline SDK).
+      isValid = await verifyGatewayPayment(paymentDetails, tempOrderForVerify);
+    } else if (
+      tempOrderForVerify.paymentAccountMode === "Own" &&
+      tempOrderForVerify.merchantPaymentConfigId
+    ) {
       // Per-merchant verification
       const MerchantPaymentConfig = require("../../models/MerchantPaymentConfig");
-      const config = await MerchantPaymentConfig.findById(tempOrderForVerify.merchantPaymentConfigId);
+      const config = await MerchantPaymentConfig.findById(
+        tempOrderForVerify.merchantPaymentConfigId
+      );
       isValid = await verifyMerchantPayment(paymentDetails, "Own", config);
     } else {
       // Platform verification
@@ -3397,12 +3441,15 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     // Try to mark as completed (might already be done by webhook)
     const tempOrder = await TemporaryOrder.findOneAndUpdate(
       {
-        razorpayOrderId: razorpay_order_id,
+        gatewayOrderId: tempOrderForVerify.gatewayOrderId || tempOrderForVerify.razorpayOrderId,
         paymentStatus: "PENDING_PAYMENT",
       },
       {
         paymentStatus: "PAYMENT_COMPLETED",
-        paymentId: razorpay_payment_id,
+        paymentId:
+          paymentDetails.paymentId ||
+          razorpay_payment_id ||
+          tempOrderForVerify.gatewayOrderId,
       },
       { new: true },
     );
@@ -3410,7 +3457,7 @@ const verifyOnlinePaymentController = async (req, res, next) => {
     if (!tempOrder) {
       // Webhook may have already marked it — check if it exists at all
       const existing = await TemporaryOrder.findOne({
-        razorpayOrderId: razorpay_order_id,
+        gatewayOrderId: tempOrderForVerify.gatewayOrderId || tempOrderForVerify.razorpayOrderId,
       }).lean();
 
       if (existing && existing.paymentStatus === "PAYMENT_COMPLETED") {

@@ -104,6 +104,10 @@ const merchantWalletRoute = require("./routes/merchantRoute/merchantWalletRoute.
 const merchantReviewRoute = require("./routes/adminRoute/merchantRoute/merchantReviewRoute.js");
 const merchantQrConfigRoute = require("./routes/adminRoute/merchantRoute/merchantQrConfigRoute.js");
 const merchantAnalyticsRoute = require("./routes/adminRoute/merchantRoute/merchantAnalyticsRoute.js");
+const {
+  featureConfigRoute,
+  merchantFeatureConfigRoute,
+} = require("./routes/adminRoute/featureConfigRoute/featureConfigRoute.js");
 const { deleteOldLogs, deleteOldTasks, removeOldNotifications } = require("./libs/automatic.js");
 const { removeExpiredMerchantDiscounts, removeExpiredProductDiscount, removeExpiredPromoCode } = require("./libs/removeExpired.js");
 const {
@@ -112,6 +116,7 @@ const {
 const processOrderService = require("./utils/ProcessOrderService.js");
 const { fetchRazorpayOrderPayments } = require("./utils/razorpayPayment.js");
 const { merchantRazorpayWebhookController } = require("./utils/merchantRazorpay.js");
+const { handleGatewayWebhook } = require("./utils/paymentGateways.js");
 
 
 app.use(
@@ -123,6 +128,20 @@ app.use(
   "/api/v1/merchants/:merchantId/razorpay-webhook",
   express.raw({ type: "application/json" }),
   merchantRazorpayWebhookController
+);
+
+// Self-payment (Own mode) webhooks. Platform only processes Razorpay, so these
+// are merchant-scoped: the merchant's own Cashfree/PhonePe account notifies us.
+app.use(
+  "/api/v1/merchants/:merchantId/cashfree-webhook",
+  express.raw({ type: "application/json" }),
+  handleGatewayWebhook("cashfree")
+);
+
+app.use(
+  "/api/v1/merchants/:merchantId/phonepe-webhook",
+  express.raw({ type: "application/json" }),
+  handleGatewayWebhook("phonepe")
 );
 
 app.use(express.json({ limit: "10mb" }));
@@ -176,6 +195,8 @@ app.use("/api/v1/admin/product-discount", productDiscountRoute);
 app.use("/api/v1/merchant/product-discount", productDiscountRoute);
 app.use("/api/v1/admin/managers", managerRoute);
 app.use("/api/v1/admin/app-customization", appCustomizationRoute);
+app.use("/api/v1/admin/feature-config", featureConfigRoute);
+app.use("/api/v1/merchants/feature-config", merchantFeatureConfigRoute);
 app.use("/api/v1/admin/taxes", taxRoute);
 app.use("/api/v1/admin/business-categories", businessCategoryRoute);
 app.use("/api/v1/admin/service-categories", serviceCategoryRoute);

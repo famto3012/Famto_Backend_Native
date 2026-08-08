@@ -3,6 +3,7 @@ const taskRoute = express.Router();
 const isAuthenticated = require("../../../middlewares/isAuthenticated");
 const isAdmin = require("../../../middlewares/isAdmin");
 const isMerchant = require("../../../middlewares/isMerchant");
+const { requireFeature } = require("../../../utils/featureConfig");
 const {
   getTaskByIdController,
   assignAgentToTaskController,
@@ -41,6 +42,7 @@ taskRoute.get(
   "/merchant/task-filter",
   isAuthenticated,
   isMerchant,
+  requireFeature("delivery"),
   getMerchantTasksController
 );
 
@@ -48,6 +50,7 @@ taskRoute.get(
   "/merchant/agent-filter",
   isAuthenticated,
   isMerchant,
+  requireFeature("delivery"),
   getMerchantAgentsController
 );
 

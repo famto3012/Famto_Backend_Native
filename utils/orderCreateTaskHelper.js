@@ -7,6 +7,7 @@ const Merchant = require("../models/Merchant");
 const AgentPricing = require("../models/AgentPricing");
 const AutoAllocation = require("../models/AutoAllocation");
 const BusinessCategory = require("../models/BusinessCategory");
+const { featureEnabled } = require("./featureConfig");
 
 const {
   sendNotification,
@@ -287,7 +288,8 @@ const fetchAgents = async (merchantId) => {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
       if (!merchant.merchantDetail) merchant.merchantDetail = {};
-      if (merchant.merchantDetail?.hasOwnDelivery) {
+      const deliveryOn = await featureEnabled("delivery", merchantId);
+      if (deliveryOn && merchant.merchantDetail?.hasOwnDelivery) {
         ownFleetFilter.merchantId = merchant._id;
       }
       merchantBusinessCategory = await BusinessCategory.findById(
@@ -336,7 +338,8 @@ const fetchNearestAgents = async (radius, merchantId) => {
     merchant = await Merchant.findById(merchantId);
     if (merchant) {
       if (!merchant.merchantDetail) merchant.merchantDetail = {};
-      if (merchant.merchantDetail?.hasOwnDelivery) {
+      const deliveryOn = await featureEnabled("delivery", merchantId);
+      if (deliveryOn && merchant.merchantDetail?.hasOwnDelivery) {
         ownFleetFilter.merchantId = merchant._id;
       }
       merchantBusinessCategory = await BusinessCategory.findById(
@@ -399,7 +402,8 @@ const fetchMonthlySalaryAgents = async (merchantId) => {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
         if (!merchant.merchantDetail) merchant.merchantDetail = {};
-        if (merchant.merchantDetail?.hasOwnDelivery) {
+        const deliveryOn = await featureEnabled("delivery", merchantId);
+        if (deliveryOn && merchant.merchantDetail?.hasOwnDelivery) {
           ownFleetFilter.merchantId = merchant._id;
         }
         merchantBusinessCategory = await BusinessCategory.findById(
@@ -473,7 +477,8 @@ const fetchNearestMonthlySalaryAgents = async (radius, merchantId) => {
       merchant = await Merchant.findById(merchantId);
       if (merchant) {
         if (!merchant.merchantDetail) merchant.merchantDetail = {};
-        if (merchant.merchantDetail?.hasOwnDelivery) {
+        const deliveryOn = await featureEnabled("delivery", merchantId);
+        if (deliveryOn && merchant.merchantDetail?.hasOwnDelivery) {
           ownFleetFilter.merchantId = merchant._id;
         }
         merchantBusinessCategory = await BusinessCategory.findById(
